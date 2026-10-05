@@ -1,0 +1,6 @@
+{
+  "_comment": "Ejemplo de cómo configurar la zona de pit lane de una pista. normalizedSplinePosition va de 0 a 1 a lo largo de la vuelta — hay que manejar el auto por pit lane en la pista real y mirar el valor que reporta el panel admin (columna futura 'spline') para calibrar splineStart/splineEnd. Una vez calibrado, estos valores van en pit.zone dentro de server/config.json.",
+  "track": "monza",
+  "splineStart": 0.97,
+  "splineEnd": 0.995
+}

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Race Control</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 2rem; max-width: 900px; margin: auto; }
+    h1 { font-size: 1.4rem; }
+    .row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    button { padding: 0.75rem 1.25rem; font-size: 1rem; border: none; border-radius: 6px; cursor: pointer; }
+    .begin { background: #2563eb; color: white; }
+    .green { background: #16a34a; color: white; }
+    .reset { background: #4b5563; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #333; font-size: 0.9rem; }
+    .state { font-size: 1.1rem; padding: 0.3rem 0.8rem; border-radius: 6px; display: inline-block; }
+    .state-idle { background: #4b5563; }
+    .state-formation { background: #ca8a04; }
+    .state-green { background: #16a34a; }
+    fieldset { border: 1px solid #333; border-radius: 6px; margin-top: 1.5rem; }
+    label { display: block; margin: 0.4rem 0; font-size: 0.9rem; }
+    input, select { padding: 0.3rem; }
+  </style>
+</head>
+<body>
+  <h1>Race Control — Largada en movimiento</h1>
+  <p>Estado: <span id="lightState" class="state state-idle">idle</span></p>
+  <div class="row">
+    <button class="begin" onclick="post('/api/formation/begin')">Iniciar formación</button>
+    <button class="green" onclick="post('/api/formation/green')">VERDE (apretar cuando se apaga el semáforo)</button>
+    <button class="reset" onclick="post('/api/formation/reset')">Reset</button>
+  </div>
+
+  <h2>Autos conectados</h2>
+  <table id="carsTable"><thead><tr><th>Car</th><th>Piloto</th><th>Vel (km/h)</th><th>Spline pos.</th></tr></thead><tbody></tbody></table>
+  <p style="font-size:0.8rem;color:#999">"Spline pos." sirve para calibrar la zona de pit lane por circuito (ver shared/tracks/example-pit-zone.json): manejá por pit lane y anotá entre qué valores se mueve.</p>
+
+  <h2>Sanciones</h2>
+  <table id="penaltiesTable"><thead><tr><th>Car</th><th>Motivo</th><th>Tipo</th><th>Estado</th><th>Vueltas rest.</th></tr></thead><tbody></tbody></table>
+
+  <fieldset>
+    <legend>Configuración</legend>
+    <label>Umbral de velocidad en formación (km/h): <input id="cfgFormationSpeed" type="number" /></label>
+    <label>Tolerancia (segundos): <input id="cfgFormationTolerance" type="number" /></label>
+    <label>Vueltas de gracia para cumplir DT/SG: <input id="cfgGraceLaps" type="number" /></label>
+    <label>Tipo de sanción:
+      <select id="cfgPenaltyType"><option value="DT">Drive-Through</option><option value="SG">Stop-and-Go</option><option value="BALLAST">Ballast inmediato</option></select>
+    </label>
+    <label>Si no cumple, escala a:
+      <select id="cfgEscalation"><option value="DQ">Descalificación</option><option value="TIME_PENALTY">Penalización de tiempo</option></select>
+    </label>
+    <button onclick="saveConfig()">Guardar</button>
+  </fieldset>
+
+  <script>
+    async function post(url) { await fetch(url, { method: "POST" }); refresh(); }
+
+    async function refresh() {
+      const res = await fetch("/api/state");
+      const data = await res.json();
+      const el = document.getElementById("lightState");
+      el.textContent = data.lightState;
+      el.className = "state state-" + data.lightState;
+
+      const carsBody = document.querySelector("#carsTable tbody");
+      carsBody.innerHTML = data.cars.map(c =>
+        `<tr><td>${c.carId}</td><td>${c.driverName}</td><td>${c.speedKmh.toFixed(0)}</td><td>${c.normalizedSplinePosition.toFixed(3)}</td></tr>`
+      ).join("");
+
+      const all = [...data.formationPenalties, ...data.pitPenalties];
+      const penBody = document.querySelector("#penaltiesTable tbody");
+      penBody.innerHTML = all.map(p =>
+        `<tr><td>${p.carId}</td><td>${p.reason}</td><td>${p.type}</td><td>${p.status}</td><td>${p.graceLapsRemaining}</td></tr>`
+      ).join("");
+    }
+
+    async function loadConfig() {
+      const res = await fetch("/api/config");
+      const cfg = await res.json();
+      document.getElementById("cfgFormationSpeed").value = cfg.formation.speedThresholdKmh;
+      document.getElementById("cfgFormationTolerance").value = cfg.formation.toleranceSeconds;
+      document.getElementById("cfgGraceLaps").value = cfg.formation.penalty.graceLaps;
+      document.getElementById("cfgPenaltyType").value = cfg.formation.penalty.penaltyType;
+      document.getElementById("cfgEscalation").value = cfg.formation.penalty.escalation;
+    }
+
+    async function saveConfig() {
+      const speedThresholdKmh = Number(document.getElementById("cfgFormationSpeed").value);
+      const toleranceSeconds = Number(document.getElementById("cfgFormationTolerance").value);
+      const graceLaps = Number(document.getElementById("cfgGraceLaps").value);
+      const penaltyType = document.getElementById("cfgPenaltyType").value;
+      const escalation = document.getElementById("cfgEscalation").value;
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          formation: { speedThresholdKmh, toleranceSeconds, penalty: { speedThresholdKmh, toleranceSeconds, graceLaps, penaltyType, escalation, ballastKg: 50 } },
+        }),
+      });
+      alert("Guardado");
+    }
+
+    loadConfig();
+    refresh();
+    setInterval(refresh, 1000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+# dependencies
+/server/node_modules
+
+# build output
+/server/dist
+
+# config local generado en el primer `npm start` (IPs/puertos propios de cada liga)
+/server/config.json
+
+# misc
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+
+# local IDE/editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
