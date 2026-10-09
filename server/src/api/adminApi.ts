@@ -59,8 +59,15 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       res.status(400).json({ ok: false, error: "Body inválido" });
       return;
     }
-    applyConfigPatch(deps.config, req.body);
-    res.json(deps.config);
+    try {
+      applyConfigPatch(deps.config, req.body);
+      res.json(deps.config);
+    } catch (err) {
+      // No dejar que un error de escritura (ej. permisos) tumbe el request en silencio — el
+      // panel necesita un JSON para poder avisarle al usuario que algo falló.
+      console.error("[admin-api] No se pudo guardar la configuración:", err);
+      res.status(500).json({ ok: false, error: "No se pudo guardar la configuración: " + String(err) });
+    }
   });
 
   app.post("/api/formation/begin", (_req, res) => {
@@ -76,6 +83,13 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.post("/api/formation/reset", (_req, res) => {
     deps.formationStart.reset();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
+  });
+
+  // Red de seguridad: cualquier excepción no prevista en una ruta devuelve JSON, no la página de
+  // error HTML por defecto de Express — el panel siempre espera poder parsear la respuesta.
+  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("[admin-api] Error no manejado:", err);
+    res.status(500).json({ ok: false, error: String(err) });
   });
 
   return app;

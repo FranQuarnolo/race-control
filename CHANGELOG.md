@@ -3,6 +3,26 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.2.1] — 2026-10-09
+
+Fix encontrado probando el `.exe` real por primera vez: el wizard de primer arranque (pedir el
+nombre de la liga) se quedaba trabado sin cerrar el modal, sin ningún error visible.
+
+- **Causa real**: `config.json` se guardaba al lado del `.exe`. Si el admin lo corre desde
+  Descargas (el caso típico, recién bajado del navegador), esa carpeta puede tener permisos de
+  escritura restringidos por el antivirus/Windows — el guardado fallaba en silencio y el panel
+  nunca se enteraba. **Fix**: `config.json` y `logs/` ahora viven en `%APPDATA%\RaceControl`,
+  siempre escribible por el usuario actual sin importar desde dónde se corra el `.exe`
+  (`server/src/config.ts`).
+- **Manejo de errores end-to-end**: el panel (`app.js`) ahora muestra un aviso visible si un
+  guardado falla, en vez de fallar en silencio; el backend (`adminApi.ts`, `clientApi.ts`) nunca
+  más devuelve una página de error HTML sin manejar — siempre JSON, para que el panel pueda
+  mostrarlo.
+- **Se intentó** parchear el `.exe` para que Windows lo identifique como "Race Control" en vez de
+  "node" en los diálogos de SmartScreen/Firewall (vía `rcedit`), pero reescribir los recursos del
+  `.exe` después de empaquetarlo con `pkg` corrompe su payload interno. Se descartó — en cambio,
+  se documentó en `LEEME.txt` que esos avisos son esperables y seguros de aceptar.
+
 ## [0.2.0] — 2026-10-09
 
 Puesta a punto para producción: pasar de un prototipo técnico (requería clonar el repo, tener

@@ -35,5 +35,10 @@ export function createClientApi(deps: ClientApiDeps): Express {
     res.json({ ok: true });
   });
 
+  app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("[client-api] Error no manejado:", err);
+    res.status(500).json({ ok: false });
+  });
+
   return app;
 }

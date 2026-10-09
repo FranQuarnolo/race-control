@@ -8,16 +8,31 @@ function $(id) {
   return document.getElementById(id);
 }
 
-function toast(message) {
+function toast(message, durationMs) {
   const el = $("toast");
   el.textContent = message;
   el.classList.add("show");
-  setTimeout(() => el.classList.remove("show"), 2000);
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => el.classList.remove("show"), durationMs || 2500);
 }
 
 async function api(path, options) {
-  const res = await fetch(path, options);
-  if (!res.ok) throw new Error("HTTP " + res.status);
+  let res;
+  try {
+    res = await fetch(path, options);
+  } catch (err) {
+    throw new Error("No se pudo conectar con el backend (¿sigue abierto RaceControlServer.exe?)");
+  }
+  if (!res.ok) {
+    let detail = "HTTP " + res.status;
+    try {
+      const body = await res.json();
+      if (body && body.error) detail = body.error;
+    } catch (_) {
+      // la respuesta no era JSON, nos quedamos con el código HTTP
+    }
+    throw new Error(detail);
+  }
   return res.json();
 }
 
@@ -150,60 +165,73 @@ async function loadConfigForm() {
 }
 
 function wireButtons() {
-  $("btn-begin").addEventListener("click", () => api("/api/formation/begin", { method: "POST" }).catch(() => toast("Error")));
-  $("btn-green").addEventListener("click", () => api("/api/formation/green", { method: "POST" }).catch(() => toast("Error")));
-  $("btn-reset").addEventListener("click", () => api("/api/formation/reset", { method: "POST" }).catch(() => toast("Error")));
+  $("btn-begin").addEventListener("click", () => api("/api/formation/begin", { method: "POST" }).catch((err) => toast(err.message, 5000)));
+  $("btn-green").addEventListener("click", () => api("/api/formation/green", { method: "POST" }).catch((err) => toast(err.message, 5000)));
+  $("btn-reset").addEventListener("click", () => api("/api/formation/reset", { method: "POST" }).catch((err) => toast(err.message, 5000)));
 
   $("btn-save-formation").addEventListener("click", async () => {
-    await api("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        formation: {
-          penalty: {
-            speedThresholdKmh: Number($("f-threshold").value),
-            toleranceSeconds: Number($("f-tolerance").value),
-            graceLaps: Number($("f-grace").value),
-            penaltyType: $("f-penalty-type").value,
-            escalation: $("f-escalation").value,
+    try {
+      await api("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          formation: {
+            penalty: {
+              speedThresholdKmh: Number($("f-threshold").value),
+              toleranceSeconds: Number($("f-tolerance").value),
+              graceLaps: Number($("f-grace").value),
+              penaltyType: $("f-penalty-type").value,
+              escalation: $("f-escalation").value,
+            },
           },
-        },
-      }),
-    });
-    toast("Guardado");
+        }),
+      });
+      toast("Guardado");
+    } catch (err) {
+      toast("No se pudo guardar: " + err.message, 5000);
+    }
   });
 
   $("btn-save-pit").addEventListener("click", async () => {
-    await api("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pit: {
-          zone: {
-            splineStart: Number($("p-zone-start").value),
-            splineEnd: Number($("p-zone-end").value),
+    try {
+      await api("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pit: {
+            zone: {
+              splineStart: Number($("p-zone-start").value),
+              splineEnd: Number($("p-zone-end").value),
+            },
+            stopGoSeconds: Number($("p-stopgo").value),
+            penalty: {
+              speedThresholdKmh: Number($("p-threshold").value),
+              toleranceSeconds: Number($("p-tolerance").value),
+              graceLaps: Number($("p-grace").value),
+              penaltyType: $("p-penalty-type").value,
+              escalation: $("p-escalation").value,
+            },
           },
-          stopGoSeconds: Number($("p-stopgo").value),
-          penalty: {
-            speedThresholdKmh: Number($("p-threshold").value),
-            toleranceSeconds: Number($("p-tolerance").value),
-            graceLaps: Number($("p-grace").value),
-            penaltyType: $("p-penalty-type").value,
-            escalation: $("p-escalation").value,
-          },
-        },
-      }),
-    });
-    toast("Guardado");
+        }),
+      });
+      toast("Guardado");
+    } catch (err) {
+      toast("No se pudo guardar: " + err.message, 5000);
+    }
   });
 
   $("shadow-toggle").addEventListener("change", async (e) => {
-    await api("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shadowMode: e.target.checked }),
-    });
-    toast(e.target.checked ? "Modo sombra activado" : "Aplicación automática activada");
+    try {
+      await api("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shadowMode: e.target.checked }),
+      });
+      toast(e.target.checked ? "Modo sombra activado" : "Aplicación automática activada");
+    } catch (err) {
+      e.target.checked = !e.target.checked; // revertir el checkbox, no se guardó
+      toast("No se pudo guardar: " + err.message, 5000);
+    }
   });
 
   $("btn-copy-snippet").addEventListener("click", () => {
@@ -212,17 +240,24 @@ function wireButtons() {
 
   $("wizard-submit").addEventListener("click", async () => {
     const name = $("wizard-name").value.trim();
-    if (!name) return;
-    await api("/api/config", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leagueName: name }),
-    });
-    $("wizard-overlay").hidden = true;
+    if (!name) {
+      toast("Escribí un nombre para tu liga");
+      return;
+    }
+    try {
+      await api("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leagueName: name }),
+      });
+      $("wizard-overlay").hidden = true;
+    } catch (err) {
+      toast("No se pudo guardar: " + err.message, 5000);
+    }
   });
 }
 
 wireButtons();
-loadConfigForm();
-refresh();
-setInterval(refresh, POLL_MS);
+loadConfigForm().catch((err) => toast("No se pudo cargar la configuración: " + err.message, 5000));
+refresh().catch((err) => toast("No se pudo conectar con el backend: " + err.message, 5000));
+setInterval(() => refresh().catch(() => {}), POLL_MS);

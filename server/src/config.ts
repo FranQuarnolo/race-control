@@ -24,9 +24,13 @@ export interface AppConfig {
 
 function resolveConfigDir(): string {
   // Dentro de un ejecutable empaquetado (pkg/@yao-pkg/pkg) el snapshot es de solo lectura —
-  // el config tiene que vivir al lado del .exe real, no en __dirname (que apunta al snapshot).
+  // el config tiene que vivir fuera de él. Usamos %APPDATA%\RaceControl (siempre escribible por
+  // el usuario actual) en vez de "al lado del .exe": esa carpeta puede ser Descargas o cualquier
+  // otra con permisos restringidos por el antivirus/Windows, lo que hacía fallar el guardado en
+  // silencio (ej. el wizard de primer arranque nunca cerraba porque el POST fallaba).
   if ((process as unknown as { pkg?: unknown }).pkg) {
-    return path.dirname(process.execPath);
+    const appData = process.env.APPDATA || path.join(require("os").homedir(), "AppData", "Roaming");
+    return path.join(appData, "RaceControl");
   }
   return path.join(__dirname, "..");
 }
