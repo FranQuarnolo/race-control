@@ -1,51 +1,65 @@
 import express, { Express } from "express";
 import * as path from "path";
-import { AppConfig, saveConfig } from "../config";
+import { AppConfig, applyConfigPatch } from "../config";
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
 import { StateTracker } from "../state/stateTracker";
+import { ConnectivityManager } from "../net/connectivity";
 
 export interface AdminApiDeps {
   config: AppConfig;
+  firstRun: boolean;
   stateTracker: StateTracker;
   formationStart: FormationStart;
   formationPenaltyEngine: PenaltyEngine;
   pitPenaltyEngine: PenaltyEngine;
   presenceWatchdog: PresenceWatchdog;
+  connectivity: ConnectivityManager;
+  buildEmperorServersSnippet: () => string;
 }
 
-interface LightEvent {
-  seq: number;
-  type: "idle" | "formation" | "green";
-}
+const TELEMETRY_STALE_MS = 2000;
 
+/**
+ * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
+ * a internet. Los endpoints que sí necesitan ser alcanzables desde afuera (cliente Python) viven
+ * en clientApi.ts, en un puerto/listener separado.
+ */
 export function createAdminApi(deps: AdminApiDeps): Express {
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "50kb" }));
   app.use(express.static(path.join(__dirname, "public")));
 
-  let lightEventSeq = 0;
-  let lastLightEvent: LightEvent = { seq: 0, type: "idle" };
-  deps.formationStart.on("stateChanged", (type: LightEvent["type"]) => {
-    lightEventSeq += 1;
-    lastLightEvent = { seq: lightEventSeq, type };
-  });
-
   app.get("/api/state", (_req, res) => {
+    deps.connectivity.refreshTelemetryFlag();
+    const now = Date.now();
     res.json({
+      firstRun: deps.firstRun,
+      leagueName: deps.config.leagueName,
+      shadowMode: deps.config.shadowMode,
       lightState: deps.formationStart.getLightState(),
-      cars: deps.stateTracker.getConnected(),
+      cars: deps.stateTracker.getConnected().map((car) => ({
+        ...car,
+        telemetryStale: car.lastUpdate === 0 || now - car.lastUpdate > TELEMETRY_STALE_MS,
+      })),
       formationPenalties: deps.formationPenaltyEngine.getAll(),
       pitPenalties: deps.pitPenaltyEngine.getAll(),
+      network: {
+        ...deps.connectivity.getStatus(),
+        emperorServersSnippet: deps.buildEmperorServersSnippet(),
+      },
     });
   });
 
   app.get("/api/config", (_req, res) => res.json(deps.config));
 
   app.post("/api/config", (req, res) => {
-    Object.assign(deps.config, req.body);
-    saveConfig(deps.config);
+    if (typeof req.body !== "object" || req.body === null || Array.isArray(req.body)) {
+      res.status(400).json({ ok: false, error: "Body inválido" });
+      return;
+    }
+    applyConfigPatch(deps.config, req.body);
     res.json(deps.config);
   });
 
@@ -62,19 +76,6 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.post("/api/formation/reset", (_req, res) => {
     deps.formationStart.reset();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
-  });
-
-  // Polling del cliente Python (Content Manager) — solo el evento global de semáforo.
-  // Las sanciones individuales se avisan por chat del propio juego (sendChatToCar), que el
-  // cliente también escucha, así no hace falta que la app sepa su propio carId.
-  app.get("/api/client/poll", (_req, res) => {
-    res.json({ lightEvent: lastLightEvent });
-  });
-
-  app.post("/api/client/heartbeat", (req, res) => {
-    const steamGuid = String(req.body?.steamGuid ?? "");
-    if (steamGuid) deps.presenceWatchdog.onHeartbeat(steamGuid);
-    res.json({ ok: true });
   });
 
   return app;

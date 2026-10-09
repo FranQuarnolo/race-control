@@ -2,107 +2,233 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Race Control</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 2rem; max-width: 900px; margin: auto; }
-    h1 { font-size: 1.4rem; }
-    .row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
-    button { padding: 0.75rem 1.25rem; font-size: 1rem; border: none; border-radius: 6px; cursor: pointer; }
-    .begin { background: #2563eb; color: white; }
-    .green { background: #16a34a; color: white; }
-    .reset { background: #4b5563; color: white; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #333; font-size: 0.9rem; }
-    .state { font-size: 1.1rem; padding: 0.3rem 0.8rem; border-radius: 6px; display: inline-block; }
-    .state-idle { background: #4b5563; }
-    .state-formation { background: #ca8a04; }
-    .state-green { background: #16a34a; }
-    fieldset { border: 1px solid #333; border-radius: 6px; margin-top: 1.5rem; }
-    label { display: block; margin: 0.4rem 0; font-size: 0.9rem; }
-    input, select { padding: 0.3rem; }
+    :root {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --panel: #171a21;
+      --panel-border: #272b35;
+      --text: #e6e8ec;
+      --muted: #8b93a3;
+      --accent: #3fa9f5;
+      --green: #35c76e;
+      --yellow: #e0b84b;
+      --red: #e05555;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--panel-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    header h1 { font-size: 18px; margin: 0; }
+    header .league { color: var(--muted); font-size: 14px; }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 16px;
+      overflow-x: auto;
+    }
+    .card h2 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin: 0 0 12px 0;
+    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .row label { font-size: 13px; color: var(--muted); }
+    input[type="number"], input[type="text"], select {
+      background: #0c0e12;
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 6px 8px;
+      width: 110px;
+      font-size: 13px;
+    }
+    input[type="text"] { width: 180px; }
+    button {
+      background: var(--accent);
+      color: #05121e;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button.secondary { background: #2a2f3a; color: var(--text); }
+    button.danger { background: var(--red); color: #1a0505; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--panel-border); }
+    th { color: var(--muted); font-weight: 500; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge.ok { background: rgba(53, 199, 110, 0.15); color: var(--green); }
+    .badge.warn { background: rgba(224, 184, 75, 0.15); color: var(--yellow); }
+    .badge.bad { background: rgba(224, 85, 85, 0.15); color: var(--red); }
+    .badge.neutral { background: rgba(139, 147, 163, 0.15); color: var(--muted); }
+    .semaforo {
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      padding: 12px 0;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .semaforo.idle { background: #1d2029; color: var(--muted); }
+    .semaforo.formation { background: rgba(224, 184, 75, 0.15); color: var(--yellow); }
+    .semaforo.green { background: rgba(53, 199, 110, 0.15); color: var(--green); }
+    pre.snippet {
+      background: #0c0e12;
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .muted { color: var(--muted); font-size: 12px; }
+    .toggle-row { display: flex; align-items: center; gap: 8px; }
+    #wizard-overlay {
+      position: fixed; inset: 0; background: rgba(5, 6, 9, 0.85);
+      display: flex; align-items: center; justify-content: center; z-index: 10;
+    }
+    #wizard-overlay .card { max-width: 420px; }
+    #toast {
+      position: fixed; bottom: 16px; right: 16px; background: var(--panel);
+      border: 1px solid var(--panel-border); padding: 10px 14px; border-radius: 8px;
+      font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
-  <h1>Race Control — Largada en movimiento</h1>
-  <p>Estado: <span id="lightState" class="state state-idle">idle</span></p>
-  <div class="row">
-    <button class="begin" onclick="post('/api/formation/begin')">Iniciar formación</button>
-    <button class="green" onclick="post('/api/formation/green')">VERDE (apretar cuando se apaga el semáforo)</button>
-    <button class="reset" onclick="post('/api/formation/reset')">Reset</button>
+  <header>
+    <h1>Race Control</h1>
+    <span class="league" id="league-label"></span>
+  </header>
+
+  <main>
+    <section class="card" id="card-semaforo">
+      <h2>Largada</h2>
+      <div class="semaforo idle" id="semaforo">--</div>
+      <div class="btn-row">
+        <button id="btn-begin">Iniciar formación</button>
+        <button id="btn-green" class="secondary">Verde</button>
+        <button id="btn-reset" class="secondary">Reset</button>
+      </div>
+    </section>
+
+    <section class="card" id="card-network">
+      <h2>Red</h2>
+      <div class="row"><label>IP pública</label><span id="net-ip">--</span></div>
+      <div class="row"><label>Señal del servidor de AC</label><span id="net-signal">--</span></div>
+      <div class="row"><label>Estrategia activa</label><span id="net-strategy">--</span></div>
+      <p class="muted">Pegá esto en el <code>server_cfg.ini</code> de tu hosting (ej. EmperorServers):</p>
+      <pre class="snippet" id="net-snippet">--</pre>
+      <button class="secondary" id="btn-copy-snippet">Copiar</button>
+    </section>
+
+    <section class="card" id="card-shadow">
+      <h2>Modo de aplicación</h2>
+      <div class="toggle-row">
+        <input type="checkbox" id="shadow-toggle" />
+        <label for="shadow-toggle">Modo sombra (solo registra, no sanciona ni kickea de verdad)</label>
+      </div>
+      <p class="muted">Recomendado activo en las primeras carreras, hasta confirmar que no hay falsos positivos.</p>
+    </section>
+
+    <section class="card" id="card-cars">
+      <h2>Autos conectados</h2>
+      <table>
+        <thead><tr><th>Piloto</th><th>Vel.</th><th>Vuelta</th><th>Posición (spline)</th><th>Señal</th></tr></thead>
+        <tbody id="cars-body"></tbody>
+      </table>
+    </section>
+
+    <section class="card" id="card-config">
+      <h2>Reglas de largada (formación)</h2>
+      <div class="row"><label>Umbral (km/h)</label><input type="number" id="f-threshold" /></div>
+      <div class="row"><label>Tolerancia (s)</label><input type="number" id="f-tolerance" /></div>
+      <div class="row"><label>Vueltas de gracia</label><input type="number" id="f-grace" /></div>
+      <div class="row"><label>Sanción</label>
+        <select id="f-penalty-type"><option value="DT">Drive-Through</option><option value="SG">Stop-and-Go</option><option value="BALLAST">Ballast</option></select>
+      </div>
+      <div class="row"><label>Si no cumple</label>
+        <select id="f-escalation"><option value="DQ">Kick (DQ)</option><option value="TIME_PENALTY">Penalización de tiempo</option></select>
+      </div>
+      <button id="btn-save-formation">Guardar</button>
+    </section>
+
+    <section class="card" id="card-config-pit">
+      <h2>Reglas de pit lane (carrera)</h2>
+      <div class="row"><label>Zona de pit — inicio (spline)</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
+      <div class="row"><label>Zona de pit — fin (spline)</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
+      <p class="muted">Para calibrar: mirá la columna "Posición (spline)" de la tabla de autos
+      mientras alguien maneja por pit lane, y anotá dónde empieza/termina.</p>
+      <div class="row"><label>Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
+      <div class="row"><label>Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
+      <div class="row"><label>Vueltas de gracia</label><input type="number" id="p-grace" /></div>
+      <div class="row"><label>Stop-and-Go (s)</label><input type="number" id="p-stopgo" /></div>
+      <div class="row"><label>Sanción</label>
+        <select id="p-penalty-type"><option value="DT">Drive-Through</option><option value="SG">Stop-and-Go</option><option value="BALLAST">Ballast</option></select>
+      </div>
+      <div class="row"><label>Si no cumple</label>
+        <select id="p-escalation"><option value="DQ">Kick (DQ)</option><option value="TIME_PENALTY">Penalización de tiempo</option></select>
+      </div>
+      <button id="btn-save-pit">Guardar</button>
+    </section>
+
+    <section class="card" id="card-penalties" style="grid-column: 1 / -1;">
+      <h2>Sanciones</h2>
+      <table>
+        <thead><tr><th>Instancia</th><th>Auto</th><th>Motivo</th><th>Estado</th><th>Gracia restante</th></tr></thead>
+        <tbody id="penalties-body"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="wizard-overlay" hidden>
+    <div class="card">
+      <h2>Primera vez</h2>
+      <p class="muted">Solo necesitamos el nombre de tu liga. El resto (puertos, IP pública) se detecta solo.</p>
+      <div class="row"><label>Nombre de la liga</label><input type="text" id="wizard-name" /></div>
+      <button id="wizard-submit">Empezar</button>
+    </div>
   </div>
 
-  <h2>Autos conectados</h2>
-  <table id="carsTable"><thead><tr><th>Car</th><th>Piloto</th><th>Vel (km/h)</th><th>Spline pos.</th></tr></thead><tbody></tbody></table>
-  <p style="font-size:0.8rem;color:#999">"Spline pos." sirve para calibrar la zona de pit lane por circuito (ver shared/tracks/example-pit-zone.json): manejá por pit lane y anotá entre qué valores se mueve.</p>
+  <div id="toast"></div>
 
-  <h2>Sanciones</h2>
-  <table id="penaltiesTable"><thead><tr><th>Car</th><th>Motivo</th><th>Tipo</th><th>Estado</th><th>Vueltas rest.</th></tr></thead><tbody></tbody></table>
-
-  <fieldset>
-    <legend>Configuración</legend>
-    <label>Umbral de velocidad en formación (km/h): <input id="cfgFormationSpeed" type="number" /></label>
-    <label>Tolerancia (segundos): <input id="cfgFormationTolerance" type="number" /></label>
-    <label>Vueltas de gracia para cumplir DT/SG: <input id="cfgGraceLaps" type="number" /></label>
-    <label>Tipo de sanción:
-      <select id="cfgPenaltyType"><option value="DT">Drive-Through</option><option value="SG">Stop-and-Go</option><option value="BALLAST">Ballast inmediato</option></select>
-    </label>
-    <label>Si no cumple, escala a:
-      <select id="cfgEscalation"><option value="DQ">Descalificación</option><option value="TIME_PENALTY">Penalización de tiempo</option></select>
-    </label>
-    <button onclick="saveConfig()">Guardar</button>
-  </fieldset>
-
-  <script>
-    async function post(url) { await fetch(url, { method: "POST" }); refresh(); }
-
-    async function refresh() {
-      const res = await fetch("/api/state");
-      const data = await res.json();
-      const el = document.getElementById("lightState");
-      el.textContent = data.lightState;
-      el.className = "state state-" + data.lightState;
-
-      const carsBody = document.querySelector("#carsTable tbody");
-      carsBody.innerHTML = data.cars.map(c =>
-        `<tr><td>${c.carId}</td><td>${c.driverName}</td><td>${c.speedKmh.toFixed(0)}</td><td>${c.normalizedSplinePosition.toFixed(3)}</td></tr>`
-      ).join("");
-
-      const all = [...data.formationPenalties, ...data.pitPenalties];
-      const penBody = document.querySelector("#penaltiesTable tbody");
-      penBody.innerHTML = all.map(p =>
-        `<tr><td>${p.carId}</td><td>${p.reason}</td><td>${p.type}</td><td>${p.status}</td><td>${p.graceLapsRemaining}</td></tr>`
-      ).join("");
-    }
-
-    async function loadConfig() {
-      const res = await fetch("/api/config");
-      const cfg = await res.json();
-      document.getElementById("cfgFormationSpeed").value = cfg.formation.speedThresholdKmh;
-      document.getElementById("cfgFormationTolerance").value = cfg.formation.toleranceSeconds;
-      document.getElementById("cfgGraceLaps").value = cfg.formation.penalty.graceLaps;
-      document.getElementById("cfgPenaltyType").value = cfg.formation.penalty.penaltyType;
-      document.getElementById("cfgEscalation").value = cfg.formation.penalty.escalation;
-    }
-
-    async function saveConfig() {
-      const speedThresholdKmh = Number(document.getElementById("cfgFormationSpeed").value);
-      const toleranceSeconds = Number(document.getElementById("cfgFormationTolerance").value);
-      const graceLaps = Number(document.getElementById("cfgGraceLaps").value);
-      const penaltyType = document.getElementById("cfgPenaltyType").value;
-      const escalation = document.getElementById("cfgEscalation").value;
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          formation: { speedThresholdKmh, toleranceSeconds, penalty: { speedThresholdKmh, toleranceSeconds, graceLaps, penaltyType, escalation, ballastKg: 50 } },
-        }),
-      });
-      alert("Guardado");
-    }
-
-    loadConfig();
-    refresh();
-    setInterval(refresh, 1000);
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>

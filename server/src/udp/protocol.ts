@@ -1,11 +1,17 @@
 /**
  * Protocolo UDP del plugin del servidor dedicado de Assetto Corsa (ACSP).
  *
- * IMPORTANTE: Los valores de opcode y los layouts de cada paquete están tomados de
- * implementaciones comunitarias de referencia (joaoubaldo/acudpclient, flamescape/acsp),
- * no de documentación oficial de Kunos. Antes de confiar en esto en producción hay que
- * validarlo con una captura real (Wireshark) contra un acServer de prueba —
- * ver "Spike de protocolo" en el plan.
+ * Opcodes y layouts verificados contra el ejemplo oficial de Kunos
+ * (`acRemoteServerUDP_Example`, un proyecto C# que Kunos distribuye como referencia del
+ * protocolo), cruzado además contra dos implementaciones comunitarias independientes
+ * (joaoubaldo/acudpclient en Python, flamescape/acsp en Node.js) — las tres coinciden
+ * exactamente en opcodes, orden de campos y, crucialmente, en el formato de los strings
+ * (ver `wideString`/`narrowString` abajo, antes mal implementado como UTF-16LE genérico).
+ *
+ * Lo que SIGUE sin poder confirmarse sin un servidor real (ver docs/spike-protocolo.md):
+ * el formato exacto real de `driverGuid` en la práctica, y el comportamiento de la red bajo
+ * pérdida de paquetes/múltiples autos — eso no depende de leer código, depende de observar
+ * tráfico real.
  */
 
 export const Opcode = {
@@ -72,47 +78,119 @@ export interface ChatMessage {
   message: string;
 }
 
+export interface SessionInfo {
+  protocolVersion: number;
+  sessionIndex: number;
+  currentSessionIndex: number;
+  sessionCount: number;
+  serverName: string;
+  track: string;
+  trackConfig: string;
+  name: string;
+  sessionType: number;
+  timeSeconds: number;
+  laps: number;
+  waitTimeSeconds: number;
+  ambientTemp: number;
+  roadTemp: number;
+  weatherGraphics: string;
+  elapsedMs: number;
+}
+
+export interface ErrorMessage {
+  message: string;
+}
+
 export type IncomingPacket =
   | { type: "CAR_UPDATE"; data: CarUpdate }
   | { type: "NEW_CONNECTION"; data: NewConnection }
   | { type: "CONNECTION_CLOSED"; data: ConnectionClosed }
   | { type: "LAP_COMPLETED"; data: LapCompleted }
   | { type: "CHAT"; data: ChatMessage }
-  | { type: "NEW_SESSION" | "END_SESSION" | "CLIENT_LOADED" | "SESSION_INFO" | "ERROR" | "CLIENT_EVENT"; raw: Buffer };
+  | { type: "NEW_SESSION" | "SESSION_INFO"; data: SessionInfo }
+  | { type: "ERROR"; data: ErrorMessage }
+  | { type: "END_SESSION" | "CLIENT_LOADED" | "CLIENT_EVENT"; raw: Buffer };
+
+/** Paquete UDP más corto de lo que exige el opcode decodificado — nunca debe tumbar el proceso. */
+export class TruncatedPacketError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TruncatedPacketError";
+  }
+}
 
 class BufferReader {
   private offset = 0;
   constructor(private buf: Buffer) {}
 
+  private ensure(n: number): void {
+    if (this.offset + n > this.buf.length) {
+      throw new TruncatedPacketError(
+        `Se esperaban ${n} bytes en offset ${this.offset} pero el paquete mide ${this.buf.length}`
+      );
+    }
+  }
+
   byte(): number {
+    this.ensure(1);
     const v = this.buf.readUInt8(this.offset);
     this.offset += 1;
     return v;
   }
 
   uint16(): number {
+    this.ensure(2);
     const v = this.buf.readUInt16LE(this.offset);
     this.offset += 2;
     return v;
   }
 
   int32(): number {
+    this.ensure(4);
     const v = this.buf.readInt32LE(this.offset);
     this.offset += 4;
     return v;
   }
 
+  uint32(): number {
+    this.ensure(4);
+    const v = this.buf.readUInt32LE(this.offset);
+    this.offset += 4;
+    return v;
+  }
+
   float(): number {
+    this.ensure(4);
     const v = this.buf.readFloatLE(this.offset);
     this.offset += 4;
     return v;
   }
 
-  /** Strings ACSP: 1 byte de longitud (en caracteres) + UTF-16LE. */
-  string(): string {
+  /**
+   * Strings "anchas" del protocolo (nombre de piloto, guid, mensajes de chat, nombre de
+   * servidor): 1 byte de longitud EN CARACTERES, seguido de 4 bytes por carácter en UTF-32LE.
+   * Confirmado contra el ejemplo oficial de Kunos (`Encoding.UTF32.GetString(...)` en
+   * `readStringW`) — el código anterior de este archivo asumía UTF-16LE (2 bytes/char), lo
+   * cual corrompía cualquier driverGuid/driverName/mensaje de chat leído.
+   */
+  wideString(): string {
     const len = this.byte();
-    const str = this.buf.toString("utf16le", this.offset, this.offset + len * 2);
-    this.offset += len * 2;
+    this.ensure(len * 4);
+    let result = "";
+    for (let i = 0; i < len; i++) {
+      result += String.fromCodePoint(this.buf.readUInt32LE(this.offset + i * 4));
+    }
+    this.offset += len * 4;
+    return result;
+  }
+
+  /** Strings "angostas" (modelo/skin de auto, nombre de pista, clima): 1 byte de longitud EN
+   * BYTES, seguido de esa cantidad de bytes en ASCII/UTF-8. */
+  narrowString(): string {
+    const len = this.byte();
+    this.ensure(len);
+    const str = this.buf.toString("utf8", this.offset, this.offset + len);
+    this.offset += len;
     return str;
   }
 
@@ -121,14 +199,50 @@ class BufferReader {
   }
 }
 
-function writeAcString(value: string): Buffer {
-  const chars = Buffer.from(value, "utf16le");
-  const header = Buffer.from([value.length]);
-  return Buffer.concat([header, chars]);
+/** Codifica para mandar AL servidor — todos los comandos de texto (chat, admin) usan el mismo
+ * formato ancho (UTF-32LE) que las strings anchas que recibimos. */
+function writeWideString(value: string): Buffer {
+  const codePoints = Array.from(value);
+  if (codePoints.length > 255) {
+    throw new RangeError("El mensaje no puede superar los 255 caracteres");
+  }
+  const body = Buffer.alloc(codePoints.length * 4);
+  codePoints.forEach((ch, i) => body.writeUInt32LE(ch.codePointAt(0)!, i * 4));
+  return Buffer.concat([Buffer.from([codePoints.length]), body]);
+}
+
+function readSessionInfo(r: BufferReader): SessionInfo {
+  return {
+    protocolVersion: r.byte(),
+    sessionIndex: r.byte(),
+    currentSessionIndex: r.byte(),
+    sessionCount: r.byte(),
+    serverName: r.wideString(),
+    track: r.narrowString(),
+    trackConfig: r.narrowString(),
+    name: r.narrowString(),
+    sessionType: r.byte(),
+    timeSeconds: r.uint16(),
+    laps: r.uint16(),
+    waitTimeSeconds: r.uint16(),
+    ambientTemp: r.byte(),
+    roadTemp: r.byte(),
+    weatherGraphics: r.narrowString(),
+    elapsedMs: r.int32(),
+  };
 }
 
 export function decodePacket(buf: Buffer): IncomingPacket | null {
   if (buf.length === 0) return null;
+  try {
+    return decodePacketUnsafe(buf);
+  } catch (err) {
+    if (err instanceof TruncatedPacketError) return null;
+    throw err;
+  }
+}
+
+function decodePacketUnsafe(buf: Buffer): IncomingPacket | null {
   const opcode = buf.readUInt8(0);
   const r = new BufferReader(buf.subarray(1));
 
@@ -144,7 +258,10 @@ export function decodePacket(buf: Buffer): IncomingPacket | null {
       const gear = r.byte();
       const engineRpm = r.uint16();
       const normalizedSplinePosition = r.float();
-      const speedMs = Math.sqrt(velocityX ** 2 + velocityY ** 2 + velocityZ ** 2);
+      // Asumimos Y como eje vertical (convención estándar del motor de AC) y calculamos la
+      // velocidad solo con el plano horizontal — incluir la componente vertical sobreestimaría
+      // la velocidad en subidas/bajadas. Pendiente de confirmar contra un servidor real.
+      const speedMs = Math.sqrt(velocityX ** 2 + velocityZ ** 2);
       return {
         type: "CAR_UPDATE",
         data: {
@@ -164,11 +281,11 @@ export function decodePacket(buf: Buffer): IncomingPacket | null {
     }
     case Opcode.NEW_CONNECTION:
     case Opcode.CONNECTION_CLOSED: {
-      const driverName = r.string();
-      const driverGuid = r.string();
+      const driverName = r.wideString();
+      const driverGuid = r.wideString();
       const carId = r.byte();
-      const carModel = r.string();
-      const carSkin = r.string();
+      const carModel = r.narrowString();
+      const carSkin = r.narrowString();
       const data = { carId, driverName, driverGuid, carModel, carSkin };
       return {
         type: opcode === Opcode.NEW_CONNECTION ? "NEW_CONNECTION" : "CONNECTION_CLOSED",
@@ -177,25 +294,28 @@ export function decodePacket(buf: Buffer): IncomingPacket | null {
     }
     case Opcode.LAP_COMPLETED: {
       const carId = r.byte();
-      const lapTimeMs = r.int32();
+      const lapTimeMs = r.uint32();
       const cuts = r.byte();
+      // Después de esto el paquete trae un leaderboard (cars_count + N × {carId, time, laps})
+      // y un grip_level final — no los necesitamos hoy, así que no los leemos (no hace falta
+      // consumir el resto del buffer, decodePacket no exige llegar al final).
       return { type: "LAP_COMPLETED", data: { carId, lapTimeMs, cuts } };
     }
     case Opcode.CHAT: {
       const carId = r.byte();
-      const message = r.string();
+      const message = r.wideString();
       return { type: "CHAT", data: { carId, message } };
     }
     case Opcode.NEW_SESSION:
-      return { type: "NEW_SESSION", raw: buf };
+      return { type: "NEW_SESSION", data: readSessionInfo(r) };
+    case Opcode.SESSION_INFO:
+      return { type: "SESSION_INFO", data: readSessionInfo(r) };
+    case Opcode.ERROR:
+      return { type: "ERROR", data: { message: r.wideString() } };
     case Opcode.END_SESSION:
       return { type: "END_SESSION", raw: buf };
     case Opcode.CLIENT_LOADED:
       return { type: "CLIENT_LOADED", raw: buf };
-    case Opcode.SESSION_INFO:
-      return { type: "SESSION_INFO", raw: buf };
-    case Opcode.ERROR:
-      return { type: "ERROR", raw: buf };
     case Opcode.CLIENT_EVENT:
       return { type: "CLIENT_EVENT", raw: buf };
     default:
@@ -211,15 +331,15 @@ export function encodeRealtimePosInterval(intervalMs: number): Buffer {
 }
 
 export function encodeSendChat(carId: number, message: string): Buffer {
-  return Buffer.concat([Buffer.from([Opcode.SEND_CHAT, carId]), writeAcString(message)]);
+  return Buffer.concat([Buffer.from([Opcode.SEND_CHAT, carId]), writeWideString(message)]);
 }
 
 export function encodeBroadcastChat(message: string): Buffer {
-  return Buffer.concat([Buffer.from([Opcode.BROADCAST_CHAT]), writeAcString(message)]);
+  return Buffer.concat([Buffer.from([Opcode.BROADCAST_CHAT]), writeWideString(message)]);
 }
 
 export function encodeAdminCommand(command: string): Buffer {
-  return Buffer.concat([Buffer.from([Opcode.ADMIN_COMMAND]), writeAcString(command)]);
+  return Buffer.concat([Buffer.from([Opcode.ADMIN_COMMAND]), writeWideString(command)]);
 }
 
 export function encodeKickUser(carId: number): Buffer {

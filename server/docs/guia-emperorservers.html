@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Race Control — Guía de EmperorServers</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f1115; color: #e6e8ec; max-width: 760px; margin: 0 auto; padding: 24px; line-height: 1.5; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 1px solid #272b35; padding-bottom: 6px; }
+  code, pre { background: #171a21; border: 1px solid #272b35; border-radius: 6px; padding: 2px 6px; }
+  pre { padding: 12px; overflow-x: auto; }
+  .step { background: #171a21; border: 1px solid #272b35; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .step b { color: #3fa9f5; }
+  .why { color: #8b93a3; font-size: 14px; margin-top: 8px; }
+  .warn { background: rgba(224, 184, 75, 0.1); border: 1px solid rgba(224, 184, 75, 0.3); border-radius: 8px; padding: 12px 16px; }
+</style>
+</head>
+<body>
+  <h1>Conectar Race Control con tu servidor en EmperorServers</h1>
+  <p>Esta es la única parte que no se puede resolver automáticamente desde la app: el panel de
+  EmperorServers lo maneja la empresa de hosting, no nosotros. Son 2 líneas para pegar — no hace
+  falta entender de redes para hacerlo, pero si tenés curiosidad, acá explicamos el porqué.</p>
+
+  <div class="step">
+    <b>Paso 1.</b> Abrí Race Control (<code>RaceControlServer.exe</code>) y andá a la sección
+    <b>"Red"</b> del panel. Ahí vas a ver un bloque de texto de 2 líneas, ya completado con tu
+    IP pública y los puertos correctos, con un botón "Copiar".
+  </div>
+
+  <div class="step">
+    <b>Paso 2.</b> Entrá al panel de control de tu hosting en EmperorServers y buscá la sección
+    de configuración del servidor (suele llamarse algo como "Server Config", "cfg" o
+    "Configuración avanzada"). Ahí vas a encontrar el archivo <code>server_cfg.ini</code>.
+    <div class="why">Los nombres exactos de menú pueden variar según el plan contratado —
+    si no lo encontrás, es más rápido preguntarle directamente al soporte de EmperorServers
+    "dónde edito el server_cfg.ini" que buscarlo a ciegas.</div>
+  </div>
+
+  <div class="step">
+    <b>Paso 3.</b> Dentro de <code>server_cfg.ini</code> buscá la sección <code>[UDP]</code> (o
+    similar) y pegá ahí las 2 líneas que copiaste en el paso 1. Van a verse parecido a esto:
+    <pre>UDP_PLUGIN_LOCAL_PORT=11000
+UDP_PLUGIN_ADDRESS=TU_IP_PUBLICA:12000</pre>
+    Guardá los cambios y reiniciá el servidor de Assetto Corsa desde el panel de EmperorServers
+    para que los tome.
+  </div>
+
+  <div class="warn">
+    <b>Importante:</b> si tu conexión de internet de casa tiene IP dinámica (cambia cada tanto),
+    vas a tener que repetir este paso cuando cambie. Si eso te resulta molesto, la alternativa es
+    correr Race Control en una VPS barata (IP fija) en vez de tu PC — preguntanos si querés esa
+    opción.
+  </div>
+
+  <h2>¿Por qué hace falta esto y qué hace cada línea?</h2>
+  <p>El servidor de Assetto Corsa (que corre en EmperorServers) le manda constantemente datos de
+  velocidad y posición de cada auto a una dirección externa — ahí es donde Race Control los recibe
+  para poder detectar violaciones. También Race Control le manda de vuelta órdenes (sanciones,
+  avisos, kicks). Estas 2 líneas le dicen al servidor de EmperorServers a dónde mandar y escuchar
+  cada cosa:</p>
+  <ul>
+    <li><code>UDP_PLUGIN_ADDRESS</code>: tu IP pública y el puerto donde corre Race Control — es
+    donde el servidor de AC manda la telemetría de cada auto.</li>
+    <li><code>UDP_PLUGIN_LOCAL_PORT</code>: el puerto que el propio servidor de AC abre para
+    recibir las órdenes que le manda Race Control (sanciones, kicks, avisos de largada).</li>
+  </ul>
+  <p>Sin estas 2 líneas, el servidor de EmperorServers nunca se entera de que existe Race Control,
+  y nada de esto funciona — ni la largada, ni las sanciones.</p>
+
+  <h2>¿Qué pasa con el router de mi casa?</h2>
+  <p>Eso Race Control lo intenta resolver solo (sin que hagas nada) en el momento de arrancar.
+  Si después de un rato la sección "Red" del panel sigue mostrando "sin señal", ahí sí te va a
+  mostrar instrucciones puntuales para tu caso.</p>
+</body>
+</html>

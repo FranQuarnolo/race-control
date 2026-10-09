@@ -16,6 +16,8 @@ export interface CarState {
   lastUpdate: number;
 }
 
+const MAX_PLAUSIBLE_SPEED_KMH = 400;
+
 function emptyState(carId: number): CarState {
   return {
     carId,
@@ -48,23 +50,29 @@ export class StateTracker extends EventEmitter {
 
   onNewConnection(data: NewConnection): void {
     const state = this.getOrCreate(data.carId);
+    // Un NEW_CONNECTION duplicado del mismo piloto ya conectado (reenvío, paquete repetido) no
+    // debe resetear el conteo de vueltas a mitad de carrera.
+    const isDuplicateOfCurrentOccupant = state.connected && state.driverGuid === data.driverGuid;
     state.driverName = data.driverName;
     state.driverGuid = data.driverGuid;
     state.carModel = data.carModel;
     state.connected = true;
-    state.lapCount = 0;
+    if (!isDuplicateOfCurrentOccupant) state.lapCount = 0;
     this.emit("connected", state);
   }
 
   onConnectionClosed(data: ConnectionClosed): void {
     const state = this.cars.get(data.carId);
-    if (state) {
-      state.connected = false;
-      this.emit("disconnected", state);
-    }
+    if (!state) return;
+    // Un CONNECTION_CLOSED viejo/fuera de orden no debe desconectar al piloto que reocupó el
+    // mismo slot después (caso borde: reconexión rápida con reuso de carId).
+    if (state.driverGuid !== data.driverGuid) return;
+    state.connected = false;
+    this.emit("disconnected", state);
   }
 
   onCarUpdate(data: CarUpdate): void {
+    if (!this.isPlausibleSample(data)) return;
     const state = this.getOrCreate(data.carId);
     state.speedKmh = data.speedKmh;
     state.posX = data.posX;
@@ -75,6 +83,16 @@ export class StateTracker extends EventEmitter {
     this.emit("update", state);
   }
 
+  private isPlausibleSample(data: CarUpdate): boolean {
+    if (!Number.isFinite(data.speedKmh) || data.speedKmh < 0 || data.speedKmh > MAX_PLAUSIBLE_SPEED_KMH) {
+      return false;
+    }
+    if (!Number.isFinite(data.normalizedSplinePosition) || data.normalizedSplinePosition < 0 || data.normalizedSplinePosition > 1) {
+      return false;
+    }
+    return true;
+  }
+
   onLapCompleted(data: LapCompleted): void {
     const state = this.getOrCreate(data.carId);
     state.lapCount += 1;
@@ -83,6 +101,16 @@ export class StateTracker extends EventEmitter {
 
   get(carId: number): CarState | undefined {
     return this.cars.get(carId);
+  }
+
+  /** Resuelve el carId ACTUAL de un piloto por su driverGuid — necesario porque una sanción
+   * emitida contra un carId puede quedar desactualizada si el piloto se reconecta y le toca
+   * otro slot (reuso de carId por el servidor de AC). */
+  findCarIdByGuid(driverGuid: string): number | undefined {
+    for (const state of this.cars.values()) {
+      if (state.connected && state.driverGuid === driverGuid) return state.carId;
+    }
+    return undefined;
   }
 
   getAll(): CarState[] {

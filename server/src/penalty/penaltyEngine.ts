@@ -20,6 +20,9 @@ export interface PenaltyRules {
 export interface Penalty {
   id: string;
   carId: number;
+  /** Identidad estable del piloto — una sanción sigue al piloto aunque se reconecte y le toque
+   * otro carId (ver StateTracker.findCarIdByGuid). */
+  driverGuid: string;
   reason: string;
   type: PenaltyType;
   status: PenaltyStatus;
@@ -35,6 +38,9 @@ let nextId = 1;
 /**
  * Máquina de estados de sanción compartida por instancia 1 (largada) e instancia 2 (penalizaciones en carrera):
  * servingWindow -> served | escalated (DQ o penalización de tiempo) si se agotan las vueltas de gracia.
+ *
+ * `rules` se recibe por referencia (el mismo objeto anidado de AppConfig) para que los cambios
+ * de configuración desde el panel se apliquen a las próximas sanciones sin reconstruir el motor.
  */
 export class PenaltyEngine extends EventEmitter {
   private penalties = new Map<string, Penalty>();
@@ -43,18 +49,21 @@ export class PenaltyEngine extends EventEmitter {
     super();
   }
 
-  updateRules(rules: Partial<PenaltyRules>): void {
-    this.rules = { ...this.rules, ...rules };
+  /** Actualiza las reglas EN EL MISMO objeto (no reemplaza la referencia) — necesario para que
+   * quien ya tiene `rules` capturado (ej. un SpeedWatcher) vea el cambio sin reconstruirse. */
+  updateRules(patch: Partial<PenaltyRules>): void {
+    Object.assign(this.rules, patch);
   }
 
   getRules(): PenaltyRules {
     return this.rules;
   }
 
-  issuePenalty(carId: number, reason: string, type: PenaltyType = this.rules.penaltyType): Penalty {
+  issuePenalty(carId: number, driverGuid: string, reason: string, type: PenaltyType = this.rules.penaltyType): Penalty {
     const penalty: Penalty = {
       id: `P${nextId++}`,
       carId,
+      driverGuid,
       reason,
       type,
       status: "servingWindow",

@@ -2,6 +2,7 @@ import { EventEmitter } from "events";
 import { PenaltyEngine, Penalty } from "../penalty/penaltyEngine";
 import { CarState, StateTracker } from "../state/stateTracker";
 import { SpeedViolation, SpeedWatcher } from "../state/speedWatcher";
+import { Clock, systemClock } from "../util/clock";
 
 export interface PitZone {
   /** normalizedSplinePosition (0..1) donde arranca y termina pit lane en esta pista. */
@@ -21,13 +22,11 @@ function inZone(car: CarState, zone: PitZone): boolean {
 export class PitSpeedMonitor extends EventEmitter {
   private watcher: SpeedWatcher;
 
-  constructor(stateTracker: StateTracker, thresholdKmh: number, toleranceSeconds: number, zone: PitZone, private penaltyEngine: PenaltyEngine) {
+  constructor(stateTracker: StateTracker, zone: PitZone, private penaltyEngine: PenaltyEngine) {
     super();
-    this.watcher = new SpeedWatcher(stateTracker, {
-      thresholdKmh,
-      toleranceSeconds,
-      isInZone: (car) => inZone(car, zone),
-    });
+    // Las reglas se pasan por referencia (penaltyEngine.getRules()): si el admin cambia el
+    // límite de velocidad de pit desde el panel, el watcher lo ve en la próxima muestra.
+    this.watcher = new SpeedWatcher(stateTracker, this.penaltyEngine.getRules(), (car) => inZone(car, zone));
     this.watcher.on("violation", (v: SpeedViolation) => this.handleViolation(v));
   }
 
@@ -43,6 +42,7 @@ export class PitSpeedMonitor extends EventEmitter {
     const rules = this.penaltyEngine.getRules();
     const penalty = this.penaltyEngine.issuePenalty(
       violation.carId,
+      violation.car.driverGuid,
       `Pit lane: superó ${rules.speedThresholdKmh} km/h por más de ${rules.toleranceSeconds}s (máx ${violation.maxSpeedKmh.toFixed(1)} km/h)`
     );
     this.emit("violation", { violation, penalty });
@@ -52,9 +52,10 @@ export class PitSpeedMonitor extends EventEmitter {
 /**
  * Instancia 2 (parte 2): detección de cumplimiento del DT/SG, estilo Real Penalty.
  *
- * Simplificación v1: no tenemos la geometría exacta del box propio de cada auto por circuito,
- * solo la zona general de pit lane. Por eso no distingue "paró en su propio box" de "paró en
- * pit lane" — una vez validado el resto, conviene sumar esa geometría por pista (ver shared/tracks).
+ * Simplificación v1 (aceptada con el usuario): no tenemos la geometría exacta del box propio de
+ * cada auto por circuito, solo la zona general de pit lane. Por eso no distingue "paró en su
+ * propio box" de "paró en pit lane" — cualquier parada dentro de la zona cumple el Stop-and-Go.
+ * Se puede sumar esa geometría por pista más adelante (ver shared/tracks).
  */
 export class PitComplianceTracker {
   private sawInZone = new Set<number>();
@@ -65,10 +66,20 @@ export class PitComplianceTracker {
     private stateTracker: StateTracker,
     private penaltyEngine: PenaltyEngine,
     private zone: PitZone,
-    private legalPitSpeedKmh: number,
-    private stopGoSeconds: number
+    /** stopGoSeconds vive en config.pit (no en PenaltyRules) — se lee en vivo por función. */
+    private getStopGoSeconds: () => number,
+    private clock: Clock = systemClock
   ) {
     this.stateTracker.on("update", (car: CarState) => this.handleUpdate(car));
+  }
+
+  /** Velocidad legal de pit lane: la misma que dispara la violación (única fuente de verdad). */
+  private get legalPitSpeedKmh(): number {
+    return this.penaltyEngine.getRules().speedThresholdKmh;
+  }
+
+  private get stopGoMs(): number {
+    return this.getStopGoSeconds() * 1000;
   }
 
   private handleUpdate(car: CarState): void {
@@ -107,12 +118,12 @@ export class PitComplianceTracker {
       this.stoppedSinceMs.delete(car.carId);
       return;
     }
-    const now = Date.now();
+    const now = this.clock.now();
     if (!this.stoppedSinceMs.has(car.carId)) {
       this.stoppedSinceMs.set(car.carId, now);
     }
     const since = this.stoppedSinceMs.get(car.carId)!;
-    if ((now - since) / 1000 >= this.stopGoSeconds) {
+    if (now - since >= this.stopGoMs) {
       this.penaltyEngine.markServed(penalty.id);
     }
   }

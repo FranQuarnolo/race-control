@@ -3,6 +3,9 @@
 
 # build output
 /server/dist
+/server/release
+/server/logs
+/client-app/release
 
 # config local generado en el primer `npm start` (IPs/puertos propios de cada liga)
 /server/config.json

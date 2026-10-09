@@ -53,6 +53,7 @@ export class FormationStart extends EventEmitter {
     const rules = this.penaltyEngine.getRules();
     const penalty = this.penaltyEngine.issuePenalty(
       violation.carId,
+      violation.car.driverGuid,
       `Largada: superó ${rules.speedThresholdKmh} km/h por más de ${rules.toleranceSeconds}s en la formación (máx ${violation.maxSpeedKmh.toFixed(1)} km/h)`
     );
     this.emit("violation", { violation, penalty });
