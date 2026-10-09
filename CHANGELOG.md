@@ -3,6 +3,22 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.2.3] — 2026-10-09
+
+Tercer intento sobre el mismo síntoma — esta vez probado con un navegador real (Playwright +
+Chromium headless) en vez de solo `curl`, que fue lo que había dejado pasar el bug real dos veces
+seguidas.
+
+- **Causa real (por fin)**: el CSS de `#wizard-overlay` le ponía `display: flex` de forma
+  incondicional. Esa regla de autor le gana en el cascade a la regla nativa del navegador para
+  `[hidden]` (`display: none`), así que el atributo `hidden` se seteaba perfecto desde JS pero el
+  modal nunca desaparecía visualmente — los dos fixes anteriores (0.2.1, 0.2.2) eran correctos
+  pero no podían arreglar algo que estaba roto en el CSS, no en la lógica.
+  **Fix**: `#wizard-overlay[hidden] { display: none; }` (`server/src/api/public/index.html`).
+- Verificado con capturas de pantalla reales: wizard se cierra al guardar, se mantiene cerrado
+  tras recargar la página, y el resto de los botones del panel (formación, reset, modo sombra,
+  guardar reglas) funcionan sin errores de consola.
+
 ## [0.2.2] — 2026-10-09
 
 Segundo fix encontrado probando la 0.2.1 real: el modal de primera vez seguía sin cerrar incluso

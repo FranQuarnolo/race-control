@@ -8,8 +8,8 @@
 
 | Para | Qué bajar |
 |---|---|
-| 🖥️ El admin de la liga | [**RaceControlServer.exe**](https://github.com/FranQuarnolo/race-control/releases/download/v0.2.2/RaceControlServer.exe) |
-| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/download/v0.2.2/RaceControlClient.zip) |
+| 🖥️ El admin de la liga | [**RaceControlServer.exe**](https://github.com/FranQuarnolo/race-control/releases/download/v0.2.3/RaceControlServer.exe) |
+| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/download/v0.2.3/RaceControlClient.zip) |
 
 ## 🚦 Forma de uso
 
