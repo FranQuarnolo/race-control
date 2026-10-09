@@ -1,6 +1,6 @@
 import express, { Express } from "express";
 import * as path from "path";
-import { AppConfig, applyConfigPatch } from "../config";
+import { AppConfig, applyConfigPatch, isFirstRun } from "../config";
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
@@ -9,7 +9,6 @@ import { ConnectivityManager } from "../net/connectivity";
 
 export interface AdminApiDeps {
   config: AppConfig;
-  firstRun: boolean;
   stateTracker: StateTracker;
   formationStart: FormationStart;
   formationPenaltyEngine: PenaltyEngine;
@@ -35,7 +34,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     deps.connectivity.refreshTelemetryFlag();
     const now = Date.now();
     res.json({
-      firstRun: deps.firstRun,
+      firstRun: isFirstRun(deps.config),
       leagueName: deps.config.leagueName,
       shadowMode: deps.config.shadowMode,
       lightState: deps.formationStart.getLightState(),

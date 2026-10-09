@@ -1,6 +1,6 @@
 {
   "name": "race-control-server",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Backend propio de largada en movimiento y penalizaciones en tiempo real para Assetto Corsa.",
   "private": true,
   "main": "dist/index.js",

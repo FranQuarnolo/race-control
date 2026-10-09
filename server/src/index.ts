@@ -1,7 +1,7 @@
 import * as path from "path";
 import { exec } from "child_process";
 import { performance } from "perf_hooks";
-import { loadConfig, isFirstRun, getConfigDir, AppConfig } from "./config";
+import { loadConfig, getConfigDir, AppConfig } from "./config";
 import { createAdminApi } from "./api/adminApi";
 import { createClientApi } from "./api/clientApi";
 import { FormationStart } from "./instances/formationStart";
@@ -36,7 +36,7 @@ export interface RaceControl {
 
 /** Arma todo el backend (sin levantar los listeners HTTP todavía) — separado de `main()` para
  * poder reusarlo desde el empaquetado (.exe) y, a futuro, desde tests/simulación. */
-export async function createRaceControl(config: AppConfig, firstRun: boolean): Promise<RaceControl> {
+export async function createRaceControl(config: AppConfig): Promise<RaceControl> {
   const logDir = path.join(getConfigDir(), "logs");
   const journal = new Journal(logDir);
 
@@ -174,7 +174,6 @@ export async function createRaceControl(config: AppConfig, firstRun: boolean): P
 
   const adminApp = createAdminApi({
     config,
-    firstRun,
     stateTracker,
     formationStart,
     formationPenaltyEngine,
@@ -209,9 +208,8 @@ export async function createRaceControl(config: AppConfig, firstRun: boolean): P
 }
 
 async function main() {
-  const firstRun = isFirstRun();
   const config = loadConfig();
-  const rc = await createRaceControl(config, firstRun);
+  const rc = await createRaceControl(config);
 
   // Puerto A: panel y API de administración — SIEMPRE loopback-only, nunca expuesto a internet.
   rc.adminApp.listen(config.http.adminPort, "127.0.0.1", () => {

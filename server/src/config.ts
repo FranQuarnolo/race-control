@@ -142,6 +142,11 @@ export function applyConfigPatch(config: AppConfig, patch: Record<string, unknow
   saveConfig(config);
 }
 
-export function isFirstRun(): boolean {
-  return !fs.existsSync(CONFIG_PATH);
+/** "Primera vez" se deriva en vivo del nombre de la liga, no de un snapshot tomado al arrancar
+ * el proceso — así, apenas se guarda el nombre, deja de considerarse primera vez en el acto
+ * (incluía un bug real: antes quedaba en `true` para siempre durante toda la vida del proceso,
+ * aunque el admin ya hubiera completado el wizard, haciendo que el modal volviera a aparecer si
+ * se recargaba la página). */
+export function isFirstRun(config: AppConfig): boolean {
+  return config.leagueName.trim().length === 0;
 }

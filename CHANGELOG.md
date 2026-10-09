@@ -3,6 +3,20 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.2.2] — 2026-10-09
+
+Segundo fix encontrado probando la 0.2.1 real: el modal de primera vez seguía sin cerrar incluso
+con el nombre de liga ya guardado correctamente en disco.
+
+- **Causa real**: `firstRun` se calculaba una sola vez al arrancar el proceso (`!fs.existsSync(...)`
+  evaluado antes de que existiera el archivo) y quedaba congelado en `true` el resto de la vida
+  del proceso — aunque el admin ya hubiera completado el wizard. **Fix**: `isFirstRun()` ahora se
+  deriva en vivo de `config.leagueName` (`server/src/config.ts`), recalculado en cada
+  `GET /api/state`.
+- El frontend (`app.js`) dejó de depender de un flag que se seteaba una sola vez (`wizardShown`):
+  ahora el modal se muestra/oculta en cada actualización (1 vez por segundo) según el estado real
+  del servidor — si por lo que sea no se cerrara solo, el próximo poll lo corrige.
+
 ## [0.2.1] — 2026-10-09
 
 Fix encontrado probando el `.exe` real por primera vez: el wizard de primer arranque (pedir el

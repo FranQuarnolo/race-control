@@ -122,16 +122,20 @@ function renderNetwork(network) {
   $("net-snippet").textContent = network.emperorServersSnippet;
 }
 
-let wizardShown = false;
-
 async function refresh() {
   const state = await api("/api/state");
 
   $("league-label").textContent = state.leagueName || "";
 
-  if (state.firstRun && !wizardShown) {
-    wizardShown = true;
+  // El modal es un reflejo directo de si el servidor ya tiene nombre de liga guardado — se
+  // recalcula en cada poll (1 vez por segundo), no depende de un flag que se setee una sola vez.
+  // Así, si por lo que sea no se cerró al guardar, el próximo poll lo corrige solo.
+  const wizardInput = $("wizard-name");
+  if (state.firstRun) {
     $("wizard-overlay").hidden = false;
+  } else if (document.activeElement !== wizardInput) {
+    // No lo pisamos si el usuario está justo escribiendo en el campo.
+    $("wizard-overlay").hidden = true;
   }
 
   const semaforo = $("semaforo");
