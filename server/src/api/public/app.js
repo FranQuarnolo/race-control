@@ -1717,6 +1717,8 @@ function wireButtons() {
     }
   });
 
+  wireLogout();
+
   for (const [boton, origen] of [
     ["btn-copy-snippet", "net-snippet"],
     ["btn-copy-send-address", "net-send-address"],
@@ -1730,6 +1732,28 @@ function wireButtons() {
   }
 
   wireWizard();
+}
+
+/**
+ * La sesión no vive en el worker sino en el portal, así que el logout **no** pasa por `api()`:
+ * `api()` antepone `BASE` (`/l/<slug>`) y ese prefijo se proxea al worker, que no sabe nada de
+ * cookies de sesión. La ruta va absoluta y a mano, con el header que el portal exige para aceptar
+ * algo que cambia estado.
+ */
+function wireLogout() {
+  const btn = $("btn-logout");
+  if (!BASE) return; // panel abierto directo contra el worker: no hay sesión que cerrar
+  btn.hidden = false;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await fetch("/api/portal/logout", { method: "POST", headers: { "X-RC-Request": "1" } });
+    } catch (_) {
+      // Si el logout no llegó, igual conviene sacarlo del panel: la pantalla de ingreso le va a
+      // decir qué pasa mejor que un toast acá adentro.
+    }
+    window.location.href = "/login";
+  });
 }
 
 // ===================================================================== wizard de primer arranque

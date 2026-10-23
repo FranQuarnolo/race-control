@@ -105,7 +105,7 @@ tira un error explícito cuando se acaba.
 ## El ruteo
 
 ```
-/                       → la landing pública: qué hace el producto, con capturas del panel
+/                       → la landing pública: qué hace el producto, sección por sección
 /login                  → formulario. Es la única puerta: no hay registro
 /mis-ligas              → a dónde cae un admin después de entrar
 /conectar/<slug>        → la pantalla de puesta en marcha de una liga

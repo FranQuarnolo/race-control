@@ -71,12 +71,18 @@ se podía entrar.
 Antes, la raíz era un formulario de login. Ahora es una página que explica sección por sección qué
 hace Race Control, con el botón de "Ingresar" donde corresponde.
 
-**Las capturas son el panel de verdad.** Para eso existe `src/sim/demo.ts`: levanta el panel
-completo con una carrera inventada —diez pilotos GT3, un trazado sintético, seis incidentes en la
-bandeja, tres sanciones en curso— y de ahí salen las cuatro imágenes. No es un script descartable:
-está versionado para que, cuando el panel cambie, las capturas se puedan rehacer en un comando.
+**Los cuatro lugares de captura salen con el hueco puesto**, a la espera de las fotos definitivas.
+El hueco no es un `<div>` vacío: lleva el `aspect-ratio` exacto de la imagen que va a ir ahí, así
+la página ya tiene hoy la altura final y no se reacomoda sola el día que se suban. Cómo llenarlos
+está en `PUESTA-EN-MARCHA.md`.
 
-Dos cosas que hubo que resolver para que la foto no mintiera:
+**Cuando se saquen, van a ser el panel de verdad.** Para eso existe `src/sim/demo.ts`: levanta el
+panel completo con una carrera inventada —diez pilotos GT3, un trazado sintético, seis incidentes
+en la bandeja, tres sanciones en curso— y de ahí sale cada imagen, sin necesidad de un servidor de
+Assetto Corsa. No es un script descartable: está versionado para que, cuando el panel cambie, las
+capturas se puedan rehacer en un comando.
+
+Dos cosas que hubo que resolver para que la foto no mienta:
 
 - Un pinger UDP real bindeado al puerto que la config declara como el del servidor de AC, para que
   el indicador de señal diga "recibiendo" porque **entran paquetes**, y no porque se trucó una
@@ -88,6 +94,19 @@ Dos cosas que hubo que resolver para que la foto no mintiera:
 De paso, los cajones de Conexión y Reglas aceptan ahora un ancla (`#conexion`, `#reglas`) y se
 abren solos. Nació para poder fotografiarlos, pero sirve para que un aviso enlace directo a donde
 se arregla el problema.
+
+### Salir de la sesión, desde donde sea que estés
+
+Las tres pantallas con sesión tienen ahora su botón: el panel de operador, la lista de ligas y
+—esta es la que faltaba— el panel de la liga, que era justamente donde el admin pasa toda la
+carrera. Sin él, cerrar sesión era borrar la cookie a mano o esperar a que venciera, y en una PC
+compartida en un evento eso no es un detalle.
+
+El botón del panel de liga tiene una particularidad: **no pasa por el helper `api()`**. La sesión
+vive en el portal, no en el worker, y `api()` antepone el prefijo `/l/<slug>` que se proxea al
+worker —que no sabe nada de cookies—. Va con la ruta absoluta y el header `X-RC-Request` a mano.
+Y solo aparece si el panel se abrió desde el portal: abierto directo contra el puerto del worker
+no hay sesión que cerrar y el botón mentiría.
 
 ### Versión y limpieza
 

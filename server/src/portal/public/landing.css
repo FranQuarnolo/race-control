@@ -198,6 +198,28 @@ a { color: var(--accent); }
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
 }
 
+/*
+  Hueco a la espera de la foto. Las capturas las saca quien opera el servicio y se guardan en
+  `portal/public/capturas/`.
+
+  El `aspect-ratio` va inline en cada hueco, con la proporción exacta de la imagen que va a ir
+  ahí: así la página ya tiene hoy la altura definitiva y no se reacomoda sola el día que se suban
+  las fotos. El rayado diagonal es para que se lea como "falta algo", y no como una tarjeta vacía
+  que alguien dejó a propósito.
+*/
+.sin-imagen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0 12px, transparent 12px 24px),
+    var(--panel);
+}
+
 .captura figcaption {
   padding: 10px 14px;
   font-size: 13px;

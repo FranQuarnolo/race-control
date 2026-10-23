@@ -53,6 +53,11 @@
       <span class="track" aria-hidden="true"></span>
       <span class="mode-label" id="mode-label">--</span>
     </label>
+
+    <!-- Solo aparece cuando el panel se abrió desde el portal: ahí hay una sesión que cerrar.
+         Abierto directo contra el puerto del worker (desarrollo) no hay sesión y el botón
+         mentiría. Lo muestra `app.js` mirando la URL. -->
+    <button class="status-button" id="btn-logout" hidden title="Cerrar la sesión y volver a la pantalla de ingreso.">Salir</button>
   </header>
 
   <!-- =============================================================== vista: control de carrera -->

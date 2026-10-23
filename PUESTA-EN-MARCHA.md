@@ -233,6 +233,30 @@ El despliegue reinicia la máquina, así que reinicia todos los workers. Las san
 incidentes se reconstruyen solos desde el journal al arrancar, pero **no se despliega en medio de
 una carrera**: hay unos segundos en los que no se escucha telemetría.
 
+### Poner las capturas en la landing
+
+La página pública tiene cuatro huecos grises donde van las fotos del panel. Para llenarlos:
+
+1. Dejar los PNG en `server/src/portal/public/capturas/` con estos nombres:
+
+   | Archivo | Dónde sale | Proporción |
+   |---|---|---|
+   | `control-de-carrera.png` | arriba de todo y en la sección "Control de carrera" | 2880 × 1400 |
+   | `sanciones.png` | sección "Incidentes y sanciones" | 2880 × 1400 |
+   | `reglas.png` | sección "Reglas" | 2880 × 1580 |
+   | `conexion.png` | sección "La app de los pilotos" | 2880 × 1120 |
+
+2. En `server/src/portal/public/index.html`, cambiar cada `<div class="sin-imagen">` por el `<img>`
+   correspondiente. El `aspect-ratio` que tiene hoy el hueco es la proporción que espera esa foto,
+   así que si la captura respeta esa medida la página no se mueve ni un pixel.
+
+3. `npm run build` y `fly deploy`.
+
+La proporción no tiene que ser exacta al pixel —las medidas de la tabla son el tamaño con el que se
+tomaron las originales— pero cuanto más cerca, menos se recorta. El atajo para sacarlas: `node
+dist/sim/demo.js` levanta el panel con una carrera inventada adentro, en
+[http://127.0.0.1:3900](http://127.0.0.1:3900), sin necesidad de Assetto Corsa.
+
 ---
 
 ## 9. Cuando algo no anda
