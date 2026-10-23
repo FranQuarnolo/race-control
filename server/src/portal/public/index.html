@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Race Control</title>
+  <link rel="icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body>
+  <div class="marca"><img src="/icon.svg" alt="" /> Race Control</div>
+
+  <!-- Sin sesión: qué es esto y cómo se consigue. -->
+  <section class="caja ancha" id="landing" hidden>
+    <h1>Control de carrera para tu liga de Assetto Corsa</h1>
+    <p>
+      Largada en movimiento, torre de tiempos en vivo, bandeja de incidentes y sanciones — todo
+      desde el navegador. Vos no instalás nada: entrás con tu usuario y dirigís la carrera.
+    </p>
+
+    <h2>Cómo pido mi liga</h2>
+    <p class="muted">
+      Las ligas se dan de alta por invitación. Escribinos con el nombre de tu liga y te llega un
+      link: lo abrís, elegís una contraseña y ya tenés tu panel. Lleva dos minutos.
+    </p>
+
+    <h2>Y los pilotos</h2>
+    <p class="muted">
+      Cada piloto baja una app, la arrastra a Content Manager una sola vez y listo — sin tipear
+      ninguna dirección. Se la pasás vos desde el panel.
+    </p>
+
+    <button id="btn-login">Ya tengo cuenta, quiero entrar</button>
+  </section>
+
+  <!-- Con sesión: elegir liga. -->
+  <section class="caja ancha" id="mis-ligas" hidden>
+    <h1>Tus ligas</h1>
+    <div id="lista"></div>
+    <p class="muted" id="sin-ligas" hidden>
+      Tu cuenta todavía no tiene ninguna liga asociada. Si acabás de pedirla, revisá el link de
+      invitación que te pasamos.
+    </p>
+    <button id="btn-logout">Cerrar sesión</button>
+  </section>
+
+  <p class="error" id="error" hidden></p>
+  <p class="pie">Race Control <span id="version"></span></p>
+
+  <script src="/portal.js"></script>
+  <script src="/inicio.js"></script>
+</body>
+</html>

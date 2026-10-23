@@ -160,3 +160,53 @@ function sizeOf(file: string): number {
     return 0;
   }
 }
+
+export interface RetentionPolicy {
+  /** Días que se conservan los `events-*.jsonl`. Tienen nombres y SteamID64 en texto plano. */
+  eventsDays: number;
+  /** Días que se conservan los `raw-*.bin` archivados. */
+  rawDays: number;
+}
+
+/**
+ * Borra los logs viejos de una liga. Se llama al arrancar y una vez por día.
+ *
+ * Existe por el portal, no por el `.exe`: en la PC del admin el disco es suyo y los datos son de
+ * su propia liga, así que borrarle el historial sin preguntar sería un atropello. En un servidor
+ * compartido que guarda nombres y SteamID64 de pilotos de ligas ajenas, conservarlos para siempre
+ * es lo que no se puede defender. Por eso la política se pasa explícita y el modo local no la usa.
+ *
+ * El `raw.bin` en curso no se toca: se lo lleva la rotación por tamaño. Es material de
+ * diagnóstico binario, no una lista de nombres.
+ */
+export function pruneOldLogs(logDir: string, policy: RetentionPolicy): number {
+  const ahora = Date.now();
+  const limite = (dias: number) => ahora - dias * 24 * 60 * 60 * 1000;
+  let borrados = 0;
+
+  let nombres: string[];
+  try {
+    nombres = fs.readdirSync(logDir);
+  } catch {
+    return 0;
+  }
+
+  for (const nombre of nombres) {
+    let corte: number;
+    if (/^events-.+\.jsonl$/.test(nombre)) corte = limite(policy.eventsDays);
+    else if (/^raw-.+\.bin$/.test(nombre)) corte = limite(policy.rawDays);
+    else continue;
+
+    const file = path.join(logDir, nombre);
+    try {
+      // `mtime` y no la fecha del nombre: el nombre dice cuándo EMPEZÓ el archivo, y un journal de
+      // una carrera larga se sigue escribiendo horas después. Lo que importa es la última línea.
+      if (fs.statSync(file).mtimeMs >= corte) continue;
+      fs.unlinkSync(file);
+      borrados += 1;
+    } catch {
+      // Un archivo tomado por otro proceso se reintenta mañana. No vale interrumpir el arranque.
+    }
+  }
+  return borrados;
+}

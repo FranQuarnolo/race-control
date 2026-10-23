@@ -41,8 +41,31 @@ reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 
 Apenas el servidor de Assetto Corsa detecta que este piloto se conectó, el backend de Race
 Control le manda (por el chat interno del juego, dirigido solo a ese auto) un mensaje con el
-prefijo `RACECONTROL_BACKEND:<ip>:<puerto>`. La app ya está escuchando el chat y lo captura sola.
-Ver `server/src/udp/announcer.ts`.
+prefijo `RACECONTROL_BACKEND:`. La app ya está escuchando el chat y lo captura sola. Ver
+`server/src/udp/announcer.ts`.
+
+Desde la 0.4 ese mensaje lleva **dos** datos separados por `|`:
+
+```
+RACECONTROL_BACKEND:<dirección>|<token>
+```
+
+- La **dirección** puede traer un prefijo de ruta (`race-control.fly.dev/l/mi-liga`) además de la
+  forma vieja `ip:puerto`. No hizo falta cambiar nada del ruteo para eso: la app ya armaba su URL
+  como `http://` + lo que le digan + `/api/client/...`, y un prefijo entra ahí sin que se entere.
+- El **token** es la credencial de ese piloto, y va en `Authorization: Bearer` en el poll y en el
+  heartbeat. Dura 24 horas y cada vez que el piloto entra al servidor recibe uno nuevo.
+
+El separador es `|` y no `:` porque la dirección ya trae dos puntos cuando lleva puerto.
+
+### "Credencial vencida: volvé a entrar al servidor"
+
+Es lo que muestra la app cuando el backend le contesta 401. Es literal: el piloto sale y vuelve a
+entrar, el chat le manda un token nuevo y sigue andando.
+
+Pasa si estuvo más de 24 h sin salir del servidor, o si el operador rotó la clave de la liga. **No
+pasa con el `.exe` local**: ahí el token es opcional, porque exigirlo dejaría afuera en plena
+carrera a todos los pilotos que todavía tengan la app de la 0.3.
 
 ## Pendiente de verificar contra la API real de AC (ver docs/spike-protocolo.md)
 

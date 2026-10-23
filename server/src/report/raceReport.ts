@@ -305,8 +305,14 @@ export function toCsv(report: RaceReport): string {
 }
 
 function csvCell(value: string): string {
-  if (!/[;"\r\n]/.test(value)) return value;
-  return '"' + value.replace(/"/g, '""') + '"';
+  // Inyección de fórmulas: Excel y LibreOffice interpretan como fórmula toda celda que arranque
+  // con = + - @ (y con tabulador o retorno, que algunos lectores usan igual). Un piloto puede
+  // ponerse de nombre `=HYPERLINK(...)` y esa fórmula se ejecuta en la planilla del comisario
+  // cuando abre el informe. El apóstrofo inicial es la forma estándar de forzar texto; no se ve
+  // en la celda, pero desarma la fórmula.
+  const escapado = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  if (!/[;"\r\n]/.test(escapado)) return escapado;
+  return '"' + escapado.replace(/"/g, '""') + '"';
 }
 
 /** Nombre de archivo sugerido, sin caracteres que Windows rechace. */

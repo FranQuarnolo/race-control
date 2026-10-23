@@ -76,6 +76,13 @@ async function brandedBaseBinary() {
 const leeme = `Race Control - servidor del admin
 ==================================
 
+Antes de empezar: esto es la version para correr en TU PC. Desde la 0.4 hay tambien un portal
+web donde no hace falta descargar nada, ni abrir puertos, ni dejar una ventana abierta: entras
+con tu usuario y listo. Si lo preferis, pedi tu liga en:
+https://github.com/FranQuarnolo/race-control
+
+Si vas a usar esta version, sigue estos pasos:
+
 1. Hace doble click en RaceControlServer.exe.
 2. Windows puede avisarte "Windows protegió su PC" (SmartScreen) porque esta app es nueva y no
    tiene una firma digital paga todavia. Es normal y seguro: hace click en "Mas informacion" y

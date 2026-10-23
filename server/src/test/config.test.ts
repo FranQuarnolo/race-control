@@ -1,6 +1,6 @@
 import { strict as assert } from "assert";
 import { test } from "node:test";
-import { applyPresetTo, parseConfig } from "../config";
+import { applyPresetTo, mergeConfigInto, parseConfig, validateConfig } from "../config";
 import { PRESETS } from "../incident/catalog";
 
 test("un config.json vacío arranca con el catálogo por defecto", () => {
@@ -137,4 +137,57 @@ test("puertos propios válidos se respetan tal cual", () => {
   const config = parseConfig({ http: { adminPort: 8080, clientPort: 8081 } });
   assert.equal(config.http.adminPort, 8080);
   assert.equal(config.http.clientPort, 8081);
+});
+
+// --- Mutación in place: lo que hace que tocar una regla en el panel se aplique en vivo --------
+//
+// Los motores guardan la referencia al sub-objeto de config (`PitSpeedMonitor` se queda con
+// `config.pit.zone`, `TrackLimitsTracker` con `config.infractions.trackLimits`). Si la validación
+// reemplaza el objeto en vez de corregirlo, el motor sigue leyendo el viejo: el panel dice
+// "guardado" y en pista no cambia nada. Es un bug silencioso, por eso se fija con tests.
+
+test("corregir una zona de pit inválida no reemplaza el objeto que miran los motores", () => {
+  const config = parseConfig({});
+  const zone = config.pit.zone;
+  (zone as unknown as Record<string, unknown>).splineStart = "casi al final";
+
+  validateConfig(config);
+
+  assert.equal(config.pit.zone, zone, "PitSpeedMonitor quedaría mirando el objeto viejo");
+  assert.equal(zone.splineStart, 0.97);
+  assert.equal(zone.splineEnd, 0.995);
+});
+
+test("reponer una infracción rota no reemplaza el objeto que mira el tracker", () => {
+  const config = parseConfig({});
+  const infractions = config.infractions;
+  (infractions as unknown as Record<string, unknown>).trackLimits = null;
+
+  validateConfig(config);
+
+  assert.equal(config.infractions, infractions);
+  assert.equal(config.infractions.trackLimits.minTyresOut, 4);
+});
+
+// --- Prototype pollution ----------------------------------------------------------------------
+//
+// Mientras el panel vivía en loopback esto era teórico. Con el portal, el cuerpo de un
+// POST /api/config llega de internet, y una sola clave `__proto__` le inyecta propiedades a todos
+// los objetos del proceso: a partir de ahí cualquier `if (obj.loQueSea)` da verdadero.
+
+test("una clave __proto__ en el config no envenena Object.prototype", () => {
+  const raw = JSON.parse('{"leagueName":"Liga","__proto__":{"colado":"si"}}');
+  const config = parseConfig(raw);
+
+  assert.equal(config.leagueName, "Liga");
+  assert.equal(({} as Record<string, unknown>).colado, undefined);
+  assert.equal((config as unknown as Record<string, unknown>).colado, undefined);
+});
+
+test("mergeConfigInto ignora constructor y prototype", () => {
+  const target: Record<string, unknown> = { ok: 1 };
+  mergeConfigInto(target, JSON.parse('{"constructor":{"x":1},"prototype":{"y":2},"ok":2}'));
+
+  assert.equal(target.ok, 2);
+  assert.equal(target.constructor, Object);
 });

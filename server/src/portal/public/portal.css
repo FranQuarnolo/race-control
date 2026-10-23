@@ -1,0 +1,173 @@
+/*
+  Pantallas del portal: landing, login y alta por invitación.
+
+  Hoja aparte de la del panel a propósito. El panel tiene una regla dura —todo en una pantalla,
+  sin scroll— que existe porque durante una carrera no se puede scrollear para encontrar la torre
+  de tiempos. Acá no se corre ninguna carrera: son tres pantallas cortas que se leen una vez, y
+  mezclarlas con esa hoja significaría arrastrar un layout de dashboard para mostrar un formulario
+  de dos campos.
+
+  Los colores sí son los mismos, para que entrar al panel no se sienta otra aplicación.
+*/
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-border: #272b35;
+  --text: #e6e8ec;
+  --muted: #8b93a3;
+  --accent: #3fa9f5;
+  --green: #35c76e;
+  --yellow: #e0b84b;
+  --red: #e05555;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6vh 20px 40px;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.01em;
+  margin-bottom: 28px;
+}
+
+.marca img { width: 32px; height: 32px; }
+
+.caja {
+  width: 100%;
+  max-width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+
+.caja.ancha { max-width: 720px; }
+
+h1 { font-size: 21px; margin: 0 0 6px; }
+h2 { font-size: 16px; margin: 24px 0 8px; }
+p { margin: 0 0 14px; }
+.muted { color: var(--muted); font-size: 13px; }
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 14px 0 4px;
+}
+
+input[type="email"], input[type="password"], input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: #0e1016;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+input:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button {
+  margin-top: 20px;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: #06121c;
+  font-weight: 650;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.55; cursor: progress; }
+
+.error {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--red);
+  background: rgba(224, 85, 85, 0.12);
+  color: #ffc9c9;
+  font-size: 14px;
+}
+
+.error[hidden] { display: none; }
+
+/* --------------------------------------------------------------- lista de ligas */
+
+.liga {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  text-decoration: none;
+  color: inherit;
+  background: #0e1016;
+}
+
+.liga:hover { border-color: var(--accent); }
+
+.liga .nombre { font-weight: 650; flex: 1; }
+
+.estado {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.estado.running { color: var(--green); border-color: var(--green); }
+.estado.failed { color: var(--red); border-color: var(--red); }
+.estado.starting { color: var(--yellow); border-color: var(--yellow); }
+
+.send-address {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 15px;
+  background: #0e1016;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 10px 0 4px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.pie {
+  margin-top: 26px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pie a { color: var(--accent); }

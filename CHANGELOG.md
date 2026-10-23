@@ -3,6 +3,142 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.4] — 2026-10-23
+
+El admin ya no descarga nada. Race Control pasa de ser un `.exe` que corre en la PC de una persona
+a un **portal web multi-liga**: se entra con usuario y contraseña, se pega un renglón en el panel
+del hosting, y eso es toda la puesta en marcha.
+
+El `.exe` sigue existiendo y hace exactamente lo mismo. No es una versión degradada ni un modo de
+compatibilidad: es el mismo motor con `mode: "local"`.
+
+### Por qué
+
+La 0.3.1 arregló cada paso difícil de la configuración por separado y aun así la secuencia completa
+seguía siendo impracticable: bajar un ejecutable que SmartScreen marca, convivir con una ventana de
+cmd abierta toda la carrera, entrar a un `localhost:3000` que parece un error, averiguar la IP
+pública propia, abrir un puerto en el router y esperar que la IP dinámica no cambie en el medio.
+Ninguno de esos pasos es el producto. Todos desaparecen cuando el motor corre en un servidor que ya
+tiene IP fija, puertos abiertos y un certificado válido.
+
+Lo único que no se puede eliminar es apuntar el servidor de Assetto Corsa a Race Control: ese dato
+solo lo puede poner quien tiene acceso al panel del hosting. Lo que sí se pudo es reducirlo a
+copiar y pegar un renglón que el portal muestra ya armado.
+
+### Un proceso por liga
+
+El portal no atiende varias ligas dentro del mismo proceso, y no por comodidad. Hay estado que es
+global por construcción —el `StateTracker` indexado por `carId`, el circuito que se aprende, el
+tipo de sesión— y un `uncaughtException` llamaba a `process.exit`. En un proceso compartido, un
+`carId` de una liga pisaría al de otra y cualquier falla se llevaría puestas a todas las carreras
+en curso a la vez. El precio son unas decenas de MB por liga y se paga.
+
+De ahí sale el resto de la arquitectura:
+
+- **`core/raceControl.ts`**: todo el backend extraído del entry, parametrizable. Recibe su carpeta
+  de datos, sus puertos y su modo por argumento, y tiene un `stop()` que cierra los timers, el
+  socket y los archivos. Sin eso no se pueden tener dos instancias en un proceso, que es lo que los
+  tests necesitan para poder probar el aislamiento entre ligas.
+- **`portal/supervisor.ts`**: levanta un hijo por liga y lo mantiene vivo con backoff creciente
+  (1 s, 2 s, 4 s… tope 60 s). El contador se reinicia tras cinco minutos estable, y después de
+  cinco caídas seguidas la liga queda en `failed` y se avisa en el portal. Reintentar para siempre
+  quema la máquina y llena el disco; no reintentar deja la carrera muerta.
+- **`portal/store.ts`**: cuentas, ligas, membresías e invitaciones en un JSON con escritura
+  atómica. No es una base de datos y no hace falta que lo sea: escribe un solo proceso y la escala
+  es de decenas de ligas. `node:sqlite` sigue siendo experimental en Node 22.
+
+### Rutas en vez de subdominios
+
+Cada liga vive en `race-control.fly.dev/l/<liga>/`. La alternativa era un subdominio por liga, que
+hubiera dejado el panel intacto —todas sus rutas absolutas seguirían funcionando—, pero exige un
+certificado wildcard y un dominio propio. Con `*.fly.dev` no hay sub-subdominios, así que arrancar
+sin pagar un dominio obliga a rutas.
+
+El costo fue real pero acotado: el panel aprendió a vivir bajo un prefijo (`BASE` en `app.js`, que
+se deduce de la propia URL). El cliente Python no necesitó un solo cambio de ruteo, porque ya
+armaba su URL como `http://<lo que le digan>/api/client/...` y un prefijo entra ahí sin que se
+entere.
+
+### El canal de los pilotos ahora está firmado
+
+Hasta acá ese canal no tenía ninguna autenticación: cualquiera que supiera un SteamID podía mandar
+telemetría en nombre de otro. En loopback no importaba —había que estar en la misma PC—; expuesto a
+internet, sí.
+
+Cada liga firma un token por piloto con su propia clave de 32 bytes (`security/pilotToken.ts`). El
+`steamGuid` va dentro de la firma, así que un piloto no puede usar su token para hacerse pasar por
+otro, y el token de una liga es ruido en otra. Viaja por el mismo chat del juego que ya le
+anunciaba la dirección al auto, que es el único canal que Assetto Corsa ofrece para decirle algo a
+una persona y no a toda la parrilla.
+
+**El token es obligatorio en el portal y opcional en el `.exe`.** No es un descuido: exigirlo
+también en local dejaría afuera, en plena carrera y sin ningún mensaje que lo explique, a todos los
+pilotos que todavía tengan la app de la 0.3. Local lo emite igual y lo usa si llega; lo que no hace
+es rechazar a quien no lo tenga.
+
+Lo que este esquema **no** resuelve, y se asume: el token viaja en claro, porque la app corre en el
+Python 3.3 embebido de Assetto Corsa y ahí no hay HTTPS utilizable (`ssl.create_default_context`
+llegó en 3.4, la verificación de certificados por defecto en 3.4.3, y no lee el almacén de
+Windows). Quien esté en la red de un piloto puede capturar su token y falsificar su presencia y su
+telemetría por 24 h. No da acceso al panel ni a otra liga. Está escrito en `docs/seguridad.md`.
+
+### Endurecimiento del panel, que ahora sale a internet
+
+El panel vivía en `127.0.0.1` y eso permitía no pensar en nada de esto:
+
+- **Allowlist de rutas, no denylist.** Se enumera lo que pasa y el resto es 404.
+- **CSRF con tres defensas y no una**: cookie `SameSite=Strict`, un header propio obligatorio en
+  todo POST, y chequeo de `Origin`. Cada una falla distinto.
+- **Sesiones** en cookie `__Host-rc_session`, guardadas hasheadas en memoria, con vencimiento a las
+  2 h de inactividad y 12 h absolutas. Cambiar la contraseña invalida todas de golpe.
+- **Contraseñas** con `scrypt` (N=2^15), comparación en tiempo constante, y un hash señuelo cuando
+  el email no existe para que el tiempo de respuesta no delate qué cuentas hay. Cero dependencias
+  npm nuevas: las dos siguen siendo `express` y `@runonflux/nat-upnp`.
+- **Freno de login** por IP (10 fallos en 15 minutos) y por cuenta (demora progresiva hasta 30 s,
+  nunca bloqueo: si no, cualquiera podría dejar a un admin afuera de su propia liga a propósito).
+- **`POST /api/config` con allowlist de campos**: puertos, binds y direcciones no son editables
+  desde el panel en modo portal, porque los administra el portal. El panel esconde esos formularios
+  cuando corre ahí, en vez de ofrecer un "Guardar" que no guarda nada.
+- **Auditoría con nombre y apellido**: el portal inyecta `X-RC-User` en cada acción, y lo borra si
+  viene de afuera. Sin eso, en una liga con varios comisarios el journal diría "alguien kickeó al
+  piloto 7".
+- **Informe CSV**: las celdas que empiezan con `= + - @` se prefijan con una comilla simple. Un
+  piloto con un nombre armado a propósito podía meter una fórmula en el Excel del comisario.
+- **Prototype pollution**: `mergeConfigInto` rechaza `__proto__`, `constructor` y `prototype`.
+
+### Retención de datos
+
+Los `events-*.jsonl` guardan nombres y SteamID64 en texto plano. En la PC del admin eso era un
+detalle —son sus datos, en su disco—; en un servidor con ligas de terceros, no. En modo portal se
+borran a los 90 días y las capturas crudas a los 7. **En modo local no se borra nada**: ahí el
+historial es del admin y no se le toca sin preguntar.
+
+### Dos bugs que ya estaban y salieron a la luz
+
+- `validateConfig` **reasignaba** objetos en vez de mutarlos (en `pit.zone`, en los dos `penalty` y
+  en cada tipo de infracción). Los motores guardan la referencia, así que después de una validación
+  quedaban mirando el objeto viejo y los cambios del panel dejaban de aplicarse en vivo.
+- `saveConfig` escribía directo sobre el archivo. Un corte en el momento equivocado dejaba un
+  `config.json` truncado y la liga sin configuración. Ahora es `tmp` + `rename`.
+
+### Despliegue
+
+`Dockerfile` y `fly.toml` para Fly.io. Tres cosas de esa plataforma condicionan el archivo entero y
+están anotadas ahí: UDP exige una IPv4 dedicada, Fly no reescribe el puerto de los datagramas (así
+que `internal_port` tiene que ser igual al externo y cada puerto va declarado uno por uno), y la
+app tiene que bindear a `fly-global-services` y no a `0.0.0.0` —con `0.0.0.0`, Linux contesta desde
+la dirección equivocada y el servidor de Assetto Corsa nunca ve la respuesta.
+
+Una sola máquina, sin escalado horizontal: el estado vive en el volumen y los workers son hijos de
+ese proceso.
+
+### Lo que todavía no se probó
+
+Nada de esto corrió contra un servidor de Assetto Corsa real todavía. El camino completo se validó
+de punta a punta con datagramas simulados (portal → worker → panel, y la app del piloto con su
+token), pero los supuestos del protocolo anotados en `docs/spike-protocolo.md` siguen sin confirmar
+en pista.
+
 ## [0.3.1] — 2026-10-23
 
 Primera prueba contra un servidor real de EmperorServers. No se llegó a correr: la puesta en

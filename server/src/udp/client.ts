@@ -55,7 +55,19 @@ export class AcUdpClient extends EventEmitter {
   };
   private remotePortAdoptionGaveUp = false;
 
-  constructor(private config: AcUdpConfig) {
+  /**
+   * `config` se guarda POR REFERENCIA a propósito: es el mismo objeto `config.acUdp` de la app, y
+   * la autodetección de host/puerto lo muta para que el panel y el `config.json` queden al día
+   * sin tener que propagar el cambio a mano. Copiarlo acá rompería eso en silencio.
+   *
+   * `bindAddress` va aparte justamente porque NO es parte de la configuración del usuario: no se
+   * persiste ni se muestra. Vacío = todas las interfaces (lo correcto en una PC de escritorio).
+   * Existe por Fly.io, donde el UDP entrante solo funciona si el proceso escucha en la dirección
+   * especial `fly-global-services`: con `0.0.0.0` el kernel contesta desde una IP de origen que
+   * no es la pública y las respuestas se descartan en silencio — telemetría que entra y comandos
+   * que nunca llegan, el modo de fallo más difícil de diagnosticar que tiene este producto.
+   */
+  constructor(private config: AcUdpConfig, private bindAddress?: string) {
     super();
     this.socket = dgram.createSocket("udp4");
     this.socket.on("message", (msg, rinfo) => this.handleMessage(msg, rinfo));
@@ -69,7 +81,7 @@ export class AcUdpClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       const onBindError = (err: Error) => reject(err);
       this.socket.once("error", onBindError);
-      this.socket.bind(this.config.localPort, () => {
+      this.socket.bind(this.config.localPort, this.bindAddress || undefined, () => {
         this.socket.removeListener("error", onBindError);
         resolve();
       });

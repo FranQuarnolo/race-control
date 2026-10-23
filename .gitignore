@@ -18,6 +18,11 @@
 # config local generado en el primer `npm start` (IPs/puertos propios de cada liga)
 /server/config.json
 
+# clave con la que se firman las credenciales de los pilotos. Se genera sola en el primer arranque
+# y es distinta en cada instalación: si viajara en el repo, cualquiera podría firmar credenciales
+# válidas para cualquier liga.
+/server/secrets
+
 # bytecode que deja Python al importar el cliente fuera del juego (por ejemplo al testearlo)
 __pycache__/
 

@@ -159,7 +159,7 @@
         Sanciones aplicadas
         <!-- El informe baja del backend, no se arma acá: el panel no tiene por qué saber cómo se
              calcula una clasificación, y así el mismo archivo sale igual desde /api/report.csv. -->
-        <a class="hint-action" id="btn-report" href="/api/report.csv" download
+        <a class="hint-action" id="btn-report" href="api/report.csv" download
            title="Planilla con la clasificación, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar informe de carrera</a>
       </h2>
       <div class="table-wrap">
@@ -187,8 +187,8 @@
         <div class="row"><span>Señal del servidor de AC</span><span id="net-signal">--</span></div>
         <div class="row"><span>Comandos salen hacia</span><span id="net-acserver">--</span></div>
         <div class="row"><span>Pilotos con la app reportando</span><span id="net-drivers">--</span></div>
-        <div class="row"><span>Puerto de los pilotos</span><span id="net-client-port">--</span></div>
-        <div class="row"><span>Estrategia de red</span><span id="net-strategy">--</span></div>
+        <div class="row" data-local-only><span>Puerto de los pilotos</span><span id="net-client-port">--</span></div>
+        <div class="row" data-local-only><span>Estrategia de red</span><span id="net-strategy">--</span></div>
         <p class="muted warn-box" id="net-ports-moved" hidden></p>
       </section>
 
@@ -211,7 +211,7 @@
         <p class="muted">
           Es lo único que hace falta. El otro puerto nos lo dice tu servidor solo en cuanto
           arranque. Después reiniciá el servidor de Assetto Corsa para que lo tome.
-          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía</a>.
+          <a href="docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía</a>.
         </p>
         <details>
           <summary class="muted">Si editás el <code>server_cfg.ini</code> a mano</summary>
@@ -220,7 +220,10 @@
         </details>
       </section>
 
-      <section>
+      <!-- Direcciones y puertos los administra el portal cuando Race Control corre ahí: son los
+           mismos campos que el backend rechaza en POST /api/config (ver stripManagedFields). Un
+           formulario que guarda y no cambia nada es peor que no tenerlo. -->
+      <section data-local-only>
         <h3>Direcciones</h3>
         <p class="muted">
           Las dos se detectan solas. Completalas solo si algo de lo de arriba falló.
@@ -236,7 +239,7 @@
         <button class="secondary" id="btn-save-host">Guardar direcciones</button>
       </section>
 
-      <section>
+      <section data-local-only>
         <h3>Puertos</h3>
         <p class="muted">
           Los de fábrica andan bien en casi todos los casos. Cambialos solo si otro programa tuyo
@@ -410,7 +413,7 @@
         <p class="muted">
           Después reiniciá el servidor de Assetto Corsa. Es lo único que hace falta: el resto lo
           averiguamos solos. ¿No encontrás ese campo?
-          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Abrí la guía</a>.
+          <a href="docs/guia-conexion.html" target="_blank" rel="noopener">Abrí la guía</a>.
           Podés dejarlo para después: el botón "Conexión" del panel tiene lo mismo.
         </p>
       </div>

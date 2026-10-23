@@ -6,6 +6,20 @@
 
 const POLL_MS = 1000;
 
+/**
+ * Prefijo bajo el que está servido el panel.
+ *
+ * El mismo HTML se sirve en dos lugares: en la raíz cuando corre el .exe en la PC del admin
+ * (`http://localhost:3000/`), y bajo `/l/<slug>/` cuando corre en el portal, donde todas las
+ * ligas comparten un dominio y se distinguen por la ruta. Se deduce de la propia URL en vez de
+ * inyectarlo desde el servidor: así el archivo es el mismo byte a byte en los dos modos y no hay
+ * un paso de plantilla que pueda quedar sin aplicar.
+ */
+const BASE = (function () {
+  const m = window.location.pathname.match(/^\/l\/[a-z0-9-]+/);
+  return m ? m[0] : "";
+})();
+
 function $(id) {
   return document.getElementById(id);
 }
@@ -24,10 +38,21 @@ function toast(message, durationMs) {
 
 async function api(path, options) {
   let res;
+  const opts = Object.assign({}, options);
+  // `X-RC-Request` va en TODA request, no solo en los POST: es la marca que el portal exige para
+  // aceptar algo que modifica estado. Un formulario de otro sitio no puede agregar headers, así
+  // que sin esto un CSRF pasaría. En el .exe local el header no molesta a nadie.
+  opts.headers = Object.assign({ "X-RC-Request": "1" }, options && options.headers);
   try {
-    res = await fetch(path, options);
+    res = await fetch(BASE + path, opts);
   } catch (err) {
     throw new Error("No se pudo conectar con el backend (¿sigue abierto RaceControlServer.exe?)");
+  }
+  // 401 solo puede venir del portal: la sesión venció mientras el panel seguía haciendo polling.
+  // Recargar lo manda al login con `volver`, así vuelve a donde estaba.
+  if (res.status === 401 && BASE) {
+    window.location.reload();
+    throw new Error("Sesión vencida");
   }
   if (!res.ok) {
     let detail = "HTTP " + res.status;
@@ -62,6 +87,10 @@ let lastState = null;
 let trackOutline = null;
 let lastTrackCoverage = -1;
 
+/** `null` hasta el primer `/api/state`. En el portal, la red (direcciones, puertos, forwarding) la
+ * administra el servidor y el panel no la toca: ver `applyMode`. */
+let portalMode = null;
+
 /** Si el backend no encontró Assetto Corsa, no tiene sentido pedir un logo por auto para cobrar
  * 24 respuestas 404: se va directo a la marca en texto. */
 
@@ -76,8 +105,10 @@ const VIEWS = {
 const PATH_ALIASES = { "/historialSanciones": "/sanciones" };
 
 function currentPath() {
-  const raw = window.location.pathname;
-  const path = PATH_ALIASES[raw] || raw;
+  // La ruta del router es siempre la de adentro del panel: en el portal hay que sacarle el
+  // `/l/<slug>` de adelante, que es del portal y no una vista.
+  const sinBase = window.location.pathname.slice(BASE.length) || "/";
+  const path = PATH_ALIASES[sinBase] || sinBase;
   return VIEWS[path] ? path : "/";
 }
 
@@ -95,16 +126,22 @@ function renderRoute() {
 }
 
 function navigate(path) {
-  if (window.location.pathname === path) return;
-  history.pushState({}, "", path);
+  const destino = BASE + path;
+  if (window.location.pathname === destino) return;
+  history.pushState({}, "", destino);
   renderRoute();
 }
 
 function wireRouter() {
   for (const view of Object.values(VIEWS)) {
-    $(view.nav).addEventListener("click", (e) => {
+    const nav = $(view.nav);
+    // Los href del HTML son absolutos desde la raíz del panel; bajo el portal hay que
+    // prefijarlos para que un click con el botón del medio (abrir en otra pestaña) también caiga
+    // en la liga correcta y no en la raíz del portal.
+    if (BASE) nav.setAttribute("href", BASE + nav.getAttribute("href"));
+    nav.addEventListener("click", (e) => {
       e.preventDefault();
-      navigate(e.currentTarget.getAttribute("href"));
+      navigate(e.currentTarget.getAttribute("href").slice(BASE.length) || "/");
     });
   }
   window.addEventListener("popstate", renderRoute);
@@ -1487,13 +1524,33 @@ const STRATEGY_LABELS = {
   manual: "requiere forwarding manual",
 };
 
+/**
+ * Esconde lo que el portal administra por su cuenta.
+ *
+ * Se corre una sola vez, con el primer estado: el modo no cambia durante la vida de la página, y
+ * recorrer el DOM en cada poll para no cambiar nada es trabajo tirado. Lo que se oculta son los
+ * campos que el backend ya rechaza en modo portal (ver `stripManagedFields` en adminApi.ts) y los
+ * datos que solo significan algo cuando Race Control corre en la PC del admin: el puerto crudo de
+ * los pilotos (en el portal entran por `/l/<liga>/`, no por un puerto) y la estrategia de
+ * forwarding (no hay router de por medio).
+ */
+function applyMode(mode) {
+  const esPortal = mode === "portal";
+  if (portalMode === esPortal) return;
+  portalMode = esPortal;
+  for (const el of document.querySelectorAll("[data-local-only]")) el.hidden = esPortal;
+}
+
 function renderNetwork(network) {
   // La dirección propia es el único dato del que depende que un piloto pueda conectarse, y hasta
   // ahora un fallo de detección se veía igual que una detección en curso: "detectando..." para
   // siempre. Si falló, se dice que falló.
   const ipEl = $("net-ip");
   if (network.publicIp) {
-    ipEl.textContent = network.publicIp + (network.publicHostSource === "manual" ? " (a mano)" : "");
+    // El "(a mano)" avisa que el valor lo escribió alguien en vez de detectarse. En el portal la
+    // dirección siempre es fija y puesta por el servidor, así que la aclaración sobraría.
+    const aMano = network.publicHostSource === "manual" && !portalMode;
+    ipEl.textContent = network.publicIp + (aMano ? " (a mano)" : "");
     ipEl.className = "ok";
   } else if (network.strategy === "pending") {
     ipEl.textContent = "detectando...";
@@ -1668,6 +1725,7 @@ async function refresh() {
 
   $("version-label").textContent = state.version ? "v" + state.version : "";
   $("league-label").textContent = state.leagueName || "";
+  applyMode(state.mode);
 
   // El asistente lo abre el servidor (no hay liga guardada) y lo cierra el usuario al terminarlo.
   // Antes se recalculaba en cada poll contra `firstRun`, y con varios pasos eso ya no sirve: el

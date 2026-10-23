@@ -1,0 +1,158 @@
+# Despliegue del portal en Fly.io.
+#
+# Tres cosas de esta plataforma condicionan todo el archivo y conviene tenerlas a mano:
+#
+# 1. **UDP necesita una IPv4 dedicada.** La IP compartida no enruta UDP. Sin `fly ips
+#    allocate-v4` no llega un solo paquete de telemetría, y el síntoma es silencio total.
+# 2. **Fly no reescribe el puerto de los datagramas UDP.** Por eso `internal_port` tiene que ser
+#    igual al `port` de afuera en cada servicio UDP, y por eso cada puerto va declarado uno por
+#    uno: no hay forma de publicar un rango.
+# 3. **Una sola máquina.** El estado vive en el volumen y los workers son procesos hijos de ESTE
+#    proceso. Con dos máquinas habría dos `portal.json` divergentes y dos juegos de ligas. No
+#    escalar horizontalmente.
+
+app = "race-control"
+primary_region = "gru"   # São Paulo. Si `fly platform regions` lista "eze" (Buenos Aires), mejor.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  RC_DATA_ROOT = "/data"
+  # El host público: lo que ve el admin en la barra de direcciones y lo que se le anuncia por chat
+  # a la app de cada piloto. Cambiarlo por un dominio propio es editar esta línea y nada más.
+  RC_PUBLIC_HOST = "race-control.fly.dev"
+  # En Fly, un socket UDP tiene que bindear acá y NO en 0.0.0.0: con 0.0.0.0 Linux elige la
+  # dirección de origen de la respuesta por su cuenta y contesta desde la equivocada, así que el
+  # servidor de Assetto Corsa nunca ve la respuesta y parece que Race Control no está.
+  RC_UDP_BIND = "fly-global-services"
+  # Diez ligas. Para alojar más hay que subir RC_UDP_TO *y* agregar un bloque [[services]] por
+  # cada puerto nuevo, acá abajo. Las dos cosas: el código asigna el puerto igual, pero sin el
+  # bloque Fly no lo publica y la liga queda sorda.
+  RC_UDP_FROM = "30000"
+  RC_UDP_TO = "30009"
+  # Puertos de loopback de los workers. No se publican: solo el portal los alcanza.
+  RC_LOOPBACK_FROM = "41000"
+
+# RC_PUBLIC_IP no va acá: se conoce recién después de `fly ips allocate-v4`. Se pone con
+#   fly secrets set RC_PUBLIC_IP=<la ipv4 que haya salido>
+# Es el dato que el portal le muestra al admin para pegar en el "Send Address" de su hosting.
+
+[mounts]
+  source = "rc_data"
+  destination = "/data"
+  initial_size = "3gb"
+  # El backup diario de la Fase 7 del plan: snapshots automáticos del volumen. Adentro están las
+  # cuentas, las ligas, las claves de piloto y los logs de incidentes de todo el mundo.
+  scheduled_snapshots = true
+  snapshot_retention = 14
+
+# --- HTTP: el portal y los paneles --------------------------------------------------------------
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+  # "off" y no "stop": el portal tiene que estar escuchando UDP cuando arranque una carrera, y un
+  # datagrama no despierta una máquina dormida. Con "stop", una liga que corre a la noche se
+  # encontraría con que no llegó nada y nadie sabría por qué.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    # A propósito en false: si Fly redirigiera a HTTPS en el borde, la app de los pilotos —que
+    # corre en el Python 3.3 embebido de Assetto Corsa y no tiene HTTPS utilizable— no podría
+    # entrar nunca. La redirección la hace el portal, que sabe exonerar /l/<liga>/api/client/.
+    force_https = false
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    soft_limit = 150
+    hard_limit = 250
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+
+# --- UDP: un puerto por liga ---------------------------------------------------------------------
+#
+# `handlers` va vacío (ni "tls" ni "http"): son datagramas crudos del servidor de Assetto Corsa.
+#
+# MTU: Fly se queda con unos 72 bytes por paquete, así que el límite real es ~1300 y no 1500. Los
+# paquetes del protocolo ACSP son de decenas de bytes; el único que podría acercarse es
+# SESSION_INFO, que lleva nombres en UTF-32. Si alguna vez se pierde justo ese, mirar acá.
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30000
+  [[services.ports]]
+    port = 30000
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30001
+  [[services.ports]]
+    port = 30001
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30002
+  [[services.ports]]
+    port = 30002
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30003
+  [[services.ports]]
+    port = 30003
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30004
+  [[services.ports]]
+    port = 30004
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30005
+  [[services.ports]]
+    port = 30005
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30006
+  [[services.ports]]
+    port = 30006
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30007
+  [[services.ports]]
+    port = 30007
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30008
+  [[services.ports]]
+    port = 30008
+
+[[services]]
+  protocol = "udp"
+  internal_port = 30009
+  [[services.ports]]
+    port = 30009
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # Cada liga es un proceso aparte y come unas decenas de MB. Con 1 GB entran holgadas unas
+  # cuantas; si `fly logs` muestra OOM o el supervisor reinicia workers sin motivo aparente, esto
+  # es lo primero que hay que subir.
+  memory = "1gb"

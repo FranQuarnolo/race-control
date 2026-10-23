@@ -3,7 +3,7 @@ import { test } from "node:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { RawCapture } from "../log/journal";
+import { RawCapture, pruneOldLogs } from "../log/journal";
 
 /**
  * Rotación de `raw.bin`.
@@ -91,4 +91,53 @@ test("un reinicio no reinicia el contador de tamaño", () => {
   second.close();
 
   assert.equal(archived(dir).length, 1, "el reinicio volvió a contar desde cero");
+});
+
+// --- Retención de logs ---------------------------------------------------------------------------
+
+/** Escribe un archivo y le pone la fecha de modificación que haga falta para la prueba. */
+function conEdad(dir: string, nombre: string, diasAtras: number): string {
+  const file = path.join(dir, nombre);
+  fs.writeFileSync(file, "x");
+  const cuando = new Date(Date.now() - diasAtras * 24 * 60 * 60 * 1000);
+  fs.utimesSync(file, cuando, cuando);
+  return file;
+}
+
+test("la retención borra los eventos viejos y deja los recientes", () => {
+  const dir = tempDir();
+  conEdad(dir, "events-viejo.jsonl", 120);
+  conEdad(dir, "events-reciente.jsonl", 10);
+
+  assert.equal(pruneOldLogs(dir, { eventsDays: 90, rawDays: 7 }), 1);
+  assert.ok(!fs.existsSync(path.join(dir, "events-viejo.jsonl")));
+  assert.ok(fs.existsSync(path.join(dir, "events-reciente.jsonl")));
+});
+
+test("la captura cruda se borra mucho antes que los eventos", () => {
+  // Son dos plazos distintos a propósito: el journal es la prueba de por qué se sancionó a
+  // alguien y tiene que durar una temporada; el binario crudo es diagnóstico y pesa 40 MB por hora.
+  const dir = tempDir();
+  conEdad(dir, "raw-viejo.bin", 30);
+  conEdad(dir, "events-del-mismo-dia.jsonl", 30);
+
+  assert.equal(pruneOldLogs(dir, { eventsDays: 90, rawDays: 7 }), 1);
+  assert.ok(!fs.existsSync(path.join(dir, "raw-viejo.bin")));
+  assert.ok(fs.existsSync(path.join(dir, "events-del-mismo-dia.jsonl")));
+});
+
+test("la retención no toca nada que no sea un log nuestro", () => {
+  // La carpeta de datos de una liga tiene más cosas adentro. Un barrido por antigüedad que se
+  // lleve puesto el config.json o una clave es un desastre silencioso.
+  const dir = tempDir();
+  conEdad(dir, "raw.bin", 365);
+  conEdad(dir, "config.json", 365);
+  conEdad(dir, "pilot.key", 365);
+
+  assert.equal(pruneOldLogs(dir, { eventsDays: 1, rawDays: 1 }), 0);
+  assert.equal(fs.readdirSync(dir).length, 3);
+});
+
+test("una carpeta que no existe no es un error", () => {
+  assert.equal(pruneOldLogs(path.join(tempDir(), "no-existe"), { eventsDays: 90, rawDays: 7 }), 0);
 });

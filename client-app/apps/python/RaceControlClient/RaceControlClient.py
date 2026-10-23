@@ -37,6 +37,11 @@ SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "green_green_gree
 # Prefijo que manda el backend por chat (SEND_CHAT, dirigido solo a este auto) apenas nos
 # conectamos -- asi la app no necesita que nadie le tipee una IP. Ver server/src/udp/announcer.ts.
 BACKEND_ANNOUNCE_PREFIX = "RACECONTROL_BACKEND:"
+# El anuncio trae dos campos separados por "|": la direccion y la credencial de ESTE piloto.
+# Se eligio "|" y no ":" porque la direccion ya puede traer uno (el puerto). Un anuncio sin
+# credencial sigue siendo valido: es lo que manda la app corriendo en la PC del admin, donde el
+# canal no sale a internet. Ver server/src/security/pilotToken.ts.
+BACKEND_ANNOUNCE_SEPARATOR = "|"
 
 app_window = None
 label_backend_status = None
@@ -45,6 +50,7 @@ label_penalty = None
 label_flag = None
 
 backend_url = None  # None hasta que llega el chat de auto-discovery.
+backend_token = None  # Credencial firmada que acredita a este piloto. Vence a las 24 h.
 last_seen_seq = 0
 poll_thread_running = False
 
@@ -94,9 +100,16 @@ def onChatMessage(message, author):
         ac.setText(label_penalty, message)
 
 
-def setBackendUrl(address):
-    global backend_url, poll_thread_running
-    url = "http://{0}".format(address)
+def setBackendUrl(announce):
+    global backend_url, backend_token, poll_thread_running
+    parts = announce.split(BACKEND_ANNOUNCE_SEPARATOR, 1)
+    url = "http://{0}".format(parts[0].strip())
+    token = parts[1].strip() if len(parts) > 1 else None
+
+    # La credencial se renueva sola: el servidor reanuncia cada vez que el piloto entra, y cada
+    # anuncio trae una nueva. Por eso se guarda aunque la direccion no haya cambiado -- si no, un
+    # token vencido no se reemplazaria nunca hasta reiniciar el juego.
+    backend_token = token
     if url == backend_url:
         return
     backend_url = url
@@ -105,12 +118,29 @@ def setBackendUrl(address):
     threading.Thread(target=pollLoop, daemon=True).start()
 
 
+def authHeaders():
+    """Cabeceras de autenticacion, vacias si todavia no hay credencial."""
+    if backend_token:
+        return {"Authorization": "Bearer {0}".format(backend_token)}
+    return {}
+
+
+def openAuthed(url, data=None, timeout=2):
+    """urlopen con la credencial puesta. urllib de Python 3.3 ya manda los headers tal cual."""
+    headers = authHeaders()
+    if data is None:
+        return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout)
+    headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    return urllib.request.urlopen(req, timeout=timeout)
+
+
 def pollLoop():
     global last_seen_seq
     my_backend_url = backend_url
     while poll_thread_running and backend_url == my_backend_url:
         try:
-            with urllib.request.urlopen("{0}/api/client/poll".format(backend_url), timeout=2) as resp:
+            with openAuthed("{0}/api/client/poll".format(backend_url)) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             light_event = data.get("lightEvent", {})
             seq = light_event.get("seq", 0)
@@ -123,6 +153,11 @@ def pollLoop():
                 if state == "green":
                     playGreenGreenGreen()
         except Exception as e:
+            # 401 es el unico error que el piloto puede arreglar solo, y el mensaje tiene que
+            # decirle como: la credencial vence a las 24 h y se renueva al volver a entrar al
+            # servidor. Sin esto, la app simplemente deja de funcionar sin explicar nada.
+            if getattr(e, "code", None) == 401:
+                ac.setText(label_backend_status, "Credencial vencida: volve a entrar al servidor")
             ac.log("[RaceControlClient] poll error: {0}".format(e))
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -157,14 +192,11 @@ def heartbeatLoop():
                     payload["telemetry"] = snapshot
                 if sending:
                     payload["excursions"] = sending
-                req = urllib.request.Request(
+                started = time.perf_counter()
+                openAuthed(
                     "{0}/api/client/heartbeat".format(backend_url),
                     data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
                 )
-                started = time.perf_counter()
-                urllib.request.urlopen(req, timeout=2)
                 last_ping_ms = int(round((time.perf_counter() - started) * 1000))
             except Exception as e:
                 # Una request fallida no deja un ping valido -- mejor no reportar nada que

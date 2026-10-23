@@ -1,3 +1,4 @@
+import { ANNOUNCE_SEPARATOR } from "../security/pilotToken";
 import { AcUdpClient } from "./client";
 import { NewConnection } from "./protocol";
 
@@ -19,7 +20,16 @@ export class BackendAnnouncer {
   /** `getClientAddress` devuelve `null` mientras no se sepa la dirección propia. En ese caso no se
    * anuncia nada: mandarle `127.0.0.1` a un piloto lo hace intentar conectarse a su propia PC, y
    * ese fallo es invisible para todos — ni el piloto ni el admin se enteran de por qué no anda. */
-  constructor(private udpClient: AcUdpClient, private getClientAddress: () => string | null) {}
+  /**
+   * `issueToken` emite la credencial de ESE piloto. Viaja por el mismo chat porque el chat ya
+   * está dirigido a un auto concreto: es el único canal que el servidor de AC ofrece para
+   * decirle algo a una persona y no a toda la parrilla.
+   */
+  constructor(
+    private udpClient: AcUdpClient,
+    private getClientAddress: () => string | null,
+    private issueToken?: (driverGuid: string) => string
+  ) {}
 
   onNewConnection(data: NewConnection): void {
     this.cancel(data.driverGuid);
@@ -39,7 +49,11 @@ export class BackendAnnouncer {
     const address = this.getClientAddress();
     // Sin dirección se reintenta igual en vez de abandonar: la detección puede estar todavía en
     // curso cuando el primer piloto entra, y en unos segundos ya va a haber algo que anunciar.
-    if (address) this.udpClient.sendChatToCar(carId, `${BACKEND_ANNOUNCE_PREFIX}${address}`);
+    if (address) {
+      const token = this.issueToken?.(driverGuid);
+      const payload = token ? `${address}${ANNOUNCE_SEPARATOR}${token}` : address;
+      this.udpClient.sendChatToCar(carId, `${BACKEND_ANNOUNCE_PREFIX}${payload}`);
+    }
     const timer = setTimeout(() => this.announce(carId, driverGuid, attempt + 1), RETRY_INTERVAL_MS);
     this.pendingByGuid.set(driverGuid, { carId, attempts: attempt + 1, timer });
   }

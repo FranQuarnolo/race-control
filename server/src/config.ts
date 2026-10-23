@@ -74,11 +74,29 @@ function resolveConfigDir(): string {
   return path.join(__dirname, "..");
 }
 
+/**
+ * Carpeta de datos efectiva: `config.json`, `logs/` y `tracks/` cuelgan de acá.
+ *
+ * Es mutable porque desde la 0.4 el mismo código corre en dos contextos: el `.exe` local, que usa
+ * `%APPDATA%\RaceControl`, y el worker de una liga en el portal, que recibe su propia carpeta
+ * (`<raíz>/leagues/<id>`) del supervisor. Sigue siendo estado de módulo —y no un parámetro que
+ * viaje por todos lados— porque cada liga corre en SU PROPIO proceso: nunca hay dos carpetas
+ * vivas a la vez dentro del mismo proceso. El entry la fija una sola vez, antes de `loadConfig()`.
+ */
+let configDir = resolveConfigDir();
+
 export function getConfigDir(): string {
-  return resolveConfigDir();
+  return configDir;
 }
 
-const CONFIG_PATH = path.join(resolveConfigDir(), "config.json");
+/** La fija el entry (local o worker) ANTES de cualquier `loadConfig()`/`saveConfig()`. */
+export function setConfigDir(dir: string): void {
+  configDir = dir;
+}
+
+function configPath(): string {
+  return path.join(configDir, "config.json");
+}
 
 function defaultPenalty(): PenaltyRules {
   return {
@@ -118,8 +136,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * motores de sanción guardan una referencia directa a `config.formation.penalty`/`config.pit.penalty`,
  * así que si esos objetos se reemplazan (en vez de mutarse) quedan leyendo una copia vieja.
  */
+/** Claves que nunca se copian: escribirlas desde un JSON externo envenena `Object.prototype` y
+ * con eso se le inyectan propiedades a TODOS los objetos del proceso. Mientras el panel vivía en
+ * loopback era teórico; con el portal, el cuerpo de un `POST /api/config` llega de internet. */
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 export function mergeConfigInto(target: Record<string, any>, patch: Record<string, any>): void {
   for (const key of Object.keys(patch)) {
+    if (FORBIDDEN_KEYS.has(key)) continue;
     const value = patch[key];
     if (isPlainObject(value) && isPlainObject(target[key])) {
       mergeConfigInto(target[key], value);
@@ -127,6 +151,28 @@ export function mergeConfigInto(target: Record<string, any>, patch: Record<strin
       target[key] = value;
     }
   }
+}
+
+/**
+ * Repone `parent[key]` a sus valores por defecto MUTANDO el objeto que ya estaba, si lo había.
+ *
+ * Los motores guardan la referencia viva al sub-objeto de config —`config.pit.zone` en
+ * `PitSpeedMonitor`, `config.infractions.trackLimits` en `TrackLimitsTracker`,
+ * `config.formation.penalty` en `PenaltyEngine`— porque de eso depende que tocar una regla en el
+ * panel se aplique en vivo, sin reiniciar. Reemplazar el objeto en vez de mutarlo los deja
+ * mirando para siempre el valor viejo: el panel dice "guardado" y en pista no cambia nada.
+ *
+ * Cuando lo que había no es un objeto (un `null` o un número de un config editado a mano) no
+ * queda más remedio que reemplazar: no hay objeto que mutar.
+ */
+function resetToDefaults(parent: Record<string, any>, key: string, defaults: unknown): void {
+  const current = parent[key];
+  if (isPlainObject(current) && isPlainObject(defaults)) {
+    for (const existing of Object.keys(current)) delete current[existing];
+    Object.assign(current, defaults);
+    return;
+  }
+  parent[key] = defaults;
 }
 
 function clampPositive(value: unknown, fallback: number): number {
@@ -181,7 +227,7 @@ function validateAction(value: unknown, type: InfractionType, fallback: Infracti
 function validateInfractions(rules: InfractionCatalog): void {
   const defaults = defaultInfractions();
   for (const key of Object.keys(defaults) as InfractionType[]) {
-    if (!isPlainObject(rules[key])) (rules as unknown as Record<string, unknown>)[key] = defaults[key];
+    if (!isPlainObject(rules[key])) resetToDefaults(rules as unknown as Record<string, any>, key, defaults[key]);
   }
 
   rules.carContact.action = validateAction(rules.carContact.action, "carContact", "review");
@@ -267,17 +313,19 @@ export function applyPreset(config: AppConfig, preset: PresetName): void {
   saveConfig(config);
 }
 
-function validateConfig(config: AppConfig): void {
+/** Exportada para poder probarla sin tocar el disco: `applyConfigPatch` guarda, y un test que
+ * guarde le pisaría el `config.json` real a quien esté desarrollando. */
+export function validateConfig(config: AppConfig): void {
   // Un config.json editado a mano puede traer `null` o un escalar donde se espera un objeto, y
   // mergeConfigInto lo copia tal cual (solo recursa cuando AMBOS lados son objetos). Sin esta
   // guarda, leer config.presence.graceSeconds abajo tumbaría el arranque con un TypeError.
   const defaults = defaultConfig();
   for (const key of ["http", "acUdp", "formation", "pit", "presence", "infractions"] as const) {
-    if (!isPlainObject(config[key])) (config as unknown as Record<string, unknown>)[key] = defaults[key];
+    if (!isPlainObject(config[key])) resetToDefaults(config as unknown as Record<string, any>, key, defaults[key]);
   }
-  if (!isPlainObject(config.formation.penalty)) config.formation.penalty = defaults.formation.penalty;
-  if (!isPlainObject(config.pit.penalty)) config.pit.penalty = defaults.pit.penalty;
-  if (!isPlainObject(config.pit.zone)) config.pit.zone = defaults.pit.zone;
+  if (!isPlainObject(config.formation.penalty)) resetToDefaults(config.formation, "penalty", defaults.formation.penalty);
+  if (!isPlainObject(config.pit.penalty)) resetToDefaults(config.pit, "penalty", defaults.pit.penalty);
+  if (!isPlainObject(config.pit.zone)) resetToDefaults(config.pit, "zone", defaults.pit.zone);
 
   validatePenalty(config.formation.penalty);
   validatePenalty(config.pit.penalty);
@@ -307,7 +355,7 @@ function validateConfig(config: AppConfig): void {
     !Number.isFinite(config.pit.zone.splineStart) ||
     !Number.isFinite(config.pit.zone.splineEnd)
   ) {
-    config.pit.zone = { splineStart: 0.97, splineEnd: 0.995 };
+    resetToDefaults(config.pit, "zone", { splineStart: 0.97, splineEnd: 0.995 });
   }
   config.presence.enforce = typeof config.presence.enforce === "boolean" ? config.presence.enforce : true;
   validateInfractions(config.infractions);
@@ -333,12 +381,13 @@ export function parseConfig(raw: unknown): AppConfig {
 }
 
 export function loadConfig(): AppConfig {
+  const file = configPath();
   let raw: unknown = null;
-  if (fs.existsSync(CONFIG_PATH)) {
+  if (fs.existsSync(file)) {
     try {
-      raw = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+      raw = JSON.parse(fs.readFileSync(file, "utf-8"));
     } catch (err) {
-      console.error(`[config] No se pudo leer ${CONFIG_PATH}, uso los valores por defecto:`, err);
+      console.error(`[config] No se pudo leer ${file}, uso los valores por defecto:`, err);
     }
   }
   const config = parseConfig(raw);
@@ -347,8 +396,14 @@ export function loadConfig(): AppConfig {
 }
 
 export function saveConfig(config: AppConfig): void {
-  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
+  const file = configPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // Escritura atómica: si el proceso muere a mitad del `writeFileSync` directo, el config.json
+  // queda truncado y el próximo arranque pierde TODA la configuración de la liga (vuelve a
+  // defaults y el wizard aparece de nuevo). Con tmp + rename, o está el viejo o está el nuevo.
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(config, null, 2), "utf-8");
+  fs.renameSync(tmp, file);
 }
 
 /** Aplica un patch parcial (ej. desde POST /api/config) manteniendo vivas las referencias internas. */

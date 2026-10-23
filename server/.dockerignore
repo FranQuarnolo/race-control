@@ -1,0 +1,13 @@
+# Lo que no tiene que entrar al contexto de build. Sin esto, `fly deploy` sube los node_modules
+# de Windows y el .exe empaquetado: cientos de MB por despliegue, y binarios de otra plataforma.
+node_modules
+dist
+release
+build
+logs
+tracks
+config.json
+*.log
+Dockerfile
+.dockerignore
+fly.toml

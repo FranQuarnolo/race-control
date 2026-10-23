@@ -63,7 +63,16 @@ export class ConnectivityManager {
     private udpClient: AcUdpClient,
     private ports: { udpLocalPort: number; tcpClientPort: number },
     /** Dirección puesta a mano en el panel. Vacío = usar la detectada. */
-    private getManualHost: () => string = () => ""
+    private getManualHost: () => string = () => "",
+    /**
+     * `discovery: false` apaga la detección de IP pública y el mapeo UPnP.
+     *
+     * Es lo correcto en el portal: la dirección del servidor es fija y conocida, no hay router
+     * casero que abrir, y tanto la consulta a api.ipify.org como el descubrimiento SSDP de UPnP
+     * son ruido que en un datacenter no resuelve nada (y que en Fly.io devolvería la IP de salida
+     * de la máquina, que no es la que reciben los paquetes entrantes).
+     */
+    private options: { discovery?: boolean } = {}
   ) {}
 
   getStatus(): NetworkStatus {
@@ -87,13 +96,18 @@ export class ConnectivityManager {
       }
     }, KEEPALIVE_INTERVAL_MS);
 
-    this.detectedIp = await detectPublicIp();
+    if (this.options.discovery !== false) this.detectedIp = await detectPublicIp();
     this.waitAndEscalate().catch((err) => console.error("[connectivity] error en la escalada de red:", err));
   }
 
   /** Reintenta la detección de IP pública a pedido — es lo primero que un admin quiere volver a
-   * probar después de conectar internet o apagar la VPN que la bloqueaba. */
+   * probar después de conectar internet o apagar la VPN que la bloqueaba.
+   *
+   * En el portal la dirección la fija quien despliega y no hay nada que redetectar: sin esta
+   * guarda, cada click en "Probar ahora" de cada liga saldría a un servicio externo para tirar
+   * el resultado a la basura. */
   async redetectPublicIp(): Promise<string | null> {
+    if (this.options.discovery === false) return this.getStatus().publicIp;
     this.detectedIp = await detectPublicIp();
     return this.detectedIp;
   }
@@ -111,6 +125,18 @@ export class ConnectivityManager {
   }
 
   private async waitAndEscalate(): Promise<void> {
+    // Sin descubrimiento (portal) no hay nada que escalar: los puertos están abiertos en el
+    // firewall del servidor y la única pregunta que queda es si el servidor de AC está mandando.
+    if (this.options.discovery === false) {
+      const before = this.udpClient.getStats().packetsReceived;
+      await delay(TELEMETRY_WAIT_MS);
+      const arrived = this.udpClient.getStats().packetsReceived > before;
+      this.status.strategy = arrived ? "direct" : "manual";
+      this.status.receivingTelemetry = arrived;
+      this.status.lastCheckedAt = Date.now();
+      return;
+    }
+
     // El puerto TCP de los clientes se mapea SIEMPRE, antes de cualquier otra cosa.
     //
     // Antes esto vivía dentro de la rama de fallo del UDP, y ahí está el problema: el pinhole de
@@ -155,7 +181,10 @@ export class ConnectivityManager {
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  // `unref` para que esta espera no mantenga vivo el proceso: la escalada de red corre en segundo
+  // plano y no es motivo para que el backend tarde 8 segundos más en cerrar (ni para que un test
+  // se quede esperando a que termine una detección que a nadie le importa).
+  return new Promise((resolve) => setTimeout(resolve, ms).unref());
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

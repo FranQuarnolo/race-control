@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conectar tu servidor — Race Control</title>
+  <link rel="icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body>
+  <div class="marca"><img src="/icon.svg" alt="" /> Race Control</div>
+
+  <section class="caja ancha">
+    <h1>Un solo dato y ya está</h1>
+    <p>
+      Entrá al panel de tu hosting de Assetto Corsa, buscá el campo <strong>“Send Address”</strong>
+      (en paneles más viejos se llama <code>UDP_PLUGIN_ADDRESS</code>) y pegá esto:
+    </p>
+
+    <div class="send-address" id="send-address">…</div>
+    <button id="btn-copiar" type="button">Copiar</button>
+
+    <p class="muted">
+      Después reiniciá el servidor. No hace falta tocar ningún otro número: el resto lo
+      averiguamos solos en cuanto llegue la primera señal.
+    </p>
+
+    <h2>Esperando la primera señal…</h2>
+    <p class="muted" id="estado">
+      Esta pantalla se pone verde sola cuando tu servidor empiece a hablarnos. Podés dejarla
+      abierta.
+    </p>
+
+    <p class="error" id="error" hidden></p>
+  </section>
+
+  <p class="pie">
+    ¿Algo no cierra? <a href="/l/" id="link-panel">Entrá igual al panel</a> — adentro está el
+    diagnóstico detallado y la guía por hosting.
+  </p>
+
+  <script src="/portal.js"></script>
+  <script src="/conectar.js"></script>
+</body>
+</html>

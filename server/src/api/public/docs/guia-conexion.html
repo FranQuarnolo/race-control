@@ -31,9 +31,11 @@
   en particular: lo único que cambia de un panel a otro es cómo se llama y dónde está.</p>
 
   <div class="step">
-    <b>Paso 1.</b> Abrí Race Control y tocá <b>"Conexión"</b> arriba a la derecha. En
-    "Configuración del servidor" vas a ver una dirección con un botón <b>Copiar</b>. Es algo así
-    como <code>181.45.12.7:12000</code>.
+    <b>Paso 1.</b> Copiá la dirección que te da Race Control. Es algo así como
+    <code>181.45.12.7:12000</code>.
+    <div class="why">En el portal te la muestra la pantalla que se abre apenas entrás por primera
+    vez; después la tenés siempre en <b>"Conexión"</b>, arriba a la derecha. Si corrés Race Control
+    en tu PC, está en ese mismo lugar: <b>"Conexión"</b> → "Configuración del servidor".</div>
   </div>
 
   <div class="step">
@@ -50,8 +52,9 @@
   </div>
 
   <div class="step">
-    <b>Paso 4.</b> Volvé a Race Control. Cuando el servidor arranque y mande su primer paquete, el
-    botón "Conexión" se pone verde solo. Si querés mirar el detalle, tocá <b>"Probar ahora"</b>.
+    <b>Paso 4.</b> Volvé a Race Control. Cuando el servidor arranque y mande su primer paquete,
+    se pone verde solo — la pantalla de puesta en marcha, o el botón "Conexión" si ya estás
+    adentro del panel. Si querés mirar el detalle, tocá <b>"Probar ahora"</b>.
   </div>
 
   <div class="ok">
@@ -112,17 +115,23 @@ UDP_PLUGIN_ADDRESS=TU_DIRECCION:12000</pre>
   las cosas falló y qué hacer. Las causas habituales, en orden:</p>
   <ul>
     <li><b>No reiniciaste el servidor</b> después de guardar. Es la más común de todas.</li>
-    <li><b>Falta abrir un puerto en tu router.</b> Race Control lo intenta solo al arrancar; si tu
-    router no lo aceptó, el panel te dice exactamente qué número hay que abrir.</li>
+    <li><b>Pegaste la dirección en el campo de al lado.</b> "Send Address" es a dónde manda el
+    servidor. "Listen Address" es otra cosa y no hay que tocarla.</li>
     <li><b>Tu panel tiene una lista de IPs permitidas</b> para el plugin UDP. Si está activa, el
     servidor descarta en silencio todo lo que venga de una IP que no esté en la lista: hay que
-    agregar la tuya, que es la que figura en "Dirección propia".</li>
+    agregar la de Race Control, que es la que aparece en la dirección que copiaste (la parte de
+    antes de los dos puntos).</li>
   </ul>
 
   <div class="warn">
-    <b>Si tu internet tiene IP dinámica</b> (cambia cada tanto, que es lo normal en una conexión
-    hogareña), vas a tener que repetir el paso 2 cuando cambie. Si eso te resulta molesto, la
-    alternativa es correr Race Control en una VPS barata, que tiene dirección fija.
+    <b>Esto es solo si corrés Race Control en tu propia PC.</b> Ahí hay dos cosas más que pueden
+    fallar, y que desaparecen usando el portal:
+    <ul>
+      <li><b>Falta abrir un puerto en tu router.</b> Race Control lo intenta solo al arrancar; si
+      tu router no lo aceptó, el panel te dice exactamente qué número hay que abrir.</li>
+      <li><b>Tu internet tiene IP dinámica</b> (cambia cada tanto, que es lo normal en una
+      conexión hogareña): vas a tener que repetir el paso 2 cada vez que cambie.</li>
+    </ul>
   </div>
 
   <h2>¿Por qué hace falta esto?</h2>

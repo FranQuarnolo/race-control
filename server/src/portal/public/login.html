@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Entrar — Race Control</title>
+  <link rel="icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body>
+  <div class="marca"><img src="/icon.svg" alt="" /> Race Control</div>
+
+  <form class="caja" id="form">
+    <h1>Entrar</h1>
+    <p class="muted">Con el usuario que elegiste cuando abriste tu invitación.</p>
+
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="username" required autofocus />
+
+    <label for="password">Contraseña</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+    <button type="submit">Entrar</button>
+    <p class="error" id="error" hidden></p>
+  </form>
+
+  <p class="pie">¿Todavía no tenés liga? <a href="/">Mirá cómo pedirla</a>.</p>
+
+  <script src="/portal.js"></script>
+  <script src="/login.js"></script>
+</body>
+</html>

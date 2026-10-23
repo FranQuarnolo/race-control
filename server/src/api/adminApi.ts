@@ -18,6 +18,12 @@ import { computeStandings } from "../state/standings";
 import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
 export interface AdminApiDeps {
+  /**
+   * `"portal"` cierra lo que en una PC de escritorio no importaba y en internet sí: los puertos
+   * y las direcciones los administra el portal, y dejarlos editables desde el panel permitiría
+   * que un admin —o quien le robe la sesión— mueva su liga encima del puerto de otra.
+   */
+  mode?: "local" | "portal";
   config: AppConfig;
   stateTracker: StateTracker;
   formationStart: FormationStart;
@@ -47,6 +53,8 @@ export interface AdminApiDeps {
    * arranque se corrió al siguiente libre — y en ese caso es justo lo que el panel tiene que
    * mostrar, porque es lo que el admin necesita poner en el router. */
   getActivePorts: () => { adminPort: number; clientPort: number; portsMoved: boolean };
+  /** Registro de quién hizo qué. Ver el middleware de auditoría más abajo. */
+  audit?: (entry: { user: string; method: string; path: string }) => void;
 }
 
 const TELEMETRY_STALE_MS = 2000;
@@ -55,7 +63,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
  * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
  * esto no había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.3.1";
+export const APP_VERSION = "0.4";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
@@ -65,6 +73,22 @@ export const APP_VERSION = "0.3.1";
 export function createAdminApi(deps: AdminApiDeps): Express {
   const app = express();
   app.use(express.json({ limit: "50kb" }));
+
+  /**
+   * Auditoría: toda acción que cambia algo queda registrada con quién la hizo.
+   *
+   * En una PC de escritorio sobraba —el único que podía apretar el botón era el dueño de la
+   * máquina—. En una liga con varios comisarios, "alguien kickeó al piloto 7 en la vuelta 12" no
+   * sirve para nada. El nombre lo pone el portal en `X-RC-User` (ver proxy.ts): no puede venir
+   * del navegador, justamente para que nadie firme con el nombre de otro.
+   */
+  app.use((req, _res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
+      deps.audit?.({ user: String(req.headers["x-rc-user"] || "local"), method: req.method, path: req.path });
+    }
+    next();
+  });
+
   app.use(express.static(path.join(__dirname, "public")));
 
   app.get("/api/state", (_req, res) => {
@@ -74,6 +98,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     const standings = computeStandings(connected, deps.getSessionType());
     res.json({
       version: APP_VERSION,
+      /** El panel es el mismo en los dos modos, pero esconde lo que en el portal no se puede
+       * tocar (puertos, direcciones) y los pasos que ahí ya están resueltos. */
+      mode: deps.mode ?? "local",
       firstRun: isFirstRun(deps.config),
       leagueName: deps.config.leagueName,
       shadowMode: deps.config.shadowMode,
@@ -196,13 +223,41 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     }
   });
 
+  /**
+   * Campos que el panel de una liga NO puede tocar cuando corre en el portal.
+   *
+   * Los puertos y la dirección pública se los asigna el supervisor: si el panel pudiera
+   * cambiarlos, una liga podría mudarse al puerto UDP de otra (y quedarse con su telemetría) o
+   * dejar al portal haciendo proxy a un puerto donde no hay nadie. En el `.exe` local nada de
+   * esto aplica: ahí el admin es dueño de su propia máquina y editarlos es la forma de resolver
+   * un choque de puertos.
+   */
+  function stripManagedFields(patch: Record<string, unknown>): Record<string, unknown> {
+    const copy: Record<string, unknown> = { ...patch };
+    for (const key of ["http", "acUdp"] as const) {
+      const section = copy[key];
+      if (section && typeof section === "object" && !Array.isArray(section)) {
+        const kept = { ...(section as Record<string, unknown>) };
+        for (const managed of ["adminPort", "clientPort", "publicHost", "localPort", "remoteHost", "remotePort"]) {
+          delete kept[managed];
+        }
+        if (Object.keys(kept).length === 0) delete copy[key];
+        else copy[key] = kept;
+      } else {
+        delete copy[key];
+      }
+    }
+    return copy;
+  }
+
   app.post("/api/config", (req, res) => {
     if (typeof req.body !== "object" || req.body === null || Array.isArray(req.body)) {
       res.status(400).json({ ok: false, error: "Body inválido" });
       return;
     }
     try {
-      applyConfigPatch(deps.config, req.body);
+      const patch = deps.mode === "portal" ? stripManagedFields(req.body) : req.body;
+      applyConfigPatch(deps.config, patch);
       res.json(deps.config);
     } catch (err) {
       // No dejar que un error de escritura (ej. permisos) tumbe el request en silencio — el

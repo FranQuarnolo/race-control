@@ -53,6 +53,34 @@ leer código — ningún agente de IA puede resolverlo):
 | **Varios plugins a la vez** | Con Race Control agregado como listener adicional, lo que ya tenías (Real Penalty, sTracker, un bot) tiene que seguir funcionando | Confirmado en el changelog de Assetto Corsa Server Manager 2.4.8, no en pista. Si al agregar Race Control se cae el otro plugin, es que tu panel es anterior a esa versión y el campo es uno solo |
 | **Lista de IPs permitidas** | Si tu panel tiene allowlist para el plugin UDP y tu IP no está, no llega **nada** y el síntoma es idéntico a no haber configurado el Send Address | Agregá tu IP pública a la lista. Es un modo de fallo totalmente silencioso: el servidor descarta los paquetes sin avisar |
 
+## Lo que agregó la 0.4 y hay que confirmar en pista
+
+La 0.4 movió el motor a un servidor público. Eso cierra algunos riesgos de la lista de arriba
+—la IP ya no es dinámica, no hay router que abrir— y abre otros que **solo se ven contra un
+servidor real**.
+
+| Punto | Cómo confirmarlo | Si falla |
+|---|---|---|
+| **Que lleguen los datagramas a Fly** | Después de pegar el Send Address y reiniciar el servidor de AC, la pantalla de puesta en marcha tiene que ponerse verde sola | **Es el supuesto que sostiene todo el despliegue.** Lo más probable si no llega: falta la IPv4 dedicada (`fly ips allocate-v4`), o el puerto UDP de esa liga no está declarado en `fly.toml`. El síntoma de los dos es idéntico: silencio total |
+| **`fly-global-services`** | Si la telemetría entra pero las sanciones, los kicks y el chat nunca llegan al piloto | Es exactamente el síntoma de haber bindeado a `0.0.0.0`: Linux contesta desde la dirección equivocada y el servidor de AC descarta la respuesta. Revisar `RC_UDP_BIND` |
+| **Si ACSM relaya los datagramas** | Mirar qué IP de origen registra el worker contra la IP real del servidor de Assetto Corsa | Si el origen es el panel de ACSM y no el servidor, cualquier allowlist por IP bloquearía todo. Afecta a la lista de IPs permitidas del hosting, no a Race Control |
+| **El header `Authorization` en Python 3.3** | Un piloto real entra al servidor y la app conecta sin mostrar "Credencial vencida" | Si `urllib.request` del intérprete embebido no manda el header tal cual, hay que pasar el token por la query string. Se probó contra el worker con `curl`, no con el Python de Assetto Corsa |
+| **El anuncio por chat con el token** | El piloto entra y la app arranca sola, sin tipear nada | El mensaje ahora lleva `<dirección>|<token>` y es más largo. El límite del chat ACSP son 255 caracteres y entra holgado, pero si el token se cortara la app no conectaría nunca |
+| **El panel bajo un prefijo de ruta** | Entrar a `/l/<liga>/`, recorrer las cuatro secciones y recargar en cada una | Si alguna pantalla pide un archivo de `/` en vez de `/l/<liga>/`, falta un lugar donde `BASE` no se está anteponiendo en `app.js` |
+| **Memoria por liga** | `fly ssh console` → `ps aux` con 2 o 3 ligas corriendo | Las "decenas de MB por worker" son una estimación, nunca medida. Si cada uno come mucho más, hay que subir la memoria de la máquina en `fly.toml` o bajar el tope de ligas |
+
+### Lo que la 0.4 sí dejó verificado, pero con datagramas simulados
+
+No reemplaza la prueba en pista: confirma que el camino existe, no que el protocolo real encaja.
+
+- El camino completo portal → worker → panel, con una liga creada por el CLI y aceptada por HTTP.
+- La pantalla de puesta en marcha pasando a verde al recibir el primer datagrama en el puerto UDP
+  de la liga.
+- El canal de pilotos a través del proxy: sin token da 401, con token da 200, y con el guid de otro
+  en el cuerpo da 403.
+- El `.exe` abriendo una carpeta de datos de la 0.3 sin perder nada y sin exigirle token a la app
+  vieja.
+
 ## Si algo no cierra: ahí sí, Wireshark
 
 1. Instalá [Wireshark](https://www.wireshark.org/) con Npcap (en Windows, tildar "Adapter for
