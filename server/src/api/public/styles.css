@@ -731,6 +731,49 @@ pre.snippet {
   margin: 0 0 8px 0;
 }
 
+/* ------------------------------------------------- campo con el botón de copiar adentro */
+
+/*
+  El Send Address es un dato que solo existe para ser copiado. El botón va DENTRO del campo —y no
+  debajo— porque ahí es donde está mirando el ojo cuando lee la dirección.
+  El `padding-right` del input le reserva el lugar al botón: sin eso, una dirección larga pasa por
+  debajo del ícono y se lee la mitad.
+*/
+.campo-copiable {
+  position: relative;
+  display: block;
+  margin: 0 0 8px 0;
+}
+
+.campo-copiable input[type="text"] {
+  width: 100%;
+  padding: 9px 42px 9px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+.icono-copiar {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icono-copiar:hover { background: #20242e; color: var(--text); }
+.icono-copiar svg { width: 17px; height: 17px; display: block; }
+
 .muted { color: var(--muted); font-size: 12px; margin: 0 0 8px 0; }
 
 /* ---------------------------------------------------- diagnóstico de conexión */

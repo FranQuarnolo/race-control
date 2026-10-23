@@ -47,7 +47,10 @@ async function arrancar(msg: StartMessage): Promise<void> {
   config.http.clientPort = msg.ports.clientPort;
   config.acUdp.localPort = msg.ports.udpPort;
   config.http.publicHost = msg.publicIp;
-  if (!config.leagueName) config.leagueName = msg.league.name;
+  // El nombre lo manda el portal y pisa al que hubiera: es el que el operador ve y edita en su
+  // tabla, y tener dos nombres editables en dos lugares termina siempre igual —el panel muestra
+  // uno y la factura dice otro—. Por eso el panel lo muestra pero no lo deja cambiar.
+  config.leagueName = msg.league.name;
   saveConfig(config);
 
   rc = await createRaceControl({

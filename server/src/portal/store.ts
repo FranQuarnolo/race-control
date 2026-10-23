@@ -194,7 +194,10 @@ export class PortalStore {
    * ya estaba adentro seguiría usando el panel con su cookie vigente hasta que venciera sola.
    * Desactivar tiene que echarlo ahora.
    */
-  updateUser(id: string, patch: Partial<Pick<User, "active" | "paidUntil" | "note" | "lastLoginAt">>): User | undefined {
+  updateUser(
+    id: string,
+    patch: Partial<Pick<User, "active" | "paidUntil" | "note" | "lastLoginAt" | "email">>
+  ): User | undefined {
     const user = this.findUser(id);
     if (!user) return undefined;
     const seDesactiva = patch.active === false && user.active;
@@ -230,7 +233,7 @@ export class PortalStore {
     return this.data.leagues.filter((l) => l.ownerId === userId);
   }
 
-  updateLeague(id: string, patch: Partial<Pick<League, "status" | "lastError" | "name">>): void {
+  updateLeague(id: string, patch: Partial<Pick<League, "status" | "lastError" | "name" | "slug">>): void {
     const league = this.findLeague(id);
     if (!league) return;
     Object.assign(league, patch);

@@ -208,8 +208,18 @@
         <p class="muted">
           En el panel de tu hosting, buscá <b>Send Address</b> y pegale esto:
         </p>
-        <pre class="snippet" id="net-send-address">--</pre>
-        <button class="secondary" id="btn-copy-send-address">Copiar</button>
+        <!-- Campo y no un bloque de texto: lo que hay que hacer con esto es copiarlo, y un input
+             se selecciona con un click. El botón va adentro para que el gesto de copiar esté
+             donde está el dato, sin tener que buscar un botón debajo. -->
+        <div class="campo-copiable">
+          <input type="text" id="net-send-address" value="--" readonly aria-label="Send Address de tu liga" />
+          <button type="button" class="icono-copiar" id="btn-copy-send-address" title="Copiar" aria-label="Copiar la dirección">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2" />
+              <path d="M5 15V5a2 2 0 0 1 2-2h8" />
+            </svg>
+          </button>
+        </div>
         <p class="muted">
           Es lo único que hace falta. El otro puerto nos lo dice tu servidor solo en cuanto
           arranque. Después reiniciá el servidor de Assetto Corsa para que lo tome.
@@ -322,8 +332,11 @@
 
       <section>
         <h3>Liga</h3>
-        <div class="row"><label for="league-input">Nombre</label><input type="text" id="league-input" /></div>
-        <button id="btn-save-league" data-form="league">Guardar</button>
+        <!-- Solo lectura: el nombre lo pone quien da el acceso, y el motor lo toma de ahí cada vez
+             que arranca. Un campo editable acá volvería solo al nombre viejo en el próximo
+             reinicio, que es la peor forma de no poder cambiar algo. -->
+        <div class="row"><label for="league-input">Nombre</label><input type="text" id="league-input" readonly /></div>
+        <p class="muted">Para cambiarlo, pedíselo a quien te dio el acceso.</p>
       </section>
     </div>
   </div>
@@ -332,13 +345,17 @@
     <div class="card wizard">
       <div class="wizard-steps" id="wizard-steps"></div>
 
-      <!-- Paso 1: nombre -->
+      <!-- Paso 1: bienvenida.
+           Antes acá se pedía el nombre de la liga. Dejó de tener sentido cuando el nombre pasó a
+           ser del portal: lo pone quien da el acceso y el motor lo toma de ahí en cada arranque,
+           así que un campo acá prometía algo que el próximo reinicio deshacía. -->
       <div class="wizard-step" data-step="1">
         <h2>Bienvenido a Race Control</h2>
         <p class="muted">
           En cuatro pasos queda listo para tu primera carrera. Empecemos por lo más fácil.
         </p>
-        <div class="row"><label for="wizard-name">¿Cómo se llama tu liga?</label><input type="text" id="wizard-name" /></div>
+        <p>Tu liga es <b id="wizard-name">--</b>.</p>
+        <p class="muted">Si el nombre no es ese, pedíselo a quien te dio el acceso.</p>
       </div>
 
       <!-- Paso 2: tipo de torneo -->

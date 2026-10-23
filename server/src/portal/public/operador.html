@@ -54,6 +54,47 @@
       <p class="error" id="error-alta" hidden></p>
     </form>
 
+    <!-- Edición. Un solo formulario para los dos lados del alta: la liga y la cuenta que entra. -->
+    <form class="sub-caja" id="form-editar" hidden>
+      <h2>Editar <span id="editar-quien"></span></h2>
+      <p class="muted">
+        Se cambia solo lo que toques. Lo que dejes como está, queda como está.
+      </p>
+
+      <div class="campos">
+        <div>
+          <label for="ed-leagueName">Nombre de la liga</label>
+          <input id="ed-leagueName" type="text" autocomplete="off" />
+          <p class="ayuda aviso" id="ed-aviso-nombre" hidden>
+            Al guardarlo se reinicia el motor de la liga: unos segundos sin escuchar telemetría.
+          </p>
+        </div>
+        <div>
+          <label for="ed-slug">Dirección</label>
+          <input id="ed-slug" type="text" autocomplete="off" />
+          <p class="ayuda aviso" id="ed-aviso-slug" hidden>
+            Cambia el link del panel y el de los pilotos. El anterior deja de funcionar.
+          </p>
+        </div>
+        <div>
+          <label for="ed-email">Email del admin</label>
+          <input id="ed-email" type="email" autocomplete="off" />
+          <p class="ayuda">Es con lo que entra al panel.</p>
+        </div>
+        <div>
+          <label for="ed-password">Contraseña nueva <span class="muted">(opcional)</span></label>
+          <input id="ed-password" type="text" autocomplete="off" placeholder="dejalo vacío para no tocarla" />
+          <p class="ayuda">Mínimo 8 caracteres. Al cambiarla se cierran sus sesiones abiertas.</p>
+        </div>
+      </div>
+
+      <div class="botonera">
+        <button type="submit">Guardar</button>
+        <button type="button" id="btn-cancelar-editar" class="secundario">Cancelar</button>
+      </div>
+      <p class="error" id="error-editar" hidden></p>
+    </form>
+
     <!-- Credenciales recién creadas. Es lo único que no se puede volver a ver. -->
     <div class="sub-caja credenciales" id="credenciales" hidden>
       <h2>Pasale esto al admin</h2>

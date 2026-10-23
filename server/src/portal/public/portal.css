@@ -291,6 +291,17 @@ input[type="date"] {
   font-family: inherit;
 }
 
+/* Aclaración debajo de un campo. Va pegada al input, no al siguiente: el margen de arriba es
+   negativo porque el input ya trae el suyo abajo y si no quedaría flotando en el medio. */
+.ayuda {
+  margin: -8px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.ayuda[hidden] { display: none; }
+.ayuda.aviso { color: var(--yellow); }
+
 .botonera { display: flex; gap: 10px; margin-top: 18px; }
 .botonera button { margin-top: 0; width: auto; }
 

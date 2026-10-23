@@ -66,6 +66,7 @@ mirarlo antes de prometerle una liga a alguien.
 | Qué | Cómo |
 |---|---|
 | Dar de alta una liga y su admin | "Dar de alta una liga". Pide nombre, email y, opcional, hasta cuándo pagó. Devuelve la contraseña **una sola vez**, con un botón para copiar los tres datos juntos |
+| Corregir el nombre, la dirección, el email o la contraseña | "Editar" — ver abajo |
 | Ver quién entró y cuándo | La columna "Último ingreso" |
 | Marcar que pagó | "Cobré": suma un mes desde donde venía, o desde hoy si estaba vencida |
 | Cortarle el acceso | "Desactivar". Para sus ligas y le cierra el paso al panel |
@@ -82,6 +83,30 @@ en medio de su campeonato es una decisión tuya, no de un timer.
 —configuración, sanciones, registros, trazados— donde estaba. Reactivar la vuelve a levantar con
 todo adentro. Y una liga de cuenta desactivada **no vuelve sola en un redeploy**: si volviera,
 reiniciar el servidor sería la forma de saltearse la baja.
+
+## Editar una liga o su cuenta
+
+El botón **"Editar"** de cada fila abre los cuatro datos que se pueden corregir sin tocar el
+volumen por SSH. Se manda solo lo que cambiaste: lo que dejes igual, queda igual.
+
+| Campo | Qué pasa al guardarlo |
+|---|---|
+| Nombre de la liga | **Reinicia el motor de esa liga.** Son unos segundos sin escuchar telemetría. No lo hagas en mitad de una carrera |
+| Dirección (`slug`) | Cambia la URL del panel y la de los pilotos. **El link anterior deja de funcionar**: avisale al admin antes |
+| Email del admin | Es con lo que entra. Las sesiones abiertas siguen valiendo; lo que cambia es el login |
+| Contraseña nueva | Opcional. Vacío = no se toca. Mínimo 8 caracteres, y al cambiarla **se cierran sus sesiones** |
+
+Lo que el formulario no deja hacer, a propósito: mudar una liga a una dirección que ya ocupa otra,
+y ponerle a una cuenta el email de otra. Las dos cosas romperían algo en silencio —un `/l/<slug>/`
+ambiguo, un login que elige una de dos cuentas sin criterio— así que cortan con un error.
+
+**El nombre lo manda el portal, siempre.** El worker lo copia a su `config.json` cada vez que
+arranca, y por eso hay que reiniciarlo para que el cambio se vea arriba a la izquierda en el panel.
+Del lado del admin ese campo es de solo lectura: si pudiera editarlo, su cambio duraría hasta el
+próximo reinicio y después volvería solo.
+
+Una liga de una cuenta desactivada **no se enciende por renombrarla**: el reinicio solo ocurre si
+estaba corriendo.
 
 ## El CLI: lo mismo, con el portal apagado
 

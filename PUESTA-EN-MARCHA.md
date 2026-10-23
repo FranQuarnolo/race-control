@@ -174,6 +174,10 @@ completa, con dónde está en cada panel conocido, la tiene adentro del producto
 **Lo que no hay que tocar** es el campo de al lado, "Listen Address". Race Control deduce ese
 número solo, del propio tráfico que manda el servidor.
 
+**El nombre de su liga no lo cambia él**: en su panel el campo es de solo lectura y dice que te lo
+pida. Lo cambiás vos desde `/operador` → "Editar". Es así porque el motor toma el nombre del portal
+cada vez que arranca: si el admin lo editara, su cambio volvería solo en el próximo reinicio.
+
 ---
 
 ## 6. La app de los pilotos
@@ -221,7 +225,14 @@ supervisada.
 | Cuando alguien no paga | "Desactivar". Para su liga y le corta el acceso. **No borra nada** |
 | Cuando vuelve a pagar | "Reactivar". La liga arranca con todo adentro |
 | Si pierde la contraseña | "Clave nueva". Se le cierran todas las sesiones abiertas |
+| Si hay que corregir algo | "Editar": nombre de la liga, dirección, email y contraseña. Ver abajo |
 | Antes de algo riesgoso | `fly volumes snapshots create <volume-id>` |
+
+El botón **"Editar"** manda solo lo que cambiaste. Dos de los cuatro campos tienen consecuencias y
+el panel las avisa antes de guardar: cambiar el **nombre** reinicia el motor de esa liga —unos
+segundos sin telemetría, así que no lo hagas en mitad de una carrera— y cambiar la **dirección**
+mata el link anterior, el del panel y el de los pilotos. El email y la contraseña no reinician
+nada; la contraseña, además, se puede dejar vacía para no tocarla.
 
 La tabla del panel viene ordenada por lo que requiere atención: primero lo vencido, después lo que
 vence esta semana. **Nada se da de baja solo**: una cuota vencida se pinta en rojo y espera tu

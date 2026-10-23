@@ -290,7 +290,8 @@ function setupForms() {
     () => ({ presence: { enforce: $("pr-enforce").checked, graceSeconds: num("pr-grace") } })
   );
 
-  registerForm("league", "btn-save-league", ["league-input"], () => ({ leagueName: $("league-input").value.trim() }));
+  // El nombre de la liga no se registra como formulario: lo administra el portal y acá solo se
+  // muestra. Ver la nota del campo en index.html.
 }
 
 // ===================================================================== catálogo de infracciones
@@ -1517,7 +1518,8 @@ function renderNetwork(network) {
 
   $("net-signal").textContent = network.receivingTelemetry ? "recibiendo" : "sin señal todavía";
   $("net-snippet").textContent = network.serverSnippet;
-  $("net-send-address").textContent = network.sendAddress;
+  // Es un <input>, no un bloque de texto: va por `value`.
+  $("net-send-address").value = network.sendAddress;
   $("wizard-snippet").textContent = network.sendAddress;
 
   // "Llega telemetría" y "los pilotos alcanzan el backend" son dos cosas distintas que fallan por
@@ -1655,11 +1657,11 @@ async function refresh() {
 
   $("version-label").textContent = state.version ? "v" + state.version : "";
   $("league-label").textContent = state.leagueName || "";
+  $("wizard-name").textContent = state.leagueName || "tu liga";
 
   // El asistente lo abre el servidor (no hay liga guardada) y lo cierra el usuario al terminarlo.
-  // Antes se recalculaba en cada poll contra `firstRun`, y con varios pasos eso ya no sirve: el
-  // paso 1 guarda el nombre, así que `firstRun` pasa a false y el poll siguiente cerraría el
-  // asistente de golpe en la cara del admin, a mitad de camino.
+  // Se decide una sola vez y no en cada poll: si no, un cambio de `firstRun` a mitad de camino lo
+  // cerraría de golpe en la cara del admin.
   if (state.firstRun && wizardOpen === null) {
     wizardOpen = true;
     $("wizard-overlay").hidden = false;
@@ -1728,12 +1730,19 @@ function wireButtons() {
     ["btn-copy-send-address", "net-send-address"],
   ]) {
     $(boton).addEventListener("click", () => {
-      navigator.clipboard.writeText($(origen).textContent).then(
+      const el = $(origen);
+      // Uno es un <pre> y el otro un <input>: el texto está en lugares distintos.
+      const texto = "value" in el ? el.value : el.textContent;
+      navigator.clipboard.writeText(texto).then(
         () => toast("Copiado"),
         () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
       );
     });
   }
+
+  // Un click en el campo selecciona todo: si el portapapeles falla —pasa sin HTTPS—, copiarlo a
+  // mano queda a un Ctrl+C.
+  $("net-send-address").addEventListener("focus", (e) => e.target.select());
 
   wireWizard();
 }
@@ -1782,9 +1791,6 @@ let wizardOpen = null;
 function wireWizard() {
   $("wizard-next").addEventListener("click", () => advanceWizard());
   $("wizard-back").addEventListener("click", () => showWizardStep(wizardStep - 1));
-  $("wizard-name").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") advanceWizard();
-  });
   $("wizard-copy").addEventListener("click", () => {
     navigator.clipboard.writeText($("wizard-snippet").textContent).then(
       () => toast("Copiado"),
@@ -1809,21 +1815,8 @@ function wireWizard() {
 }
 
 async function advanceWizard() {
-  if (wizardStep === 1) {
-    const name = $("wizard-name").value.trim();
-    if (!name) {
-      toast("Escribí un nombre para tu liga");
-      return;
-    }
-    try {
-      await post("/api/config", { leagueName: name });
-      $("league-input").value = name;
-      markFormSaved("league");
-    } catch (err) {
-      toast("No se pudo guardar: " + err.message, 5000);
-      return;
-    }
-  }
+  // El paso 1 no guarda nada: es una bienvenida que confirma de qué liga se trata. El nombre ya
+  // viene puesto desde el portal cuando el motor arranca.
   if (wizardStep === 2 && !wizardPreset) {
     toast("Elegí un tipo de torneo");
     return;

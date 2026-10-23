@@ -112,6 +112,7 @@ function pintar() {
 
     // --- acciones
     const tdAcciones = el("td", "acciones");
+    tdAcciones.appendChild(boton("Editar", "secundario", () => abrirEdicion(admin)));
     tdAcciones.appendChild(boton("Cobré", "secundario", () => cobrar(admin)));
     tdAcciones.appendChild(
       boton(admin.active ? "Desactivar" : "Reactivar", admin.active ? "peligro" : "secundario", () =>
@@ -194,6 +195,82 @@ async function nuevaClave(admin) {
   await recargar();
 }
 
+// ------------------------------------------------------------------------------------- edición
+
+/** Lo que había cuando se abrió el formulario, para mandar solo lo que de verdad cambió. */
+let editando = null;
+
+function abrirEdicion(admin) {
+  // Una cuenta tiene una liga. El modelo admite varias y por eso esto toma la primera en vez de
+  // asumir que existe: sin liga, la mitad de arriba del formulario no tiene qué editar.
+  const liga = admin.leagues[0] || null;
+  editando = { admin, liga };
+
+  $("editar-quien").textContent = liga ? liga.name : admin.email;
+  $("ed-leagueName").value = liga ? liga.name : "";
+  $("ed-slug").value = liga ? liga.slug : "";
+  $("ed-email").value = admin.email;
+  $("ed-password").value = "";
+  $("ed-leagueName").disabled = !liga;
+  $("ed-slug").disabled = !liga;
+  $("ed-aviso-nombre").hidden = true;
+  $("ed-aviso-slug").hidden = true;
+  $("error-editar").hidden = true;
+
+  $("form-alta").hidden = true;
+  $("form-editar").hidden = false;
+  $("form-editar").scrollIntoView({ block: "center" });
+  ($("ed-leagueName").disabled ? $("ed-email") : $("ed-leagueName")).focus();
+}
+
+function cerrarEdicion() {
+  $("form-editar").hidden = true;
+  editando = null;
+}
+
+/**
+ * Guarda los tres pedazos por separado, porque son tres endpoints distintos.
+ *
+ * El orden importa para el peor caso: si algo falla a mitad de camino, lo que ya se guardó queda
+ * guardado y el error dice cuál fue. Por eso la contraseña va última — es lo único que se muestra
+ * una sola vez, y no conviene generarla para después fallar en algo y tener que repetir todo.
+ */
+async function guardarEdicion() {
+  const { admin, liga } = editando;
+  const nombre = $("ed-leagueName").value.trim();
+  const slug = $("ed-slug").value.trim();
+  const email = $("ed-email").value.trim();
+  const clave = $("ed-password").value;
+
+  if (liga && !nombre) throw new Error("La liga necesita un nombre.");
+  if (!email) throw new Error("La cuenta necesita un email.");
+  if (clave && clave.length < 8) throw new Error("La contraseña tiene que tener al menos 8 caracteres.");
+
+  if (liga && (nombre !== liga.name || slug !== liga.slug)) {
+    const cambio = {};
+    if (nombre !== liga.name) cambio.name = nombre;
+    if (slug !== liga.slug) cambio.slug = slug;
+    await api("/api/operador/ligas/" + liga.id, cambio);
+  }
+
+  if (email.toLowerCase() !== admin.email.toLowerCase()) {
+    await api("/api/operador/admins/" + admin.id, { email });
+  }
+
+  let password = "";
+  if (clave) {
+    const res = await api("/api/operador/admins/" + admin.id + "/clave", { password: clave });
+    password = res.password;
+  }
+
+  cerrarEdicion();
+  await recargar();
+  // Si cambió algo de lo que el admin necesita para entrar, se le muestra junto para pasárselo.
+  if (password || email.toLowerCase() !== admin.email.toLowerCase()) {
+    mostrarCredenciales({ email, password: password || "la misma de antes" });
+  }
+}
+
 // -------------------------------------------------------------------------------- credenciales
 
 function mostrarCredenciales(creds) {
@@ -231,11 +308,39 @@ async function iniciar() {
   await recargar();
 
   $("btn-nueva").addEventListener("click", () => {
+    cerrarEdicion();
     $("form-alta").hidden = !$("form-alta").hidden;
     if (!$("form-alta").hidden) $("leagueName").focus();
   });
   $("btn-cancelar-alta").addEventListener("click", () => {
     $("form-alta").hidden = true;
+  });
+  $("btn-cancelar-editar").addEventListener("click", cerrarEdicion);
+
+  // Los dos avisos aparecen solo si el campo de verdad cambió: una advertencia que está siempre
+  // en pantalla deja de leerse, y estos dos cambios sí tienen consecuencias que conviene ver.
+  $("ed-leagueName").addEventListener("input", () => {
+    $("ed-aviso-nombre").hidden = !editando?.liga || $("ed-leagueName").value.trim() === editando.liga.name;
+  });
+  $("ed-slug").addEventListener("input", () => {
+    $("ed-aviso-slug").hidden = !editando?.liga || $("ed-slug").value.trim() === editando.liga.slug;
+  });
+
+  const formEditar = $("form-editar");
+  formEditar.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("error-editar").hidden = true;
+    const boton = formEditar.querySelector('button[type="submit"]');
+    boton.disabled = true;
+    try {
+      await guardarEdicion();
+    } catch (err) {
+      const aviso = $("error-editar");
+      aviso.textContent = err.message;
+      aviso.hidden = false;
+    } finally {
+      boton.disabled = false;
+    }
   });
   $("btn-cerrar-cred").addEventListener("click", () => {
     $("credenciales").hidden = true;

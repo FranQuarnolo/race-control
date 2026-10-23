@@ -6,52 +6,42 @@
     demás. El semáforo dice lo que hace ESTE producto: es quien da la largada y quien decide si
     la carrera está en verde. Es además el momento más reconocible del deporte.
 
-    Cuatro lámparas y no diez: el ícono tiene que leerse a 16x16 px en la pestaña del navegador,
-    y ahí cada lámpara mide menos de 4 px. Con dos filas lo que sobrevive a ese tamaño son las
-    dos manchas de color, que es exactamente lo que tiene que sobrevivir: rojo arriba, verde
-    abajo. Un damero de 4x4 o cinco luces en fila se vuelven un gris sin forma.
+    La regla que manda acá es el tamaño chico. A 16x16 px en la pestaña del navegador —y a 26 px
+    en la barra del panel— lo único que sobrevive es la masa de color, así que las lámparas ocupan
+    casi todo el cuadro y el fondo es apenas la junta entre ellas. Un primer intento tenía las
+    lámparas chicas sobre un panel oscuro: en la barra del panel, que ya es oscura, el ícono
+    desaparecía y parecía una imagen rota.
 
-    La paleta no se inventa: son las mismas variables CSS del panel (--red, --green, --bg), así
-    que el ícono y la interfaz quedan coherentes sin trabajo extra.
+    Cuatro lámparas y no diez por lo mismo: a ese tamaño, cinco luces en fila o un damero de 4x4
+    se vuelven un gris sin forma. Rojo arriba, verde abajo.
+
+    La paleta no se inventa: son las mismas variables CSS del panel (--red, --green), así que el
+    ícono y la interfaz quedan coherentes sin trabajo extra.
   -->
   <defs>
-    <linearGradient id="rc-fondo" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1b1f28" />
-      <stop offset="1" stop-color="#0f1115" />
-    </linearGradient>
     <!-- El degradado descentrado hace que la lámpara se lea como una esfera encendida y no como
          un círculo plano. A 16 px no se nota; a 256 es la diferencia entre un ícono y un dibujo. -->
-    <radialGradient id="rc-rojo" cx="0.36" cy="0.3" r="0.85">
-      <stop offset="0" stop-color="#ff9292" />
-      <stop offset="0.55" stop-color="#e05555" />
-      <stop offset="1" stop-color="#9c2f2f" />
+    <radialGradient id="rc-rojo" cx="0.35" cy="0.28" r="0.9">
+      <stop offset="0" stop-color="#ffb3b3" />
+      <stop offset="0.5" stop-color="#e85b5b" />
+      <stop offset="1" stop-color="#a32d2d" />
     </radialGradient>
-    <radialGradient id="rc-verde" cx="0.36" cy="0.3" r="0.85">
-      <stop offset="0" stop-color="#8ff0b6" />
-      <stop offset="0.55" stop-color="#35c76e" />
-      <stop offset="1" stop-color="#1c7a44" />
+    <radialGradient id="rc-verde" cx="0.35" cy="0.28" r="0.9">
+      <stop offset="0" stop-color="#a6f5c8" />
+      <stop offset="0.5" stop-color="#35c76e" />
+      <stop offset="1" stop-color="#17703d" />
     </radialGradient>
   </defs>
 
-  <rect width="256" height="256" rx="56" fill="url(#rc-fondo)" />
+  <!-- El cuadro oscuro no es "el fondo": es el cuerpo del semáforo, y lo que se ve de él es la
+       junta entre las cuatro lámparas. -->
+  <rect width="256" height="256" rx="54" fill="#0c0f15" />
 
-  <!-- El panel del semáforo. Más oscuro que el fondo para que las lámparas tengan de dónde
-       despegarse, con un borde claro que le da el canto metálico. -->
-  <rect x="32" y="52" width="192" height="152" rx="32" fill="#0b0d12" stroke="#2b3240" stroke-width="6" />
-
-  <!-- Fila de arriba: encendida. La parrilla formada, esperando. -->
-  <g>
-    <circle cx="90" cy="96" r="40" fill="#e05555" opacity="0.15" />
-    <circle cx="166" cy="96" r="40" fill="#e05555" opacity="0.15" />
-    <circle cx="90" cy="96" r="28" fill="url(#rc-rojo)" />
-    <circle cx="166" cy="96" r="28" fill="url(#rc-rojo)" />
-  </g>
+  <!-- Fila de arriba: rojo. La parrilla formada, esperando. -->
+  <circle cx="76" cy="76" r="44" fill="url(#rc-rojo)" />
+  <circle cx="180" cy="76" r="44" fill="url(#rc-rojo)" />
 
   <!-- Fila de abajo: verde. Largada dada, carrera en curso. -->
-  <g>
-    <circle cx="90" cy="160" r="40" fill="#35c76e" opacity="0.17" />
-    <circle cx="166" cy="160" r="40" fill="#35c76e" opacity="0.17" />
-    <circle cx="90" cy="160" r="28" fill="url(#rc-verde)" />
-    <circle cx="166" cy="160" r="28" fill="url(#rc-verde)" />
-  </g>
+  <circle cx="76" cy="180" r="44" fill="url(#rc-verde)" />
+  <circle cx="180" cy="180" r="44" fill="url(#rc-verde)" />
 </svg>

@@ -217,9 +217,14 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * Los puertos y la dirección pública se los asigna el supervisor: si el panel pudiera
    * cambiarlos, una liga podría mudarse al puerto UDP de otra (y quedarse con su telemetría) o
    * dejar al portal haciendo proxy a un puerto donde no hay nadie.
+   *
+   * El nombre de la liga está por un motivo distinto: lo edita el operador en su tabla y el worker
+   * lo toma del portal al arrancar. Si el panel también pudiera cambiarlo, el cambio del admin
+   * duraría hasta el próximo reinicio y después volvería solo, sin que nadie entienda por qué.
    */
   function stripManagedFields(patch: Record<string, unknown>): Record<string, unknown> {
     const copy: Record<string, unknown> = { ...patch };
+    delete copy.leagueName;
     for (const key of ["http", "acUdp"] as const) {
       const section = copy[key];
       if (section && typeof section === "object" && !Array.isArray(section)) {

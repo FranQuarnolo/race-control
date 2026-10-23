@@ -37,6 +37,8 @@ interface Running {
   startedAt: number;
   /** `true` cuando el cierre lo pedimos nosotros: entonces el exit no es una caída. */
   stopping: boolean;
+  /** `true` cuando lo que pedimos es un reinicio: al salir hay que volver a levantarlo. */
+  restartOnExit?: boolean;
 }
 
 export class Supervisor {
@@ -147,6 +149,25 @@ export class Supervisor {
     this.store.updateLeague(leagueId, { status: "stopped" });
   }
 
+  /**
+   * Reinicio pedido a propósito — hoy, porque el operador le cambió el nombre a la liga y el
+   * worker toma ese dato al arrancar.
+   *
+   * No es lo mismo que una caída: acá no hay backoff ni contador de crashes, porque no falló
+   * nada. Y no alcanza con `stop()` seguido de `start()`: el worker tarda en irse, y `start()`
+   * se iría sin hacer nada al ver que la liga todavía figura corriendo. Por eso el arranque se
+   * cuelga del `exit`.
+   */
+  restart(leagueId: string): void {
+    const entry = this.running.get(leagueId);
+    if (!entry) {
+      this.start(leagueId);
+      return;
+    }
+    entry.restartOnExit = true;
+    this.stop(leagueId);
+  }
+
   /** Para el cierre ordenado del portal: no toca el estado guardado, porque al volver a arrancar
    * las ligas tienen que levantarse solas. */
   shutdown(): void {
@@ -180,7 +201,13 @@ export class Supervisor {
   private onExit(leagueId: string, code: number | null, signal: string | null): void {
     const entry = this.running.get(leagueId);
     this.running.delete(leagueId);
-    if (!entry || entry.stopping) return;
+    if (!entry) return;
+    if (entry.stopping) {
+      // Salida pedida por nosotros. Si lo que se pidió fue un reinicio, este es el momento: el
+      // puerto UDP recién queda libre cuando el proceso viejo se fue del todo.
+      if (entry.restartOnExit) this.start(leagueId);
+      return;
+    }
 
     const league = this.store.findLeague(leagueId);
     if (!league) return;

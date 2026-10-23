@@ -137,6 +137,36 @@ Son cuatro lámparas y no diez por la misma razón de siempre: a 16 px en la pes
 cada una mide menos de 4 px, y lo único que sobrevive a ese tamaño son las dos manchas de color
 —rojo arriba, verde abajo—. Cinco luces en fila, o un damero de 4x4, se vuelven un gris sin forma.
 
+El primer intento tenía las lámparas chicas sobre un panel oscuro. En la barra del panel —que ya
+es oscura— el ícono se fundía con el fondo y parecía una imagen rota. Ahora las lámparas ocupan
+casi todo el cuadro y lo que queda del cuerpo del semáforo es apenas la junta entre ellas.
+
+### El operador edita la liga y la cuenta desde la tabla
+
+Faltaba lo más obvio: dar de alta una liga se podía, corregirla no. Si el nombre venía con un
+error de tipeo, o el admin cambiaba de email, había que editar el `portal.json` a mano por SSH.
+
+Cada fila tiene ahora un botón **Editar** con los cuatro datos que importan: nombre de la liga,
+dirección (`/l/<slug>/`), email del admin y contraseña nueva. Se manda solo lo que cambió, y los
+dos cambios con consecuencias las avisan antes de guardar: renombrar reinicia el motor —unos
+segundos sin escuchar telemetría— y cambiar la dirección deja muerto el link anterior.
+
+La contraseña dejó de ser siempre generada: el operador puede escribir una, o dejar el campo vacío
+y que no se toque. Sigue sin guardarse en claro en ningún lado.
+
+Debajo hay una decisión que venía postergada: **el nombre de la liga tenía dos dueños**. El portal
+guardaba `League.name` —lo que se ve en la tabla y en la factura— y el worker guardaba su propio
+`config.leagueName` —lo que se ve arriba a la izquierda en el panel—, y cada uno se editaba en un
+lado distinto. Ahora manda el portal: el worker lo toma al arrancar y `POST /api/config` descarta
+`leagueName` como descarta los puertos. En el panel del admin el campo quedó de solo lectura, y el
+paso 1 del asistente dejó de pedir el nombre para pasar a confirmarlo.
+
+### Un campo para copiar, no un bloque de texto
+
+En "Configuración del servidor", el Send Address pasó de ser un `<pre>` a un input de solo lectura
+con el botón de copiar **adentro**. El gesto de copiar queda donde está el dato, y un click en el
+campo lo selecciona entero.
+
 ### Versión y limpieza
 
 `0.5` en el panel y en `/api/state`, `0.5.0` en `package.json`. La única dependencia de producción

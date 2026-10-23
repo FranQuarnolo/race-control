@@ -342,6 +342,9 @@ export function createPortal(config: PortalConfig): Portal {
   /** Una fila de la tabla del operador: la cuenta, su liga y en qué estado está cada cosa. */
   function filaDeAdmin(user: User) {
     const leagues = store.leaguesOwnedBy(user.id).map((l) => ({
+      // El id va al panel porque es lo que `POST /api/operador/ligas/:id` necesita para editarla.
+      // El slug no sirve: justamente puede cambiar en esa misma llamada.
+      id: l.id,
       slug: l.slug,
       name: l.name,
       status: l.status,
@@ -425,6 +428,24 @@ export function createPortal(config: PortalConfig): Portal {
     if (typeof body.active === "boolean") patch.active = body.active;
     if (typeof body.paidUntil === "string") patch.paidUntil = body.paidUntil.trim();
     if (typeof body.note === "string") patch.note = body.note.slice(0, 500);
+
+    // El email es con lo que entra: cambiarlo mal lo deja afuera de su propia liga. Se valida que
+    // sea un email y que no sea el de otra cuenta — dos cuentas con el mismo email harían que el
+    // login eligiera una de las dos sin criterio.
+    if (typeof body.email === "string" && body.email.trim()) {
+      const email = normalizeEmail(body.email);
+      if (!email.includes("@")) {
+        res.status(400).json({ ok: false, error: `"${body.email}" no parece un email.` });
+        return;
+      }
+      const otro = store.findUserByEmail(email);
+      if (otro && otro.id !== user.id) {
+        res.status(400).json({ ok: false, error: `Ya hay una cuenta con el email ${email}.` });
+        return;
+      }
+      patch.email = email;
+    }
+
     store.updateUser(user.id, patch);
 
     // Desactivar apaga la liga; reactivar la vuelve a levantar. Los datos no se tocan nunca: el
@@ -448,6 +469,59 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
     res.json({ ok: true, password: await resetPassword(user, pedida) });
+  });
+
+  /**
+   * Editar la liga: su nombre y su dirección.
+   *
+   * El nombre no se guarda en un solo lado. El portal tiene `League.name` —lo que se ve en esta
+   * tabla— y el worker tiene su propio `config.leagueName`, que es lo que muestra el panel arriba
+   * a la izquierda. Para que el cambio se vea de verdad hay que reiniciar la liga: el worker toma
+   * el nombre del portal al arrancar. Son unos segundos sin escuchar telemetría, y por eso el
+   * panel avisa antes de hacerlo.
+   */
+  operadorApi.post("/ligas/:id", (req, res) => {
+    const league = store.findLeague(req.params.id);
+    if (!league) {
+      res.status(404).json({ ok: false, error: "No existe esa liga." });
+      return;
+    }
+    const body = req.body ?? {};
+    const patch: Parameters<typeof store.updateLeague>[1] = {};
+
+    if (typeof body.name === "string" && body.name.trim()) {
+      patch.name = body.name.trim().slice(0, 80);
+    }
+
+    if (typeof body.slug === "string" && body.slug.trim() && body.slug.trim() !== league.slug) {
+      const slug = toSlug(body.slug);
+      if (!SLUG_RE.test(slug)) {
+        res.status(400).json({
+          ok: false,
+          error: "La dirección va en minúsculas, con números y guiones, y de 2 a 40 caracteres.",
+        });
+        return;
+      }
+      const otra = store.findLeagueBySlug(slug);
+      if (otra && otra.id !== league.id) {
+        res.status(400).json({ ok: false, error: `Ya hay una liga en /l/${slug}.` });
+        return;
+      }
+      patch.slug = slug;
+    }
+
+    if (!patch.name && !patch.slug) {
+      res.status(400).json({ ok: false, error: "No viene nada para cambiar." });
+      return;
+    }
+
+    store.updateLeague(league.id, patch);
+    // Reiniciar solo si estaba corriendo. Una liga de una cuenta desactivada tiene que seguir
+    // apagada después de renombrarla: si no, editarle el nombre sería la forma de saltearse la baja.
+    if (supervisor.isRunning(league.id)) supervisor.restart(league.id);
+
+    const actualizada = store.findLeague(league.id)!;
+    res.json({ ok: true, league: { slug: actualizada.slug, name: actualizada.name } });
   });
 
   app.use("/api/operador", operadorApi);

@@ -118,7 +118,9 @@ before(async () => {
     publicHost: "race-control.test",
     publicIp: "203.0.113.5",
     udpPortFrom: 39000,
-    udpPortTo: 39009,
+    // Rango holgado a propósito: varios tests dan de alta su propia liga para no pisar las de los
+    // demás, y un pool justo haría que el alta fallara por cupo y el test mintiera sobre la causa.
+    udpPortTo: 39049,
     loopbackPortFrom: 39100,
     // Sin HTTPS no hay `__Host-` ni redirección a https: es el mismo modo que se usa para
     // desarrollar contra el portal en la máquina propia.
@@ -428,6 +430,156 @@ test("el estado de la cuota lo calcula el servidor", async () => {
   // es peor que cualquier impago. El corte es `active`, y lo decide una persona.
   assert.equal(fila.active, true);
   assert.equal((await pedir("GET", "/l/liga-a/api/state", { cookie: cookieA })).status, 200);
+});
+
+// --- Edición desde el panel del operador ---------------------------------------------------------
+
+/** Da de alta una liga propia del test, para no renombrar las que usan los demás. */
+async function altaDePrueba(leagueName: string, email: string) {
+  const res = await pedir("POST", "/api/operador/admins", {
+    cookie: cookieOp,
+    body: { leagueName, email },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 200, res.body);
+  const { admin, password } = res.json();
+  return { admin, password, liga: admin.leagues[0] };
+}
+
+test("el operador le cambia el nombre y la dirección a una liga", async () => {
+  const { admin, liga } = await altaDePrueba("Copa Vieja", "copa@example.com");
+  assert.equal(liga.slug, "copa-vieja");
+
+  const res = await pedir("POST", `/api/operador/ligas/${liga.id}`, {
+    cookie: cookieOp,
+    body: { name: "Copa Nueva", slug: "Copa Nueva 2027" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 200, res.body);
+  // El slug se normaliza del lado del servidor: lo que el operador escriba como título llega
+  // igual a una URL válida, sin pedirle que la arme él.
+  assert.equal(res.json().league.slug, "copa-nueva-2027");
+
+  const fila = (await pedir("GET", "/api/operador/admins", { cookie: cookieOp }))
+    .json()
+    .admins.find((a: { id: string }) => a.id === admin.id);
+  assert.equal(fila.leagues[0].name, "Copa Nueva");
+  assert.equal(fila.leagues[0].slug, "copa-nueva-2027");
+
+  // La dirección vieja deja de existir, y eso es lo que hay que avisarle al admin antes de tocarla.
+  assert.equal((await pedir("GET", "/l/copa-vieja/api/state", { cookie: cookieOp })).status, 404);
+});
+
+test("una liga no se puede mudar encima de otra", async () => {
+  const { liga } = await altaDePrueba("Copa Chocadora", "chocadora@example.com");
+  const res = await pedir("POST", `/api/operador/ligas/${liga.id}`, {
+    cookie: cookieOp,
+    body: { slug: "liga-b" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 400);
+  assert.match(res.json().error, /liga-b/);
+  // Y la liga de al lado sigue donde estaba.
+  assert.equal(portal.store.findLeagueBySlug("liga-b")!.id !== liga.id, true);
+});
+
+test("editar una liga que no existe es 404, y sin cambios es 400", async () => {
+  const { liga } = await altaDePrueba("Copa Sin Cambios", "sincambios@example.com");
+  assert.equal(
+    (await pedir("POST", "/api/operador/ligas/no-existe", {
+      cookie: cookieOp,
+      body: { name: "Lo que sea" },
+      headers: { "x-rc-request": "1" },
+    })).status,
+    404
+  );
+  assert.equal(
+    (await pedir("POST", `/api/operador/ligas/${liga.id}`, {
+      cookie: cookieOp,
+      body: {},
+      headers: { "x-rc-request": "1" },
+    })).status,
+    400
+  );
+});
+
+test("editar ligas tampoco existe para quien no es operador", async () => {
+  const liga = portal.store.findLeagueBySlug("liga-a")!;
+  const res = await pedir("POST", `/api/operador/ligas/${liga.id}`, {
+    cookie: cookieA,
+    body: { name: "Mi propia liga renombrada" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 404);
+  assert.equal(portal.store.findLeague(liga.id)!.name, "Liga A");
+});
+
+test("cambiar el email cambia con qué entra el admin", async () => {
+  const { admin, password } = await altaDePrueba("Copa Del Mail", "viejo@example.com");
+
+  const res = await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { email: "Nuevo@Example.com" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 200, res.body);
+  // Normalizado a minúsculas: si no, el login con el mismo email escrito distinto no encontraría
+  // la cuenta.
+  assert.equal(res.json().admin.email, "nuevo@example.com");
+
+  const viejo = await pedir("POST", "/api/portal/login", {
+    body: { email: "viejo@example.com", password },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(viejo.status, 401);
+
+  const cookie = await entrar("nuevo@example.com", password);
+  assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
+});
+
+test("un email que ya es de otra cuenta se rechaza", async () => {
+  const { admin } = await altaDePrueba("Copa Repetida", "repetida@example.com");
+  const res = await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { email: "ana@example.com" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 400);
+  assert.equal(portal.store.findUser(admin.id)!.email, "repetida@example.com");
+
+  const feo = await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { email: "esto no es un email" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(feo.status, 400);
+});
+
+test("el operador puede elegir la contraseña en vez de que se la generen", async () => {
+  const { admin, password } = await altaDePrueba("Copa De Clave", "declave@example.com");
+
+  const corta = await pedir("POST", `/api/operador/admins/${admin.id}/clave`, {
+    cookie: cookieOp,
+    body: { password: "corta" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(corta.status, 400);
+
+  const res = await pedir("POST", `/api/operador/admins/${admin.id}/clave`, {
+    cookie: cookieOp,
+    body: { password: "la-que-yo-elijo" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 200, res.body);
+  assert.equal(res.json().password, "la-que-yo-elijo");
+
+  const vieja = await pedir("POST", "/api/portal/login", {
+    body: { email: "declave@example.com", password },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(vieja.status, 401);
+  const cookie = await entrar("declave@example.com", "la-que-yo-elijo");
+  assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
 });
 
 test("las pantallas del portal salen con sus cabeceras de seguridad", async () => {
