@@ -16,9 +16,9 @@
   --panel-border: #272b35;
   --text: #e6e8ec;
   --muted: #8b93a3;
-  --accent: #3fa9f5;
+  --accent: #f0b429;
   --green: #35c76e;
-  --yellow: #e0b84b;
+  --yellow: #ef8e3c;
   --red: #e05555;
   --radius: 12px;
   --ancho: 1080px;
@@ -83,7 +83,7 @@ a { color: var(--accent); }
   border-radius: 8px;
   border: 0;
   background: var(--accent);
-  color: #06121c;
+  color: #1d1400;
   font-weight: 650;
   font-size: 15px;
   font-family: inherit;
@@ -131,9 +131,9 @@ a { color: var(--accent); }
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   overflow: hidden;
-  /* La sombra azulada hace que la captura se lea como "una pantalla", y no como una imagen
-     pegada sobre el fondo del mismo color. */
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(63, 169, 245, 0.08);
+  /* El filo dorado hace que la captura se lea como "una pantalla", y no como una imagen pegada
+     sobre el fondo del mismo color. */
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(240, 180, 41, 0.08);
 }
 
 /* --------------------------------------------------------------------------------- secciones */
@@ -250,8 +250,8 @@ a { color: var(--accent); }
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(63, 169, 245, 0.14);
-  border: 1px solid rgba(63, 169, 245, 0.35);
+  background: rgba(240, 180, 41, 0.14);
+  border: 1px solid rgba(240, 180, 41, 0.35);
   color: var(--accent);
   font-weight: 700;
   margin-bottom: 14px;
@@ -273,13 +273,46 @@ a { color: var(--accent); }
 
 .pie {
   border-top: 1px solid var(--panel-border);
-  padding: 28px 0 40px;
+  padding: 14px 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .pie .contenedor { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
-.pie .separador { margin-left: auto; }
+.pie .derechos { margin-left: auto; }
+
+/* --------------------------------------------------------------------------- volver arriba */
+
+/*
+  La landing es larga y en el celular son varias pantallas de scroll. El botón aparece recién
+  después de bajar algo —ver landing.js—, porque arriba de todo no tendría nada que hacer salvo
+  tapar el contenido.
+*/
+.arriba {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  /* Oculto de verdad para lectores de pantalla y para el tabulador, no solo transparente. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.18s, visibility 0.18s, border-color 0.18s;
+  z-index: 20;
+}
+
+.arriba.visible { opacity: 1; visibility: visible; }
+.arriba:hover { border-color: var(--accent); color: var(--accent); }
+.arriba:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.arriba svg { width: 20px; height: 20px; display: block; }
 
 /* ------------------------------------------------------------------------------------ angosto */
 

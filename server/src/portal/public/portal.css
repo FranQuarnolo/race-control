@@ -21,9 +21,9 @@
   --panel-border: #272b35;
   --text: #e6e8ec;
   --muted: #8b93a3;
-  --accent: #3fa9f5;
+  --accent: #f0b429;
   --green: #35c76e;
-  --yellow: #e0b84b;
+  --yellow: #ef8e3c;
   --red: #e05555;
   --radius: 10px;
 }
@@ -104,7 +104,7 @@ button {
   border-radius: 8px;
   border: 0;
   background: var(--accent);
-  color: #06121c;
+  color: #1d1400;
   font-weight: 650;
   font-size: 15px;
   font-family: inherit;
@@ -213,7 +213,7 @@ button.peligro:hover { border-color: var(--red); background: rgba(224, 85, 85, 0
 }
 
 .aviso[hidden] { display: none; }
-.aviso.leve { border: 1px solid rgba(224, 184, 75, 0.4); background: rgba(224, 184, 75, 0.1); color: #f3dfa6; }
+.aviso.leve { border: 1px solid rgba(239, 142, 60, 0.4); background: rgba(239, 142, 60, 0.1); color: #f7d6b0; }
 .aviso.grave { border: 1px solid rgba(224, 85, 85, 0.5); background: rgba(224, 85, 85, 0.1); color: #ffc9c9; }
 
 /* ------------------------------------------------------------------------ panel del operador */
@@ -226,7 +226,7 @@ body.operador { padding-top: 4vh; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent);
-  border: 1px solid rgba(63, 169, 245, 0.4);
+  border: 1px solid rgba(240, 180, 41, 0.4);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -260,7 +260,7 @@ body.operador { padding-top: 4vh; }
 .dato .etiqueta { font-size: 12px; color: var(--muted); }
 .dato.malo { border-color: rgba(224, 85, 85, 0.5); }
 .dato.malo .valor { color: #ffb4b4; }
-.dato.aviso { border-color: rgba(224, 184, 75, 0.45); }
+.dato.aviso { border-color: rgba(239, 142, 60, 0.45); }
 .dato.aviso .valor { color: var(--yellow); }
 
 .sub-caja {
@@ -342,7 +342,7 @@ input[type="date"] {
 }
 
 .cuota-al-dia { color: var(--green); border-color: rgba(53, 199, 110, 0.45); }
-.cuota-por-vencer { color: var(--yellow); border-color: rgba(224, 184, 75, 0.5); }
+.cuota-por-vencer { color: var(--yellow); border-color: rgba(239, 142, 60, 0.5); }
 .cuota-vencida { color: #ffb4b4; border-color: var(--red); background: rgba(224, 85, 85, 0.1); }
 
 @media (max-width: 900px) {

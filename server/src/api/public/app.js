@@ -1051,10 +1051,14 @@ function drawMap() {
 
     ctx.beginPath();
     ctx.arc(p.x, p.y, selected || hovered ? 8 : 6, 0, Math.PI * 2);
-    ctx.fillStyle = selected ? "#e0b84b" : hovered ? "#e6e8ec" : "#3fa9f5";
+    // Con el acento en dorado, el auto seleccionado ya no puede ser amarillo: sobre el resto de
+    // la parrilla —que ahora es dorada— se perdería. El blanco es el único color que queda con
+    // contraste propio en el mapa, y es además el más fuerte, que es lo que corresponde a lo
+    // seleccionado. El hover queda en un dorado claro: un escalón, no otro color.
+    ctx.fillStyle = selected ? "#ffffff" : hovered ? "#ffd877" : "#f0b429";
     ctx.fill();
     if (selected) {
-      ctx.strokeStyle = "rgba(224, 184, 75, 0.45)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
       ctx.lineWidth = 6;
       ctx.beginPath();
       ctx.arc(p.x, p.y, 13, 0, Math.PI * 2);

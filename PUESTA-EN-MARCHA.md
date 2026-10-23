@@ -121,12 +121,19 @@ curl -I https://race-control.fly.dev/      # 200
 ```
 
 ```bash
-# El de verdad: que entre UDP. Contra el puerto de una liga ya creada.
+# El de verdad: que entre UDP. Contra el puerto de una liga de prueba, NO de una liga real.
 printf 'x' | nc -u -w1 <la-ipv4> 30000
-fly logs                                   # el worker tiene que registrar que entró algo
+fly logs      # "Servidor de AC detectado en <tu ip>" = el datagrama cruzó. Es la prueba.
 ```
 
 El HTTP puede estar impecable con el UDP roto. Son dos caminos distintos y fallan por separado.
+
+⚠️ **Hacelo solo contra una liga descartable.** El motor adopta como servidor de Assetto Corsa la
+dirección del primer datagrama que le llega, y esa adopción **queda escrita**: después de la prueba,
+esa liga apunta a la IP de tu casa y ya no va a adoptar la del servidor real. Es lo correcto —si
+adoptara al último que habla, cualquiera podría secuestrar la liga mandando un paquete—, pero
+significa que la liga que uses para probar hay que darla de baja y crearla de nuevo antes de
+entregársela a nadie.
 
 ---
 
@@ -292,7 +299,9 @@ Para desarrollar, o para mostrarle el producto a alguien sin tocar producción.
 ```bash
 cd server
 npm install
-npm run build
+npm run build    # compila TypeScript y copia los estáticos a dist/
+npm run dev      # lo mismo pero recargando solo al guardar
+npm test         # compila y corre los tests
 ```
 
 **El portal completo, en tu máquina:**

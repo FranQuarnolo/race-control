@@ -1,37 +1,57 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Race Control">
   <!--
-    Marca de Race Control: bandera a cuadros + arco de señal.
+    Marca de Race Control: el semáforo de largada.
 
-    Dos elementos, no más: el ícono tiene que seguir siendo legible a 16x16 px en la barra de
-    tareas y en la pestaña del navegador, y ahí cualquier tercer elemento se vuelve una mancha.
-    La bandera comunica "carreras" al instante; el arco comunica "telemetría / control remoto",
-    que es lo que distingue a esta app de cualquier otra herramienta de sim racing.
+    La bandera a cuadros que había antes decía "automovilismo", que es lo que dicen todas las
+    demás. El semáforo dice lo que hace ESTE producto: es quien da la largada y quien decide si
+    la carrera está en verde. Es además el momento más reconocible del deporte.
 
-    La paleta no se inventa: son las mismas variables CSS que define el panel (index.html), así
+    Cuatro lámparas y no diez: el ícono tiene que leerse a 16x16 px en la pestaña del navegador,
+    y ahí cada lámpara mide menos de 4 px. Con dos filas lo que sobrevive a ese tamaño son las
+    dos manchas de color, que es exactamente lo que tiene que sobrevivir: rojo arriba, verde
+    abajo. Un damero de 4x4 o cinco luces en fila se vuelven un gris sin forma.
+
+    La paleta no se inventa: son las mismas variables CSS del panel (--red, --green, --bg), así
     que el ícono y la interfaz quedan coherentes sin trabajo extra.
   -->
   <defs>
-    <clipPath id="rc-flag-clip">
-      <rect x="44" y="76" width="128" height="104" rx="8" />
-    </clipPath>
+    <linearGradient id="rc-fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1f28" />
+      <stop offset="1" stop-color="#0f1115" />
+    </linearGradient>
+    <!-- El degradado descentrado hace que la lámpara se lea como una esfera encendida y no como
+         un círculo plano. A 16 px no se nota; a 256 es la diferencia entre un ícono y un dibujo. -->
+    <radialGradient id="rc-rojo" cx="0.36" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#ff9292" />
+      <stop offset="0.55" stop-color="#e05555" />
+      <stop offset="1" stop-color="#9c2f2f" />
+    </radialGradient>
+    <radialGradient id="rc-verde" cx="0.36" cy="0.3" r="0.85">
+      <stop offset="0" stop-color="#8ff0b6" />
+      <stop offset="0.55" stop-color="#35c76e" />
+      <stop offset="1" stop-color="#1c7a44" />
+    </radialGradient>
   </defs>
 
-  <rect width="256" height="256" rx="56" fill="#0f1115" />
+  <rect width="256" height="256" rx="56" fill="url(#rc-fondo)" />
 
-  <!-- Bandera a cuadros 2x2. Sin más subdivisiones: a 16 px un damero de 4x4 se gris-ifica. -->
-  <g clip-path="url(#rc-flag-clip)">
-    <rect x="44" y="76" width="128" height="104" fill="#e6e8ec" />
-    <rect x="44" y="76" width="64" height="52" fill="#3fa9f5" />
-    <rect x="108" y="128" width="64" height="52" fill="#3fa9f5" />
+  <!-- El panel del semáforo. Más oscuro que el fondo para que las lámparas tengan de dónde
+       despegarse, con un borde claro que le da el canto metálico. -->
+  <rect x="32" y="52" width="192" height="152" rx="32" fill="#0b0d12" stroke="#2b3240" stroke-width="6" />
+
+  <!-- Fila de arriba: encendida. La parrilla formada, esperando. -->
+  <g>
+    <circle cx="90" cy="96" r="40" fill="#e05555" opacity="0.15" />
+    <circle cx="166" cy="96" r="40" fill="#e05555" opacity="0.15" />
+    <circle cx="90" cy="96" r="28" fill="url(#rc-rojo)" />
+    <circle cx="166" cy="96" r="28" fill="url(#rc-rojo)" />
   </g>
-  <rect x="44" y="76" width="128" height="104" rx="8" fill="none" stroke="#272b35" stroke-width="4" />
 
-  <!-- Mástil: ancla la bandera para que no flote y da el eje vertical del conjunto. -->
-  <rect x="32" y="68" width="14" height="128" rx="7" fill="#8b93a3" />
-
-  <!-- Arco de señal emitiendo desde la esquina superior derecha. -->
-  <g fill="none" stroke="#35c76e" stroke-width="13" stroke-linecap="round">
-    <path d="M181 92 a34 34 0 0 1 24 24" />
-    <path d="M181 60 a66 66 0 0 1 56 56" opacity="0.55" />
+  <!-- Fila de abajo: verde. Largada dada, carrera en curso. -->
+  <g>
+    <circle cx="90" cy="160" r="40" fill="#35c76e" opacity="0.17" />
+    <circle cx="166" cy="160" r="40" fill="#35c76e" opacity="0.17" />
+    <circle cx="90" cy="160" r="28" fill="url(#rc-verde)" />
+    <circle cx="166" cy="160" r="28" fill="url(#rc-verde)" />
   </g>
 </svg>

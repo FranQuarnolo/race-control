@@ -202,10 +202,8 @@
   <section class="cierre">
     <div class="contenedor">
       <h2>¿Querés tu liga en Race Control?</h2>
-      <p>
-        Las cuentas se crean a pedido, una por liga. Escribinos con el nombre de tu campeonato y te
-        pasamos el acceso.
-      </p>
+      <!-- Si alguna vez hay un lugar a dónde mandar a quien todavía no es cliente (mail, Discord,
+           Instagram), el botón principal va acá, arriba del de ingresar. -->
       <a class="boton grande" href="/login">Ya tengo cuenta, quiero entrar</a>
     </div>
   </section>
@@ -215,9 +213,16 @@
 <footer class="pie">
   <div class="contenedor">
     <span>Race Control <span id="version"></span></span>
-    <span class="separador"><a href="/login">Ingresar</a></span>
+    <span class="derechos">© <span id="anio"></span> Race Control. Todos los derechos reservados.</span>
   </div>
 </footer>
+
+<button class="arriba" id="btn-arriba" type="button" title="Volver arriba" aria-label="Volver arriba">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 19V5" />
+    <path d="M5 12l7-7 7 7" />
+  </svg>
+</button>
 
 <script src="/landing.js"></script>
 </body>

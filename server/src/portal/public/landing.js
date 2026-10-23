@@ -1,9 +1,33 @@
 // La landing es HTML estático: no necesita JS para mostrarse, y eso es deliberado — es la página
 // que ve alguien que todavía no es cliente, y tiene que cargar aunque algo falle.
 //
-// Lo único que hace este archivo es dos retoques que mejoran la visita sin ser imprescindibles.
+// Lo único que hace este archivo son retoques que mejoran la visita sin ser imprescindibles.
 
 (function () {
+  // 0. El año del pie. Escrito acá y no en el HTML para que no haya un año a mano que quede
+  //    viejo el 1 de enero sin que nadie se dé cuenta.
+  var anio = document.getElementById("anio");
+  if (anio) anio.textContent = String(new Date().getFullYear());
+
+  // La flecha de volver arriba aparece recién cuando hay algo arriba a donde volver. Un umbral
+  // de una pantalla y media: antes de eso el botón solo taparía contenido.
+  var arriba = document.getElementById("btn-arriba");
+  if (arriba) {
+    var revisar = function () {
+      arriba.classList.toggle("visible", window.scrollY > window.innerHeight * 1.5);
+    };
+    // `passive`: el handler no cancela nada, y decírselo al navegador le deja hacer el scroll
+    // sin esperar a que este código termine.
+    window.addEventListener("scroll", revisar, { passive: true });
+    revisar();
+    arriba.addEventListener("click", function () {
+      // `behavior: "auto"` y no `"smooth"`: así manda el `scroll-behavior` de la hoja, que está
+      // dentro de un `prefers-reduced-motion`. Forzarlo acá le pasaría por encima a alguien que
+      // pidió explícitamente que las cosas no se deslicen.
+      window.scrollTo({ top: 0, behavior: "auto" });
+    });
+  }
+
   // 1. La versión en el pie. Si la API no contesta, el hueco queda vacío y no pasa nada.
   fetch("/api/portal/me", { headers: { "X-RC-Request": "1" } })
     .then(function (res) { return res.json(); })

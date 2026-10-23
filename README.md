@@ -26,22 +26,25 @@ descarga es la app de los pilotos.
 4. 🎮 Le pasás `RaceControlClient.zip` a cada piloto, una sola vez para toda la temporada.
 5. 🏁 El día de carrera entrás al panel y apretás los botones de largada.
 
-### 🙋 Cómo consigo mi usuario
+### 🎬 En video
 
-No hay registro abierto: las cuentas las crea a mano quien opera el servicio. No es por hacerse el
-difícil — cada liga ocupa un puerto UDP de un rango chico declarado a mano en el servidor, así que
-un formulario público lo agotaría el primer día. Y el acceso va atado a la cuota mensual.
+> 🚧 **Próximamente**: los cinco pasos de arriba, hechos en pantalla de punta a punta.
 
-Abrí un [issue](https://github.com/FranQuarnolo/race-control/issues) o escribime con el nombre de
-tu liga y un email, y te mando las credenciales.
+<!-- Cuando el video esté subido a YouTube, borrar el "Próximamente" de arriba y descomentar la
+     línea de abajo, cambiando las dos veces que dice VIDEO_ID por el id del video (lo que va
+     después de `watch?v=`). La miniatura la genera YouTube sola en esa dirección, no hay que
+     subir ninguna imagen. GitHub no reproduce video embebido: una miniatura que linkea es lo
+     máximo que se puede hacer en un README. Va comentado y no puesto a medias porque una imagen
+     rota en lo primero que se ve del proyecto es peor que no tener video.
+
+[![Ver el video](https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=VIDEO_ID)
+-->
 
 ## 📥 Descargas
 
 | Para | Qué bajar |
 |---|---|
 | 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) |
-
-El admin no baja nada: el panel es una página web.
 
 ## 🏎️ Para el piloto
 
@@ -73,16 +76,6 @@ y una credencial por el chat del juego apenas entrás. 🎮
 - **Modo sombra**: 🛡️ **recomendado para las primeras carreras**. El sistema registra todo pero no
   sanciona a nadie en serio, así podés chequear que funcione antes de confiar en él del todo.
 
-## 🛠️ Para quien opera el servicio
-
-Entrando con la cuenta de operador aparece **`/operador`**: la lista de admins, cuándo entró cada
-uno, hasta cuándo pagó, y los botones para dar de alta una liga nueva, generar una contraseña o
-desactivar una cuenta. Desactivar **para el worker de esa liga y deja todos sus datos donde
-estaban**; reactivar lo vuelve a levantar.
-
-La puesta en marcha completa —desde el `fly launch` hasta la primera liga andando— está en
-**[PUESTA-EN-MARCHA.md](PUESTA-EN-MARCHA.md)**.
-
 ## 📚 Documentación
 
 | Documento | De qué trata |
@@ -92,29 +85,3 @@ La puesta en marcha completa —desde el `fly launch` hasta la primera liga anda
 | [docs/operacion.md](server/docs/operacion.md) | Manual de operación: crear ligas, desplegar, leer logs, restaurar |
 | [docs/seguridad.md](server/docs/seguridad.md) | Modelo de amenazas y qué queda explícitamente aceptado |
 | [CHANGELOG.md](CHANGELOG.md) | Cada decisión de diseño, con el porqué y no solo el qué |
-
-## 🔧 Para desarrollar
-
-```bash
-cd server
-npm install
-npm run dev      # portal con recarga
-npm test         # compila y corre los tests
-```
-
-El portal en la máquina propia, con sus cookies sin HTTPS:
-
-```bash
-npm run build
-RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 \
-  RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com PORT=8080 node dist/portal/index.js
-```
-
-La contraseña del operador sale en el log del primer arranque, una sola vez.
-
-Dos ayudas más, que no necesitan un servidor de Assetto Corsa:
-
-```bash
-node dist/sim/replay.js   # reproduce una captura cruda contra el motor
-node dist/sim/demo.js     # levanta el panel con una carrera inventada, para sacar capturas
-```

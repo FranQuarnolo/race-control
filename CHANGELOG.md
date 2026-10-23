@@ -95,6 +95,12 @@ De paso, los cajones de Conexión y Reglas aceptan ahora un ancla (`#conexion`, 
 abren solos. Nació para poder fotografiarlos, pero sirve para que un aviso enlace directo a donde
 se arregla el problema.
 
+El pie quedó en la mitad de alto y con el aviso de derechos —el año lo escribe el JS, para que no
+haya una fecha a mano que quede vieja el 1 de enero sin que nadie se entere—. Perdió el botón de
+"Ingresar", que era el tercero de la misma página. Y la página, que es larga, tiene ahora una
+flecha de volver arriba que aparece recién pasada la pantalla y media: antes de eso no hay nada
+arriba a donde volver y el botón solo taparía contenido.
+
 ### Salir de la sesión, desde donde sea que estés
 
 Las tres pantallas con sesión tienen ahora su botón: el panel de operador, la lista de ligas y
@@ -107,6 +113,29 @@ vive en el portal, no en el worker, y `api()` antepone el prefijo `/l/<slug>` qu
 worker —que no sabe nada de cookies—. Va con la ruta absoluta y el header `X-RC-Request` a mano.
 Y solo aparece si el panel se abrió desde el portal: abierto directo contra el puerto del worker
 no hay sesión que cerrar y el botón mentiría.
+
+### El acento pasa de celeste a dorado
+
+`--accent` era `#3fa9f5` en las tres hojas de estilo y ahora es `#f0b429`. El cambio arrastró algo
+que no era opcional: el amarillo de aviso (`--yellow`, `#e0b84b`) quedaba a un paso del dorado
+nuevo, y son **dos cosas distintas** —uno es "esto es un link / esto es el acento", el otro es
+"prestá atención"—. Si se parecen, el aviso deja de avisar. El amarillo de aviso pasó entonces a
+ámbar (`#ef8e3c`): sigue leyéndose como precaución y ya no se confunde con el acento.
+
+El mapa del circuito tuvo el mismo problema en chico. El auto seleccionado era amarillo sobre una
+parrilla celeste; con la parrilla dorada se habría perdido adentro. Ahora el seleccionado es
+blanco —el color de más contraste del mapa, que es lo que le corresponde a lo que está
+seleccionado— y el hover es un dorado claro: un escalón del mismo color, no un color nuevo.
+
+### El ícono es un semáforo de largada
+
+`brand/icon.svg` —y su copia en el panel— dejó de ser una bandera a cuadros. La bandera dice
+"automovilismo", que es lo que dicen todas las demás; el semáforo dice lo que hace **este**
+producto, que es dar la largada y decidir si la carrera está en verde.
+
+Son cuatro lámparas y no diez por la misma razón de siempre: a 16 px en la pestaña del navegador
+cada una mide menos de 4 px, y lo único que sobrevive a ese tamaño son las dos manchas de color
+—rojo arriba, verde abajo—. Cinco luces en fila, o un damero de 4x4, se vuelven un gris sin forma.
 
 ### Versión y limpieza
 
