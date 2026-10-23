@@ -67,6 +67,19 @@ export interface NewConnection {
 
 export interface ConnectionClosed extends NewConnection {}
 
+/**
+ * Respuesta a GET_CAR_INFO: quién ocupa un slot de la parrilla *ahora*, sin esperar a que se
+ * conecte de nuevo.
+ *
+ * Es lo que permite que un reinicio del backend a mitad de carrera no deje la torre llena de
+ * autos sin nombre: `NEW_CONNECTION` ya pasó y no se vuelve a emitir, y `CAR_UPDATE` solo trae
+ * el número de slot. Preguntando por cada slot al arrancar, la parrilla se repuebla sola.
+ */
+export interface CarInfo extends NewConnection {
+  isConnected: boolean;
+  driverTeam: string;
+}
+
 export interface LapCompleted {
   carId: number;
   lapTimeMs: number;
@@ -88,7 +101,11 @@ export interface SessionInfo {
   trackConfig: string;
   name: string;
   sessionType: number;
-  timeSeconds: number;
+  /** Duración de la sesión en MINUTOS. El nombre anterior ("timeSeconds") estaba mal y nunca se
+   * había usado: en el ejemplo oficial de Kunos este campo se imprime como "Time: {0} minutes",
+   * mientras que `wait_time`, el de abajo, sí viene en segundos. Un campo sin usar no duele; el
+   * tiempo restante de carrera calculado con la unidad equivocada daría 60 veces menos. */
+  timeMinutes: number;
   laps: number;
   waitTimeSeconds: number;
   ambientTemp: number;
@@ -101,15 +118,48 @@ export interface ErrorMessage {
   message: string;
 }
 
+/** Subtipos de CLIENT_EVENT. Los dos de colisión son los únicos documentados por Kunos. */
+export const ClientEventType = {
+  COLLISION_WITH_CAR: 10,
+  COLLISION_WITH_ENV: 11,
+} as const;
+
+export interface Vector3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface ClientEvent {
+  /** 10 = contra otro auto, 11 = contra el entorno (muro, piano, cualquier parte del circuito). */
+  eventType: number;
+  carId: number;
+  /** Solo presente cuando eventType === COLLISION_WITH_CAR. */
+  otherCarId?: number;
+  /** Velocidad de la componente de impacto. Es lo que distingue rozar un piano de estrellarse. */
+  impactSpeed: number;
+  /** Dónde ocurrió, en coordenadas del mundo. */
+  worldPosition: Vector3;
+  /**
+   * Dónde golpeó, RELATIVO al chasis del auto que reporta. Es el campo que permite deducir la
+   * geometría del toque: `z` positivo/negativo indica trompa o cola, `x` indica el costado.
+   * El servidor manda un paquete por cada auto involucrado, cada uno con su propio relPosition —
+   * cruzando los dos se sabe quién embistió a quién (ver incident/incidentEngine.ts).
+   */
+  relPosition: Vector3;
+}
+
 export type IncomingPacket =
   | { type: "CAR_UPDATE"; data: CarUpdate }
   | { type: "NEW_CONNECTION"; data: NewConnection }
   | { type: "CONNECTION_CLOSED"; data: ConnectionClosed }
+  | { type: "CAR_INFO"; data: CarInfo }
   | { type: "LAP_COMPLETED"; data: LapCompleted }
   | { type: "CHAT"; data: ChatMessage }
   | { type: "NEW_SESSION" | "SESSION_INFO"; data: SessionInfo }
   | { type: "ERROR"; data: ErrorMessage }
-  | { type: "END_SESSION" | "CLIENT_LOADED" | "CLIENT_EVENT"; raw: Buffer };
+  | { type: "CLIENT_EVENT"; data: ClientEvent }
+  | { type: "END_SESSION" | "CLIENT_LOADED"; raw: Buffer };
 
 /** Paquete UDP más corto de lo que exige el opcode decodificado — nunca debe tumbar el proceso. */
 export class TruncatedPacketError extends Error {
@@ -164,6 +214,10 @@ class BufferReader {
     const v = this.buf.readFloatLE(this.offset);
     this.offset += 4;
     return v;
+  }
+
+  vector3(): Vector3 {
+    return { x: this.float(), y: this.float(), z: this.float() };
   }
 
   /**
@@ -222,7 +276,7 @@ function readSessionInfo(r: BufferReader): SessionInfo {
     trackConfig: r.narrowString(),
     name: r.narrowString(),
     sessionType: r.byte(),
-    timeSeconds: r.uint16(),
+    timeMinutes: r.uint16(),
     laps: r.uint16(),
     waitTimeSeconds: r.uint16(),
     ambientTemp: r.byte(),
@@ -292,6 +346,22 @@ function decodePacketUnsafe(buf: Buffer): IncomingPacket | null {
         data,
       };
     }
+    case Opcode.CAR_INFO: {
+      // Orden distinto al de NEW_CONNECTION, y no es un error de transcripción: acá el slot viene
+      // primero y el modelo/skin antes que el nombre. Verificado contra el ejemplo oficial de
+      // Kunos (`ACSP_CAR_INFO` en el plugin de muestra) y `joaoubaldo/acudpclient`.
+      const carId = r.byte();
+      const isConnected = r.byte() !== 0;
+      const carModel = r.wideString();
+      const carSkin = r.wideString();
+      const driverName = r.wideString();
+      const driverTeam = r.wideString();
+      const driverGuid = r.wideString();
+      return {
+        type: "CAR_INFO",
+        data: { carId, isConnected, carModel, carSkin, driverName, driverTeam, driverGuid },
+      };
+    }
     case Opcode.LAP_COMPLETED: {
       const carId = r.byte();
       const lapTimeMs = r.uint32();
@@ -316,8 +386,20 @@ function decodePacketUnsafe(buf: Buffer): IncomingPacket | null {
       return { type: "END_SESSION", raw: buf };
     case Opcode.CLIENT_LOADED:
       return { type: "CLIENT_LOADED", raw: buf };
-    case Opcode.CLIENT_EVENT:
-      return { type: "CLIENT_EVENT", raw: buf };
+    case Opcode.CLIENT_EVENT: {
+      // El orden importa: `other_car_id` SOLO existe si el evento es contra otro auto. Leerlo
+      // siempre desfasaría un byte todo el resto (velocidad de impacto y las dos posiciones).
+      const eventType = r.byte();
+      const carId = r.byte();
+      const otherCarId = eventType === ClientEventType.COLLISION_WITH_CAR ? r.byte() : undefined;
+      const impactSpeed = r.float();
+      const worldPosition = r.vector3();
+      const relPosition = r.vector3();
+      return {
+        type: "CLIENT_EVENT",
+        data: { eventType, carId, otherCarId, impactSpeed, worldPosition, relPosition },
+      };
+    }
     default:
       return null;
   }
@@ -344,4 +426,17 @@ export function encodeAdminCommand(command: string): Buffer {
 
 export function encodeKickUser(carId: number): Buffer {
   return Buffer.from([Opcode.KICK_USER, carId]);
+}
+
+export function encodeGetCarInfo(carId: number): Buffer {
+  return Buffer.from([Opcode.GET_CAR_INFO, carId]);
+}
+
+/** `-1` (el valor por defecto) pide la sesión que se está corriendo ahora. El índice va como
+ * int16 con signo justamente para poder expresar ese -1. */
+export function encodeGetSessionInfo(sessionIndex = -1): Buffer {
+  const buf = Buffer.alloc(3);
+  buf.writeUInt8(Opcode.GET_SESSION_INFO, 0);
+  buf.writeInt16LE(sessionIndex, 1);
+  return buf;
 }

@@ -1,6 +1,11 @@
 import { EventEmitter } from "events";
 
-export type PenaltyType = "DT" | "SG" | "BALLAST";
+/**
+ * `TIME` no es una sanción que el piloto pueda cumplir en pista: se suma a su tiempo final. Por eso
+ * no se ofrece como sanción automática de largada ni de pit lane —ahí el piloto tiene que poder
+ * hacer algo al respecto— y solo la emite el comisario desde la bandeja de incidentes.
+ */
+export type PenaltyType = "DT" | "SG" | "BALLAST" | "TIME";
 export type EscalationType = "DQ" | "TIME_PENALTY";
 export type PenaltyStatus = "servingWindow" | "served" | "escalated";
 
@@ -31,6 +36,10 @@ export interface Penalty {
   servedAt?: number;
   escalatedAt?: number;
   escalatedTo?: EscalationType;
+  /** Solo en las de tipo `TIME`: los segundos que se le suman al resultado final. */
+  timePenaltySeconds?: number;
+  /** Solo en las que aplica el comisario a mano: de qué incidente de la bandeja salieron. */
+  incidentId?: string;
 }
 
 let nextId = 1;
@@ -59,7 +68,17 @@ export class PenaltyEngine extends EventEmitter {
     return this.rules;
   }
 
-  issuePenalty(carId: number, driverGuid: string, reason: string, type: PenaltyType = this.rules.penaltyType): Penalty {
+  issuePenalty(
+    carId: number,
+    driverGuid: string,
+    reason: string,
+    type: PenaltyType = this.rules.penaltyType,
+    extra: { timePenaltySeconds?: number; incidentId?: string } = {}
+  ): Penalty {
+    // El lastre y la penalización de tiempo no tienen nada que cumplir en pista: uno se aplica al
+    // auto de inmediato, la otra se suma al resultado final. Darles vueltas de gracia haría que
+    // escalaran a DQ solas a las pocas vueltas.
+    const immediate = type === "BALLAST" || type === "TIME";
     const penalty: Penalty = {
       id: `P${nextId++}`,
       carId,
@@ -67,14 +86,17 @@ export class PenaltyEngine extends EventEmitter {
       reason,
       type,
       status: "servingWindow",
-      graceLapsRemaining: type === "BALLAST" ? 0 : this.rules.graceLaps,
+      graceLapsRemaining: immediate ? 0 : this.rules.graceLaps,
       createdAt: Date.now(),
     };
+    if (type === "TIME") {
+      penalty.timePenaltySeconds = extra.timePenaltySeconds ?? this.rules.timePenaltySeconds ?? 5;
+    }
+    if (extra.incidentId) penalty.incidentId = extra.incidentId;
     this.penalties.set(penalty.id, penalty);
     this.emit("penalty-issued", penalty);
 
-    if (type === "BALLAST") {
-      // El ballast se aplica una sola vez, de inmediato — no hay "cumplimiento" que esperar.
+    if (immediate) {
       penalty.status = "served";
       penalty.servedAt = Date.now();
       this.emit("penalty-served", penalty);
@@ -111,5 +133,35 @@ export class PenaltyEngine extends EventEmitter {
 
   getAll(): Penalty[] {
     return Array.from(this.penalties.values()).sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /**
+   * Vuelve a cargar las sanciones de una carrera que se interrumpió por un reinicio del backend.
+   *
+   * No emite ningún evento, y esa es la decisión importante: reponer el estado no es volver a
+   * sancionar. El piloto ya recibió su aviso por chat antes del reinicio, y re-emitir
+   * `penalty-issued` le mandaría el mismo mensaje de nuevo —o peor, con BALLAST, le aplicaría el
+   * lastre dos veces.
+   */
+  restore(penalties: Penalty[]): void {
+    for (const penalty of penalties) {
+      this.penalties.set(penalty.id, penalty);
+      // El contador de ids es de módulo y lo comparten los dos motores: si no se adelanta, la
+      // primera sanción nueva reusaría un id ya restaurado y pisaría la vieja.
+      const n = Number(penalty.id.replace(/^P/, ""));
+      if (Number.isInteger(n) && n >= nextId) nextId = n + 1;
+    }
+  }
+
+  /**
+   * Una sesión nueva borra las sanciones de la anterior.
+   *
+   * Sin esto, una sanción de la clasificación seguía viva en la carrera: el piloto arrancaba
+   * debiendo un Drive-Through que nadie le había dado en esa carrera, y las vueltas de gracia se
+   * descontaban hasta escalar a DQ. Es la misma regla que ya aplican el motor de incidentes y el
+   * contador de límites de pista al recibir NEW_SESSION.
+   */
+  resetSession(): void {
+    this.penalties.clear();
   }
 }

@@ -62,20 +62,40 @@ export class PitComplianceTracker {
   private maxSpeedInPass = new Map<number, number>();
   private stoppedSinceMs = new Map<number, number>();
 
+  /**
+   * Recibe TODOS los motores de sanción, no solo el de pit.
+   *
+   * Antes solo se le pasaba el motor de pit, así que `markServed()` nunca se llamaba para una
+   * sanción de largada: con el default `penaltyType: "DT"`, un piloto sancionado en la formación
+   * cumplía el Drive-Through correctamente y escalaba a DQ igual al agotar las vueltas de gracia.
+   * El mensaje que recibía ("Tenés N vuelta(s) para cumplirla") era literalmente falso.
+   *
+   * El pit lane es físicamente uno solo: una sanción se cumple pasando por ahí, sin importar qué
+   * motor la emitió.
+   */
   constructor(
     private stateTracker: StateTracker,
-    private penaltyEngine: PenaltyEngine,
+    private penaltyEngines: PenaltyEngine[],
     private zone: PitZone,
     /** stopGoSeconds vive en config.pit (no en PenaltyRules) — se lee en vivo por función. */
     private getStopGoSeconds: () => number,
+    /** Velocidad legal de pit lane. Se toma del motor de pit (única fuente de verdad), no del
+     * motor que emitió la sanción: el límite del pit lane no cambia según por qué te sancionaron. */
+    private getLegalPitSpeedKmh: () => number,
     private clock: Clock = systemClock
   ) {
     this.stateTracker.on("update", (car: CarState) => this.handleUpdate(car));
   }
 
-  /** Velocidad legal de pit lane: la misma que dispara la violación (única fuente de verdad). */
   private get legalPitSpeedKmh(): number {
-    return this.penaltyEngine.getRules().speedThresholdKmh;
+    return this.getLegalPitSpeedKmh();
+  }
+
+  /** Sanciones pendientes de este auto en cualquiera de los motores. */
+  private pendingFor(carId: number): Array<{ penalty: Penalty; engine: PenaltyEngine }> {
+    return this.penaltyEngines.flatMap((engine) =>
+      engine.getPending(carId).map((penalty) => ({ penalty, engine }))
+    );
   }
 
   private get stopGoMs(): number {
@@ -83,7 +103,7 @@ export class PitComplianceTracker {
   }
 
   private handleUpdate(car: CarState): void {
-    const pending = this.penaltyEngine.getPending(car.carId);
+    const pending = this.pendingFor(car.carId);
     if (pending.length === 0) return;
 
     const currentlyInZone = inZone(car, this.zone);
@@ -93,17 +113,17 @@ export class PitComplianceTracker {
       const prevMax = this.maxSpeedInPass.get(car.carId) ?? 0;
       this.maxSpeedInPass.set(car.carId, Math.max(prevMax, car.speedKmh));
 
-      for (const penalty of pending) {
+      for (const { penalty, engine } of pending) {
         if (penalty.type === "SG") {
-          this.checkStopAndGo(car, penalty);
+          this.checkStopAndGo(car, penalty, engine);
         }
       }
     } else if (this.sawInZone.has(car.carId)) {
       // Acaba de salir de pit lane: evaluar si el pasaje cumplió el Drive-Through.
       const maxSpeed = this.maxSpeedInPass.get(car.carId) ?? 0;
-      for (const penalty of pending) {
+      for (const { penalty, engine } of pending) {
         if (penalty.type === "DT" && maxSpeed > 0 && maxSpeed <= this.legalPitSpeedKmh) {
-          this.penaltyEngine.markServed(penalty.id);
+          engine.markServed(penalty.id);
         }
       }
       this.sawInZone.delete(car.carId);
@@ -112,7 +132,7 @@ export class PitComplianceTracker {
     }
   }
 
-  private checkStopAndGo(car: CarState, penalty: Penalty): void {
+  private checkStopAndGo(car: CarState, penalty: Penalty, engine: PenaltyEngine): void {
     const stopped = car.speedKmh <= 2;
     if (!stopped) {
       this.stoppedSinceMs.delete(car.carId);
@@ -124,7 +144,7 @@ export class PitComplianceTracker {
     }
     const since = this.stoppedSinceMs.get(car.carId)!;
     if (now - since >= this.stopGoMs) {
-      this.penaltyEngine.markServed(penalty.id);
+      engine.markServed(penalty.id);
     }
   }
 }

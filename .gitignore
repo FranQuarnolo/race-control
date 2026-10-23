@@ -4,11 +4,22 @@
 # build output
 /server/dist
 /server/release
+
+# binario base de Node con el ícono y el nombre de Race Control, paso intermedio del empaquetado
+# (lo regenera `npm run package`, y pesa lo mismo que un node.exe)
+/server/build
 /server/logs
 /client-app/release
 
+# trazados de circuito aprendidos en vivo: se regeneran solos corriendo, y son propios de las
+# pistas que usa cada liga
+/server/tracks
+
 # config local generado en el primer `npm start` (IPs/puertos propios de cada liga)
 /server/config.json
+
+# bytecode que deja Python al importar el cliente fuera del juego (por ejemplo al testearlo)
+__pycache__/
 
 # misc
 .DS_Store

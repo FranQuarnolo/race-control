@@ -4,236 +4,412 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Race Control</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #0f1115;
-      --panel: #171a21;
-      --panel-border: #272b35;
-      --text: #e6e8ec;
-      --muted: #8b93a3;
-      --accent: #3fa9f5;
-      --green: #35c76e;
-      --yellow: #e0b84b;
-      --red: #e05555;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
-    header {
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--panel-border);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    header h1 { font-size: 18px; margin: 0; }
-    header .league { color: var(--muted); font-size: 14px; }
-    main {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 20px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-      gap: 16px;
-    }
-    .card {
-      background: var(--panel);
-      border: 1px solid var(--panel-border);
-      border-radius: 10px;
-      padding: 16px;
-      overflow-x: auto;
-    }
-    .card h2 {
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-      margin: 0 0 12px 0;
-    }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-    .row label { font-size: 13px; color: var(--muted); }
-    input[type="number"], input[type="text"], select {
-      background: #0c0e12;
-      border: 1px solid var(--panel-border);
-      color: var(--text);
-      border-radius: 6px;
-      padding: 6px 8px;
-      width: 110px;
-      font-size: 13px;
-    }
-    input[type="text"] { width: 180px; }
-    button {
-      background: var(--accent);
-      color: #05121e;
-      border: none;
-      border-radius: 6px;
-      padding: 8px 14px;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    button.secondary { background: #2a2f3a; color: var(--text); }
-    button.danger { background: var(--red); color: #1a0505; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--panel-border); }
-    th { color: var(--muted); font-weight: 500; }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .badge.ok { background: rgba(53, 199, 110, 0.15); color: var(--green); }
-    .badge.warn { background: rgba(224, 184, 75, 0.15); color: var(--yellow); }
-    .badge.bad { background: rgba(224, 85, 85, 0.15); color: var(--red); }
-    .badge.neutral { background: rgba(139, 147, 163, 0.15); color: var(--muted); }
-    .semaforo {
-      font-size: 28px;
-      font-weight: 700;
-      text-align: center;
-      padding: 12px 0;
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-    .semaforo.idle { background: #1d2029; color: var(--muted); }
-    .semaforo.formation { background: rgba(224, 184, 75, 0.15); color: var(--yellow); }
-    .semaforo.green { background: rgba(53, 199, 110, 0.15); color: var(--green); }
-    pre.snippet {
-      background: #0c0e12;
-      border: 1px solid var(--panel-border);
-      border-radius: 6px;
-      padding: 10px;
-      font-size: 12px;
-      white-space: pre-wrap;
-      word-break: break-all;
-    }
-    .muted { color: var(--muted); font-size: 12px; }
-    .toggle-row { display: flex; align-items: center; gap: 8px; }
-    #wizard-overlay {
-      position: fixed; inset: 0; background: rgba(5, 6, 9, 0.85);
-      display: flex; align-items: center; justify-content: center; z-index: 10;
-    }
-    /* Sin esto, el "display: flex" de arriba le gana a la regla nativa del navegador para
-       [hidden] (display: none) — el atributo se setea bien desde JS pero el modal nunca se
-       oculta visualmente. Este fue el bug real detrás de "el modal nunca cierra". */
-    #wizard-overlay[hidden] {
-      display: none;
-    }
-    #wizard-overlay .card { max-width: 420px; }
-    #toast {
-      position: fixed; bottom: 16px; right: 16px; background: var(--panel);
-      border: 1px solid var(--panel-border); padding: 10px 14px; border-radius: 8px;
-      font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none;
-    }
-    #toast.show { opacity: 1; }
-  </style>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <h1>Race Control</h1>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.svg" alt="" />
+      <h1>Race Control</h1>
+      <span class="version" id="version-label"></span>
+    </div>
     <span class="league" id="league-label"></span>
+
+    <span class="spacer"></span>
+
+    <nav class="views">
+      <a href="/" id="nav-live">
+        <!-- La bandera ondea solo con la carrera en curso. Ver `.flag-icon.racing` en styles.css. -->
+        <span class="flag-icon" id="race-flag" aria-hidden="true">
+          <svg viewBox="0 0 16 16">
+            <path class="mast" d="M3 1.5 V14.5" fill="none" />
+            <g class="cloth">
+              <rect class="cloth-bg" x="3.6" y="2" width="7.4" height="6" />
+              <rect x="3.6" y="2" width="3.7" height="3" />
+              <rect x="7.3" y="5" width="3.7" height="3" />
+            </g>
+          </svg>
+        </span>
+        Control de carrera
+      </a>
+      <a href="/sanciones" id="nav-sanciones">
+        Sanciones
+        <span class="count-badge" id="nav-incident-count" hidden>0</span>
+      </a>
+    </nav>
+
+    <button class="status-button" id="btn-rules" aria-haspopup="dialog">Reglas</button>
+
+    <button class="status-button" id="btn-network" aria-haspopup="dialog">
+      <span class="dot" aria-hidden="true"></span>
+      <span id="btn-network-label">Conexión</span>
+    </button>
+
+    <!-- El modo vive en la barra y no en una tarjeta: hasta ahora se podía correr una carrera
+         entera sin notar que el motor estaba en sombra y no sancionaba nada. -->
+    <label class="mode-switch" id="mode-switch" title="En modo sombra el motor detecta y registra, pero no sanciona ni kickea de verdad.">
+      <input type="checkbox" id="mode-toggle" />
+      <span class="track" aria-hidden="true"></span>
+      <span class="mode-label" id="mode-label">--</span>
+    </label>
   </header>
 
-  <main>
-    <section class="card" id="card-semaforo">
+  <!-- =============================================================== vista: control de carrera -->
+  <main id="view-live">
+    <section class="card" id="card-start">
       <h2>Largada</h2>
       <div class="semaforo idle" id="semaforo">--</div>
       <div class="btn-row">
-        <button id="btn-begin">Iniciar formación</button>
-        <button id="btn-green" class="secondary">Verde</button>
-        <button id="btn-reset" class="secondary">Reset</button>
+        <button id="btn-begin" title="Arma el control de velocidad de la vuelta de formación y avisa por chat a la parrilla.">Iniciar formación</button>
+        <button id="btn-green" class="secondary" title="Apretalo en el instante en que se apaga el semáforo en el juego: avisa por chat y corta el control de velocidad de formación.">Verde</button>
+        <!-- "Reset" no le decía nada a nadie y el título explica lo único que importa: qué NO
+             deshace. Las sanciones ya emitidas siguen en pie. -->
+        <button id="btn-reset" class="secondary" title="Vuelve el semáforo a “Esperando” y apaga el control de velocidad de formación, para rearmar una largada abortada. No borra las sanciones ya emitidas ni toca el servidor de Assetto Corsa.">Reiniciar largada</button>
+      </div>
+      <!-- Con el verde dado, el renglón gris de ayuda deja lugar a este aviso: es el estado que
+           el admin tiene que poder confirmar de un vistazo desde la otra punta del escritorio. -->
+      <span class="race-live" id="race-live" hidden>
+        <span class="dot" aria-hidden="true"></span>
+        Carrera en curso
+      </span>
+      <span class="start-hint" id="start-hint"></span>
+    </section>
+
+    <section class="card" id="card-timing">
+      <h2>
+        Torre de tiempos
+        <span class="hint" id="cars-count"></span>
+      </h2>
+      <div class="table-wrap">
+        <table id="timing-table">
+          <thead>
+            <tr>
+              <th class="c-pos" title="Posición en vivo: por progreso en carrera, por mejor vuelta en práctica y clasificación">#</th>
+              <!-- El auto va pegado a la posición y no después del nombre: la columna del piloto
+                   se queda con todo el espacio sobrante, y con el auto detrás el logo terminaba
+                   flotando solo en el medio de la fila, lejos de a quién pertenece. -->
+              <th>Auto</th>
+              <th class="c-driver">Piloto</th>
+              <th class="num">Vel.</th>
+              <th class="num" title="Vueltas completadas">Vts.</th>
+              <th title="Tiempos por sector de la última vuelta. Requiere la app del piloto.">Sectores</th>
+              <th class="num">Última</th>
+              <th class="num">Mejor</th>
+              <th class="num" title="Paradas en boxes completadas. Requiere la app del piloto.">Box</th>
+              <th title="Compuesto de neumático. Requiere la app del piloto.">Neum.</th>
+              <th class="num" title="Combustible restante. Requiere la app del piloto.">Comb.</th>
+              <th class="num" title="Latencia de la app del piloto contra Race Control (no contra el servidor de AC)">Ping</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="cars-body"></tbody>
+        </table>
+        <p class="empty" id="cars-empty">Todavía no hay nadie en pista.</p>
       </div>
     </section>
 
-    <section class="card" id="card-network">
-      <h2>Red</h2>
-      <div class="row"><label>IP pública</label><span id="net-ip">--</span></div>
-      <div class="row"><label>Señal del servidor de AC</label><span id="net-signal">--</span></div>
-      <div class="row"><label>Estrategia activa</label><span id="net-strategy">--</span></div>
-      <p class="muted">Pegá esto en el <code>server_cfg.ini</code> de tu hosting (ej. EmperorServers):</p>
-      <pre class="snippet" id="net-snippet">--</pre>
-      <button class="secondary" id="btn-copy-snippet">Copiar</button>
-    </section>
-
-    <section class="card" id="card-shadow">
-      <h2>Modo de aplicación</h2>
-      <div class="toggle-row">
-        <input type="checkbox" id="shadow-toggle" />
-        <label for="shadow-toggle">Modo sombra (solo registra, no sanciona ni kickea de verdad)</label>
+    <section class="card" id="card-map">
+      <h2>
+        Mapa en vivo
+        <span class="hint" id="map-hint"></span>
+      </h2>
+      <!-- Condiciones de la sesión. Viento y hora del juego NO están acá porque Assetto Corsa no
+           los expone por ningún canal (son campos de ACC): una columna que dijera siempre "--"
+           sería peor que no tenerla. -->
+      <div id="session-bar">
+        <div class="session-line">
+          <strong id="ses-track">--</strong>
+          <span id="ses-weather" class="muted"></span>
+        </div>
+        <div class="session-line">
+          <span id="ses-type" class="muted"></span>
+          <span id="ses-temps" class="muted"></span>
+        </div>
+        <div class="session-line"><span id="ses-grip" class="muted"></span></div>
       </div>
-      <p class="muted">Recomendado activo en las primeras carreras, hasta confirmar que no hay falsos positivos.</p>
-    </section>
-
-    <section class="card" id="card-cars">
-      <h2>Autos conectados</h2>
-      <table>
-        <thead><tr><th>Piloto</th><th>Vel.</th><th>Vuelta</th><th>Posición (spline)</th><th>Señal</th></tr></thead>
-        <tbody id="cars-body"></tbody>
-      </table>
-    </section>
-
-    <section class="card" id="card-config">
-      <h2>Reglas de largada (formación)</h2>
-      <div class="row"><label>Umbral (km/h)</label><input type="number" id="f-threshold" /></div>
-      <div class="row"><label>Tolerancia (s)</label><input type="number" id="f-tolerance" /></div>
-      <div class="row"><label>Vueltas de gracia</label><input type="number" id="f-grace" /></div>
-      <div class="row"><label>Sanción</label>
-        <select id="f-penalty-type"><option value="DT">Drive-Through</option><option value="SG">Stop-and-Go</option><option value="BALLAST">Ballast</option></select>
+      <div id="map-host">
+        <canvas id="map-canvas"></canvas>
+        <div id="map-tooltip" hidden></div>
+        <div id="map-empty">
+          <span id="map-empty-text">Esperando telemetría para aprender el circuito.</span>
+          <div id="map-progress"><div></div></div>
+          <span class="muted">El trazado se dibuja solo a medida que los autos dan vueltas. Se aprende una vez y queda guardado.</span>
+        </div>
       </div>
-      <div class="row"><label>Si no cumple</label>
-        <select id="f-escalation"><option value="DQ">Kick (DQ)</option><option value="TIME_PENALTY">Penalización de tiempo</option></select>
+      <div id="session-clock">
+        <span class="label" id="ses-clock-label">Restan</span>
+        <span class="value" id="ses-clock-value">--:--</span>
       </div>
-      <button id="btn-save-formation">Guardar</button>
-    </section>
-
-    <section class="card" id="card-config-pit">
-      <h2>Reglas de pit lane (carrera)</h2>
-      <div class="row"><label>Zona de pit — inicio (spline)</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
-      <div class="row"><label>Zona de pit — fin (spline)</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
-      <p class="muted">Para calibrar: mirá la columna "Posición (spline)" de la tabla de autos
-      mientras alguien maneja por pit lane, y anotá dónde empieza/termina.</p>
-      <div class="row"><label>Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
-      <div class="row"><label>Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
-      <div class="row"><label>Vueltas de gracia</label><input type="number" id="p-grace" /></div>
-      <div class="row"><label>Stop-and-Go (s)</label><input type="number" id="p-stopgo" /></div>
-      <div class="row"><label>Sanción</label>
-        <select id="p-penalty-type"><option value="DT">Drive-Through</option><option value="SG">Stop-and-Go</option><option value="BALLAST">Ballast</option></select>
-      </div>
-      <div class="row"><label>Si no cumple</label>
-        <select id="p-escalation"><option value="DQ">Kick (DQ)</option><option value="TIME_PENALTY">Penalización de tiempo</option></select>
-      </div>
-      <button id="btn-save-pit">Guardar</button>
-    </section>
-
-    <section class="card" id="card-penalties" style="grid-column: 1 / -1;">
-      <h2>Sanciones</h2>
-      <table>
-        <thead><tr><th>Instancia</th><th>Auto</th><th>Motivo</th><th>Estado</th><th>Gracia restante</th></tr></thead>
-        <tbody id="penalties-body"></tbody>
-      </table>
     </section>
   </main>
 
-  <div id="wizard-overlay" hidden>
-    <div class="card">
-      <h2>Primera vez</h2>
-      <p class="muted">Solo necesitamos el nombre de tu liga. El resto (puertos, IP pública) se detecta solo.</p>
-      <div class="row"><label>Nombre de la liga</label><input type="text" id="wizard-name" /></div>
-      <button id="wizard-submit">Empezar</button>
+  <!-- =============================================================== vista: sanciones -->
+  <main id="view-sanciones" hidden>
+    <section class="card">
+      <h2>
+        Incidentes a revisar
+        <span class="hint">Acá se registra lo que pasó, no quién tuvo la culpa. Eso lo decidís vos.</span>
+      </h2>
+      <div class="table-wrap" id="incidents-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>
+        Sanciones aplicadas
+        <!-- El informe baja del backend, no se arma acá: el panel no tiene por qué saber cómo se
+             calcula una clasificación, y así el mismo archivo sale igual desde /api/report.csv. -->
+        <a class="hint-action" id="btn-report" href="/api/report.csv" download
+           title="Planilla con la clasificación, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar informe de carrera</a>
+      </h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Origen</th><th>Piloto</th><th>Motivo</th><th>Estado</th><th class="num">Gracia</th></tr>
+          </thead>
+          <tbody id="penalties-body"></tbody>
+        </table>
+        <p class="empty" id="penalties-empty">Sin sanciones todavía.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- =============================================================== cajón: red -->
+  <div class="drawer-backdrop" id="drawer-network" hidden>
+    <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-network-title">
+      <header>
+        <h2 id="drawer-network-title">Conexión con el servidor</h2>
+        <button class="btn-close" data-close-drawer aria-label="Cerrar">&times;</button>
+      </header>
+
+      <section>
+        <div class="row"><span>Tu dirección en internet</span><span id="net-ip">--</span></div>
+        <div class="row"><span>Señal del servidor de AC</span><span id="net-signal">--</span></div>
+        <div class="row"><span>Comandos salen hacia</span><span id="net-acserver">--</span></div>
+        <div class="row"><span>Pilotos con la app reportando</span><span id="net-drivers">--</span></div>
+        <div class="row"><span>Puerto de los pilotos</span><span id="net-client-port">--</span></div>
+        <div class="row"><span>Estrategia de red</span><span id="net-strategy">--</span></div>
+        <p class="muted warn-box" id="net-ports-moved" hidden></p>
+      </section>
+
+      <section>
+        <h3>Probar conexión</h3>
+        <p class="muted">
+          Revisa las cuatro cosas que tienen que funcionar y te dice qué hacer con la que falle.
+        </p>
+        <button class="secondary" id="btn-test-network">Probar ahora</button>
+        <div id="net-checks"></div>
+      </section>
+
+      <section>
+        <h3>Configuración del servidor</h3>
+        <p class="muted">Pegá esto en el <code>server_cfg.ini</code> de tu hosting:</p>
+        <pre class="snippet" id="net-snippet">--</pre>
+        <button class="secondary" id="btn-copy-snippet">Copiar</button>
+        <p class="muted">
+          Sirve igual en cualquier hosting de Assetto Corsa: esas dos líneas son del juego, no de
+          ninguna empresa. Lo único que cambia es dónde está el botón para editar ese archivo.
+          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía paso a paso</a>.
+        </p>
+      </section>
+
+      <section>
+        <h3>Direcciones</h3>
+        <p class="muted">
+          Las dos se detectan solas. Completalas solo si algo de lo de arriba falló.
+        </p>
+        <div class="row">
+          <label for="net-remote-host">Servidor de Assetto Corsa</label>
+          <input id="net-remote-host" type="text" placeholder="se detecta solo" />
+        </div>
+        <div class="row">
+          <label for="net-public-host">Dirección propia</label>
+          <input id="net-public-host" type="text" placeholder="se detecta sola" />
+        </div>
+        <button class="secondary" id="btn-save-host">Guardar direcciones</button>
+      </section>
+
+      <section>
+        <h3>Puertos</h3>
+        <p class="muted">
+          Los de fábrica andan bien en casi todos los casos. Cambialos solo si otro programa tuyo
+          los usa y querés dejárselos. Toman efecto la próxima vez que abras Race Control.
+        </p>
+        <div class="row">
+          <label for="h-admin-port">Este panel</label>
+          <input id="h-admin-port" type="number" min="1024" max="65535" />
+        </div>
+        <div class="row">
+          <label for="h-client-port">App de los pilotos</label>
+          <input id="h-client-port" type="number" min="1024" max="65535" />
+        </div>
+        <button id="btn-save-ports" data-form="ports">Guardar</button>
+      </section>
     </div>
   </div>
 
-  <div id="toast"></div>
+  <!-- =============================================================== cajón: reglas -->
+  <div class="drawer-backdrop" id="drawer-rules" hidden>
+    <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-rules-title">
+      <header>
+        <h2 id="drawer-rules-title">Reglas</h2>
+        <button class="btn-close" data-close-drawer aria-label="Cerrar">&times;</button>
+      </header>
+
+      <section>
+        <h3>Tipo de torneo</h3>
+        <p class="muted">
+          Elegí uno y todos los umbrales quedan puestos de una vez. Después podés cambiar lo que
+          quieras: el tipo de torneo es un punto de partida, no un candado.
+        </p>
+        <div class="preset-list" id="preset-list"></div>
+      </section>
+
+      <section>
+        <h3>Qué se controla en pista</h3>
+        <p class="muted">
+          Para cada cosa decidís qué pasa cuando ocurre. <strong>Solo registrar</strong> la deja
+          anotada para el informe sin molestarte durante la carrera;
+          <strong>mandar a revisar</strong> la manda a la bandeja de sanciones.
+        </p>
+        <div id="infractions-list"></div>
+        <button id="btn-save-infractions" data-form="infractions">Guardar</button>
+      </section>
+
+      <section>
+        <h3>Largada (vuelta de formación)</h3>
+        <div class="row"><label for="f-threshold">Velocidad máxima (km/h)</label><input type="number" id="f-threshold" /></div>
+        <div class="row"><label for="f-tolerance">Tolerancia (s)</label><input type="number" id="f-tolerance" /></div>
+        <div class="row"><label for="f-grace">Vueltas para cumplirla</label><input type="number" id="f-grace" /></div>
+        <div class="row"><label for="f-penalty-type">Sanción</label>
+          <select id="f-penalty-type">
+            <option value="DT">Drive-Through (pasar por pits)</option>
+            <option value="SG">Stop-and-Go (parar en pits)</option>
+            <option value="BALLAST">Lastre (peso extra)</option>
+          </select>
+        </div>
+        <div class="row"><label for="f-escalation">Si no la cumple</label>
+          <select id="f-escalation">
+            <option value="DQ">Expulsar de la carrera</option>
+            <option value="TIME_PENALTY">Penalización de tiempo</option>
+          </select>
+        </div>
+        <button id="btn-save-formation" data-form="formation">Guardar</button>
+      </section>
+
+      <section>
+        <h3>Pit lane (durante la carrera)</h3>
+        <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
+        <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
+        <p class="muted">
+          Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. Para
+          calibrarlos, mirá el mapa mientras alguien maneja por boxes.
+        </p>
+        <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
+        <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
+        <div class="row"><label for="p-grace">Vueltas para cumplirla</label><input type="number" id="p-grace" /></div>
+        <div class="row"><label for="p-stopgo">Duración del Stop-and-Go (s)</label><input type="number" id="p-stopgo" /></div>
+        <div class="row"><label for="p-penalty-type">Sanción</label>
+          <select id="p-penalty-type">
+            <option value="DT">Drive-Through (pasar por pits)</option>
+            <option value="SG">Stop-and-Go (parar en pits)</option>
+            <option value="BALLAST">Lastre (peso extra)</option>
+          </select>
+        </div>
+        <div class="row"><label for="p-escalation">Si no la cumple</label>
+          <select id="p-escalation">
+            <option value="DQ">Expulsar de la carrera</option>
+            <option value="TIME_PENALTY">Penalización de tiempo</option>
+          </select>
+        </div>
+        <button id="btn-save-pit" data-form="pit">Guardar</button>
+      </section>
+
+      <section>
+        <h3>App de los pilotos</h3>
+        <div class="row">
+          <label for="pr-enforce">Exigir que todos la tengan</label>
+          <input type="checkbox" id="pr-enforce" />
+        </div>
+        <div class="row">
+          <label for="pr-grace">Tiempo de espera antes de expulsar (s)</label>
+          <input type="number" id="pr-grace" min="10" />
+        </div>
+        <p class="muted">
+          Con esto activado, el piloto que entre sin la app instalada es expulsado del servidor
+          pasado ese tiempo. Desactivalo si querés dejar correr a pilotos sin la app: siguen
+          apareciendo en la torre con posición, velocidad, vueltas y tiempos, y con guiones en
+          sectores, neumáticos y combustible, que son datos que solo existen dentro del juego.
+        </p>
+        <button id="btn-save-presence" data-form="presence">Guardar</button>
+      </section>
+
+      <section>
+        <h3>Liga</h3>
+        <div class="row"><label for="league-input">Nombre</label><input type="text" id="league-input" /></div>
+        <button id="btn-save-league" data-form="league">Guardar</button>
+      </section>
+    </div>
+  </div>
+
+  <div id="wizard-overlay" hidden>
+    <div class="card wizard">
+      <div class="wizard-steps" id="wizard-steps"></div>
+
+      <!-- Paso 1: nombre -->
+      <div class="wizard-step" data-step="1">
+        <h2>Bienvenido a Race Control</h2>
+        <p class="muted">
+          En cuatro pasos queda listo para tu primera carrera. Empecemos por lo más fácil.
+        </p>
+        <div class="row"><label for="wizard-name">¿Cómo se llama tu liga?</label><input type="text" id="wizard-name" /></div>
+      </div>
+
+      <!-- Paso 2: tipo de torneo -->
+      <div class="wizard-step" data-step="2" hidden>
+        <h2>¿Qué tipo de torneo vas a correr?</h2>
+        <p class="muted">
+          Esto deja puestos todos los umbrales de una vez. Después podés cambiar lo que quieras
+          desde el botón "Reglas".
+        </p>
+        <div class="preset-list" id="wizard-presets"></div>
+      </div>
+
+      <!-- Paso 3: conexión -->
+      <div class="wizard-step" data-step="3" hidden>
+        <h2>Conectá tu servidor de Assetto Corsa</h2>
+        <p class="muted">
+          Pegá estas dos líneas en el <code>server_cfg.ini</code> de tu hosting y reiniciá el
+          servidor de Assetto Corsa para que las tome. Sirve en cualquier hosting.
+        </p>
+        <pre class="snippet" id="wizard-snippet">--</pre>
+        <button class="secondary" id="wizard-copy">Copiar</button>
+        <p class="muted">
+          ¿No sabés dónde pegarlas?
+          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Abrí la guía paso a paso</a>.
+          Podés dejarla para después: el botón "Conexión" del panel tiene lo mismo.
+        </p>
+      </div>
+
+      <!-- Paso 4: verificación -->
+      <div class="wizard-step" data-step="4" hidden>
+        <h2>Probemos que todo llega</h2>
+        <p class="muted">
+          Revisamos las cuatro cosas que tienen que funcionar. Si alguna falla, te decimos
+          exactamente qué hacer — y podés terminar igual y arreglarla cuando quieras.
+        </p>
+        <button class="secondary" id="wizard-test">Probar conexión</button>
+        <div id="wizard-checks"></div>
+      </div>
+
+      <div class="wizard-nav">
+        <button class="secondary" id="wizard-back" hidden>Atrás</button>
+        <button id="wizard-next">Siguiente</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>

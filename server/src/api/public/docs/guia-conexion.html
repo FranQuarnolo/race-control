@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Race Control — Conectar con tu servidor</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml" />
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f1115; color: #e6e8ec; max-width: 760px; margin: 0 auto; padding: 24px; line-height: 1.5; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin-top: 32px; border-bottom: 1px solid #272b35; padding-bottom: 6px; }
+  h3 { font-size: 15px; margin-top: 22px; }
+  code, pre { background: #171a21; border: 1px solid #272b35; border-radius: 6px; padding: 2px 6px; }
+  pre { padding: 12px; overflow-x: auto; }
+  .step { background: #171a21; border: 1px solid #272b35; border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .step b { color: #3fa9f5; }
+  .why { color: #8b93a3; font-size: 14px; margin-top: 8px; }
+  .warn { background: rgba(224, 184, 75, 0.1); border: 1px solid rgba(224, 184, 75, 0.3); border-radius: 8px; padding: 12px 16px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+  th, td { border: 1px solid #272b35; padding: 8px 10px; text-align: left; font-size: 14px; vertical-align: top; }
+  th { color: #8b93a3; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Conectar Race Control con tu servidor de Assetto Corsa</h1>
+  <p>Esta es la única parte que no se puede resolver automáticamente desde la app, porque el
+  servidor de carrera no lo manejás vos sino tu hosting. Son 2 líneas para pegar — no hace falta
+  entender de redes para hacerlo, pero si tenés curiosidad, acá explicamos el porqué.</p>
+
+  <p>Sirve para <b>cualquier</b> hosting de Assetto Corsa. Las 2 líneas son del propio juego, no
+  de ninguna empresa en particular: lo único que cambia de un hosting a otro es dónde está el
+  botón para editar el archivo.</p>
+
+  <div class="step">
+    <b>Paso 1.</b> Abrí Race Control (<code>RaceControlServer.exe</code>) y tocá
+    <b>"Conexión"</b> arriba a la derecha del panel. Ahí vas a ver un bloque de texto de 2 líneas,
+    ya completado con tu dirección y tus puertos, con un botón "Copiar".
+  </div>
+
+  <div class="step">
+    <b>Paso 2.</b> Entrá al panel de control de tu hosting y buscá el archivo
+    <code>server_cfg.ini</code>. Abajo está dónde queda en los hostings más usados.
+    <div class="why">Si no lo encontrás, es más rápido preguntarle al soporte de tu hosting
+    "dónde edito el server_cfg.ini" que buscarlo a ciegas. Es una pregunta que reciben todos los
+    días.</div>
+  </div>
+
+  <div class="step">
+    <b>Paso 3.</b> Dentro de <code>server_cfg.ini</code> buscá la sección <code>[SERVER]</code> y
+    pegá ahí las 2 líneas que copiaste. Van a verse parecido a esto:
+    <pre>UDP_PLUGIN_LOCAL_PORT=11000
+UDP_PLUGIN_ADDRESS=TU_DIRECCION:12000</pre>
+    Guardá los cambios y <b>reiniciá el servidor de Assetto Corsa</b> desde el panel de tu
+    hosting para que los tome. Sin el reinicio no pasa nada: el servidor lee ese archivo una sola
+    vez, al arrancar.
+  </div>
+
+  <div class="step">
+    <b>Paso 4.</b> Volvé al panel de Race Control y tocá <b>"Probar ahora"</b> en la sección
+    "Probar conexión". Te dice cuál de las cuatro cosas falta y qué hacer con ella.
+  </div>
+
+  <h2>Dónde está el <code>server_cfg.ini</code> en cada hosting</h2>
+  <table>
+    <tr><th>Hosting</th><th>Dónde buscarlo</th></tr>
+    <tr>
+      <td>EmperorServers</td>
+      <td>En el panel, la sección de configuración del servidor — suele llamarse "Server Config",
+      "cfg" o "Configuración avanzada". Los nombres exactos cambian según el plan contratado.</td>
+    </tr>
+    <tr>
+      <td>Paneles tipo Pterodactyl<br />(GameServerKings, Nitrado, Streamline, muchos otros)</td>
+      <td>Pestaña <b>"Files"</b> (o "Administrador de archivos"), carpeta <code>cfg/</code>,
+      archivo <code>server_cfg.ini</code>. Editalo ahí mismo y usá el botón "Restart".</td>
+    </tr>
+    <tr>
+      <td>Tu propio VPS o PC</td>
+      <td>Está junto al ejecutable del servidor, en la carpeta <code>cfg/</code>. Editalo con el
+      Bloc de notas y volvé a arrancar <code>acServer.exe</code>.</td>
+    </tr>
+    <tr>
+      <td>Content Manager<br />(servidor local)</td>
+      <td>En la pantalla del servidor, pestaña <b>"Plugins"</b> o el botón "Edit server_cfg.ini".
+      Content Manager puede reescribir el archivo al guardar desde su interfaz: si las 2 líneas
+      desaparecen, cargalas desde su propia sección de plugins.</td>
+    </tr>
+  </table>
+
+  <h2>¿Por qué hace falta esto y qué hace cada línea?</h2>
+  <p>El servidor de Assetto Corsa le manda constantemente datos de velocidad y posición de cada
+  auto a una dirección externa — ahí es donde Race Control los recibe para poder detectar
+  infracciones. También Race Control le manda de vuelta órdenes (sanciones, avisos, kicks). Estas
+  2 líneas le dicen al servidor a dónde mandar y dónde escuchar cada cosa:</p>
+  <ul>
+    <li><code>UDP_PLUGIN_ADDRESS</code>: tu dirección y el puerto donde corre Race Control — es
+    donde el servidor de AC manda la telemetría de cada auto.</li>
+    <li><code>UDP_PLUGIN_LOCAL_PORT</code>: el puerto que el propio servidor de AC abre para
+    recibir las órdenes que le manda Race Control (sanciones, kicks, avisos de largada).</li>
+  </ul>
+  <p>Sin estas 2 líneas, el servidor nunca se entera de que existe Race Control, y nada de esto
+  funciona — ni la largada, ni las sanciones.</p>
+
+  <h2>¿Qué pasa con el router de mi casa?</h2>
+  <p>Race Control lo intenta resolver solo al arrancar, sin que hagas nada. Si "Probar conexión"
+  te dice que falta abrir un puerto, es porque tu router no aceptó hacerlo automáticamente — en
+  ese caso hay que entrar a su configuración y hacer una "redirección de puertos" (port
+  forwarding) hacia esta PC. El panel te dice exactamente qué número de puerto.</p>
+
+  <div class="warn">
+    <b>Si tu internet tiene IP dinámica</b> (cambia cada tanto, que es lo normal en una conexión
+    hogareña), vas a tener que repetir el paso 3 cuando cambie. Si eso te resulta molesto, la
+    alternativa es correr Race Control en una VPS barata, que tiene dirección fija.
+  </div>
+</body>
+</html>

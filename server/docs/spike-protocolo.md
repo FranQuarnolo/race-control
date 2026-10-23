@@ -34,6 +34,22 @@ leer código — ningún agente de IA puede resolverlo):
 | `/ballast` | Confirmá que ese comando existe en tu versión de servidor y que aplica el lastre | Ajustar el comando en `index.ts` si tu versión usa otra sintaxis |
 | Varios autos a la vez | Jugá con 5-10 autos si podés conseguirlos | Si ves comportamiento raro con muchos autos, ahí sí conviene usar Wireshark para ver si se están perdiendo paquetes |
 
+## Lo que agregó la 0.3 y hay que confirmar en pista
+
+| Punto | Cómo confirmarlo | Si falla |
+|---|---|---|
+| Toque entre autos | Chocate a propósito con otro auto. En `/sanciones` tiene que aparecer **un solo** incidente con los dos pilotos, no dos | Si aparecen dos, la ventana de correlación (500 ms) quedó corta para tu latencia: `CONTACT_WINDOW_MS` en `incidentEngine.ts` |
+| Geometría del toque | Embestí a alguien de atrás y mirá si dice "trompa contra cola" | Si sale al revés, el eje longitudinal de `rel_pos` tiene el signo invertido en `protocol.ts` |
+| Antiflood | Trompeá contra el muro. Tiene que salir **un** incidente con un contador de impactos, no treinta | Subir la ventana de agrupación (3 s) |
+| Reloj de la sesión | El "RESTAN" del mapa tiene que coincidir con el reloj del juego, ±2 s | Si arranca en `--:--` con una carrera por tiempo, revisar el orden de campos de `NEW_SESSION`: la duración viene **antes** de las vueltas y en minutos |
+| Tiempos por sector | Con la app instalada, los tres sectores de la torre tienen que coincidir con los del juego | **Esto es lo más incierto de la 0.3.** Se asume que `lastSectorTime` es acumulado desde el inicio de la vuelta y los sectores son diferencias. Si los números salen absurdos, es al revés: ya viene por sector. Está en `RaceControlClient.py` |
+| Límites de pista | Cortá una curva con las cuatro ruedas, tres veces | Si no cuenta, revisar `numberOfTyresOut` de la Shared Memory; si cuenta de más, subir `minDurationMs` |
+| Telemetría inconsistente | No debería aparecer nunca con la app funcionando bien | Si aparece sola, la tolerancia (3 cortes acumulados) quedó corta para el desfasaje del heartbeat |
+| Sanción del comisario | Sancioná un incidente desde la bandeja con "+10s" | El piloto tiene que recibir el chat, y la sanción tiene que aparecer en la tabla y en el informe |
+| Informe de carrera | Descargalo al terminar y abrilo con Excel | Si los acentos salen rotos o todo cae en una columna, revisar el BOM y el separador en `raceReport.ts` |
+| Reinicio a mitad de carrera | Cerrá el `.exe` con una sanción emitida y volvé a abrirlo | Las sanciones e incidentes tienen que seguir ahí. Si no, revisar la lectura del journal en el arranque |
+| Logos de marca | Mirá la columna "Auto" con una parrilla variada | Lo esperable es logo en las marcas conocidas y escudo con monograma en el resto. Un hueco vacío sí es un bug |
+
 ## Si algo no cierra: ahí sí, Wireshark
 
 1. Instalá [Wireshark](https://www.wireshark.org/) con Npcap (en Windows, tildar "Adapter for

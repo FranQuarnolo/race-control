@@ -4,12 +4,26 @@ import { AcUdpClient } from "../udp/client";
 
 export type NetworkStrategy = "pending" | "direct" | "upnp" | "manual";
 
+/**
+ * De dónde salió la dirección que se les anuncia a los pilotos.
+ *
+ * Importa mostrarlo porque los tres casos se ven iguales desde afuera y solo uno funciona. Antes,
+ * si la detección fallaba, el backend anunciaba `127.0.0.1` y el panel seguía diciendo
+ * "detectando..." para siempre: los pilotos no se conectaban y nada indicaba por qué.
+ */
+export type PublicHostSource = "manual" | "detected" | "unknown";
+
 export interface NetworkStatus {
   publicIp: string | null;
+  publicHostSource: PublicHostSource;
   receivingTelemetry: boolean;
   strategy: NetworkStrategy;
   upnpAttempted: boolean;
   upnpSuccess: boolean | null;
+  /** Si se logró mapear por UPnP el puerto TCP que usan los pilotos. `false` no significa que no
+   * funcione: muchos routers dejan pasar igual, o el admin ya tiene el forwarding hecho a mano.
+   * La prueba real es `driversReporting` en /api/state. */
+  clientPortMapped: boolean | null;
   lastCheckedAt: number;
 }
 
@@ -32,18 +46,33 @@ const PUBLIC_IP_TIMEOUT_MS = 4000;
 export class ConnectivityManager {
   private status: NetworkStatus = {
     publicIp: null,
+    publicHostSource: "unknown",
     receivingTelemetry: false,
     strategy: "pending",
     upnpAttempted: false,
     upnpSuccess: null,
+    clientPortMapped: null,
     lastCheckedAt: 0,
   };
   private keepaliveTimer: NodeJS.Timeout | null = null;
+  /** Lo que devolvió la detección automática, aparte de lo que el admin haya escrito a mano: si
+   * borra el campo manual, se vuelve a lo detectado sin tener que reiniciar. */
+  private detectedIp: string | null = null;
 
-  constructor(private udpClient: AcUdpClient, private ports: { udpLocalPort: number; tcpClientPort: number }) {}
+  constructor(
+    private udpClient: AcUdpClient,
+    private ports: { udpLocalPort: number; tcpClientPort: number },
+    /** Dirección puesta a mano en el panel. Vacío = usar la detectada. */
+    private getManualHost: () => string = () => ""
+  ) {}
 
   getStatus(): NetworkStatus {
-    return { ...this.status };
+    const manual = this.getManualHost().trim();
+    return {
+      ...this.status,
+      publicIp: manual || this.detectedIp,
+      publicHostSource: manual ? "manual" : this.detectedIp ? "detected" : "unknown",
+    };
   }
 
   /** No bloquea el arranque del panel: la detección de IP pública es rápida (segundos), pero la
@@ -58,8 +87,15 @@ export class ConnectivityManager {
       }
     }, KEEPALIVE_INTERVAL_MS);
 
-    this.status.publicIp = await detectPublicIp();
+    this.detectedIp = await detectPublicIp();
     this.waitAndEscalate().catch((err) => console.error("[connectivity] error en la escalada de red:", err));
+  }
+
+  /** Reintenta la detección de IP pública a pedido — es lo primero que un admin quiere volver a
+   * probar después de conectar internet o apagar la VPN que la bloqueaba. */
+  async redetectPublicIp(): Promise<string | null> {
+    this.detectedIp = await detectPublicIp();
+    return this.detectedIp;
   }
 
   stop(): void {
@@ -75,6 +111,17 @@ export class ConnectivityManager {
   }
 
   private async waitAndEscalate(): Promise<void> {
+    // El puerto TCP de los clientes se mapea SIEMPRE, antes de cualquier otra cosa.
+    //
+    // Antes esto vivía dentro de la rama de fallo del UDP, y ahí está el problema: el pinhole de
+    // NAT que hace entrar la telemetría UDP no abre nada para el TCP entrante de los pilotos. Con
+    // el UDP entrando "directo", esta función retornaba temprano y el puerto de clientes no se
+    // tocaba nunca: el panel mostraba "directa / recibiendo" en verde mientras ningún piloto podía
+    // mandar heartbeat, y todos terminaban kickeados por el watchdog de presencia.
+    this.status.clientPortMapped = await tryUpnpMapping([
+      { public: this.ports.tcpClientPort, private: this.ports.tcpClientPort, protocol: "TCP", description: "Race Control (clientes)" },
+    ]);
+
     const before = this.udpClient.getStats().packetsReceived;
     await delay(TELEMETRY_WAIT_MS);
     if (this.udpClient.getStats().packetsReceived > before) {
@@ -85,7 +132,9 @@ export class ConnectivityManager {
     }
 
     this.status.upnpAttempted = true;
-    const upnpOk = await tryUpnpMapping(this.ports);
+    const upnpOk = await tryUpnpMapping([
+      { public: this.ports.udpLocalPort, private: this.ports.udpLocalPort, protocol: "UDP", description: "Race Control (telemetria Assetto Corsa)" },
+    ]);
     this.status.upnpSuccess = upnpOk;
 
     if (upnpOk) {
@@ -121,29 +170,20 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   }
 }
 
-async function tryUpnpMapping(ports: { udpLocalPort: number; tcpClientPort: number }): Promise<boolean> {
+interface PortMapping {
+  public: number;
+  private: number;
+  protocol: "TCP" | "UDP";
+  description: string;
+}
+
+/** Best-effort: timeout corto y sin romper el arranque si el router no habla UPnP. */
+async function tryUpnpMapping(mappings: PortMapping[]): Promise<boolean> {
   const client = new NatUpnpClient({ timeout: UPNP_TIMEOUT_MS });
   try {
-    await withTimeout(
-      client.createMapping({
-        public: ports.udpLocalPort,
-        private: ports.udpLocalPort,
-        protocol: "UDP",
-        ttl: 0,
-        description: "Race Control (telemetria Assetto Corsa)",
-      }),
-      UPNP_TIMEOUT_MS
-    );
-    await withTimeout(
-      client.createMapping({
-        public: ports.tcpClientPort,
-        private: ports.tcpClientPort,
-        protocol: "TCP",
-        ttl: 0,
-        description: "Race Control (clientes)",
-      }),
-      UPNP_TIMEOUT_MS
-    );
+    for (const mapping of mappings) {
+      await withTimeout(client.createMapping({ ...mapping, ttl: 0 }), UPNP_TIMEOUT_MS);
+    }
     return true;
   } catch {
     return false;
@@ -171,8 +211,14 @@ function detectPublicIp(): Promise<string | null> {
   });
 }
 
-/** Arma el bloque listo para copiar/pegar en server_cfg.ini del hosting (ej. EmperorServers). */
-export function buildEmperorServersSnippet(publicIp: string | null, udpLocalPort: number, acRemotePort: number): string {
+/**
+ * Arma el bloque listo para copiar/pegar en el `server_cfg.ini` del hosting.
+ *
+ * Sirve para cualquier hosting de Assetto Corsa, no solo EmperorServers: `UDP_PLUGIN_LOCAL_PORT`
+ * y `UDP_PLUGIN_ADDRESS` son del propio Assetto Corsa, no de ninguna empresa en particular. Lo
+ * único que cambia entre hostings es dónde está el botón para editar ese archivo.
+ */
+export function buildServerSnippet(publicIp: string | null, udpLocalPort: number, acRemotePort: number): string {
   const ip = publicIp ?? "<TU_IP_PUBLICA>";
   return [`UDP_PLUGIN_LOCAL_PORT=${acRemotePort}`, `UDP_PLUGIN_ADDRESS=${ip}:${udpLocalPort}`].join("\n");
 }

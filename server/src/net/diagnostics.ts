@@ -1,0 +1,197 @@
+import { NetworkStatus } from "./connectivity";
+import { UdpStats, isLoopback } from "../udp/client";
+
+/**
+ * Diagnóstico de conexión en castellano llano.
+ *
+ * Es la respuesta al único problema que el producto no puede resolver solo: cuando algo de la red
+ * no anda, el admin —que no es técnico— ve un panel en rojo y no tiene forma de saber cuál de las
+ * cuatro cosas que tienen que funcionar es la que falló. Cada chequeo dice qué se miró, cómo
+ * salió, y —si salió mal— exactamente qué hacer, sin jerga.
+ *
+ * El orden importa: va de afuera hacia adentro, y es el orden en que conviene arreglarlos. No
+ * tiene sentido pelearse con el puerto de los pilotos si todavía no entra la telemetría.
+ */
+
+export type CheckState = "ok" | "warn" | "fail" | "pending";
+
+export interface Check {
+  id: string;
+  title: string;
+  state: CheckState;
+  /** Qué se observó. Siempre en pasado y en concreto: "llegaron 1.240 paquetes". */
+  detail: string;
+  /** Qué hacer al respecto. Vacío cuando no hay nada que hacer. */
+  action: string;
+}
+
+export interface DiagnosticsInput {
+  network: NetworkStatus;
+  udp: UdpStats;
+  remoteHost: string;
+  udpLocalPort: number;
+  clientPort: number;
+  driversConnected: number;
+  driversReporting: number;
+}
+
+const TELEMETRY_FRESH_MS = 5000;
+
+export function runDiagnostics(input: DiagnosticsInput): Check[] {
+  return [
+    checkPublicHost(input),
+    checkIncomingTelemetry(input),
+    checkOutgoingCommands(input),
+    checkDriverPort(input),
+  ];
+}
+
+/** Cuántos de los cuatro chequeos hay que mirar. Se usa para el resumen de una línea del panel. */
+export function summarize(checks: Check[]): { state: CheckState; message: string } {
+  const failed = checks.filter((c) => c.state === "fail");
+  if (failed.length > 0) {
+    return { state: "fail", message: failed[0].title + ": " + failed[0].action };
+  }
+  const warned = checks.filter((c) => c.state === "warn");
+  if (warned.length > 0) return { state: "warn", message: warned[0].title + ": " + warned[0].detail };
+  if (checks.some((c) => c.state === "pending")) return { state: "pending", message: "Todavía estamos probando." };
+  return { state: "ok", message: "Todo en orden: el servidor y los pilotos llegan hasta acá." };
+}
+
+function checkPublicHost(input: DiagnosticsInput): Check {
+  const { publicIp, publicHostSource } = input.network;
+  if (!publicIp) {
+    return {
+      id: "public-host",
+      title: "Tu dirección en internet",
+      state: "fail",
+      detail: "No pudimos averiguarla.",
+      action:
+        "Suele pasar sin internet o con una VPN o antivirus que bloquea la consulta. Escribila a " +
+        'mano en "Dirección propia", acá abajo: podés verla entrando a cualquier buscador y poniendo "cuál es mi ip".',
+    };
+  }
+  return {
+    id: "public-host",
+    title: "Tu dirección en internet",
+    state: "ok",
+    detail: publicHostSource === "manual" ? `${publicIp} (la escribiste vos)` : `${publicIp} (detectada sola)`,
+    action: "",
+  };
+}
+
+function checkIncomingTelemetry(input: DiagnosticsInput): Check {
+  const { udp, network } = input;
+  const fresh = udp.lastPacketAt > 0 && Date.now() - udp.lastPacketAt < TELEMETRY_FRESH_MS;
+  if (fresh) {
+    return {
+      id: "telemetry",
+      title: "Señal del servidor de carrera",
+      state: "ok",
+      detail: `Está llegando ahora mismo (${udp.packetsReceived.toLocaleString("es-AR")} paquetes recibidos).`,
+      action: "",
+    };
+  }
+  if (udp.packetsReceived > 0) {
+    return {
+      id: "telemetry",
+      title: "Señal del servidor de carrera",
+      state: "warn",
+      detail: "Llegó antes, pero ahora está cortada.",
+      action:
+        "Es normal si el servidor de Assetto Corsa está apagado o entre sesiones. Si debería estar " +
+        "corriendo, fijate que no lo hayan reiniciado sin la configuración de Race Control.",
+    };
+  }
+  if (network.strategy === "pending") {
+    return {
+      id: "telemetry",
+      title: "Señal del servidor de carrera",
+      state: "pending",
+      detail: "Todavía estamos esperando el primer paquete.",
+      action: "",
+    };
+  }
+  return {
+    id: "telemetry",
+    title: "Señal del servidor de carrera",
+    state: "fail",
+    detail: "Nunca llegó nada desde el servidor de Assetto Corsa.",
+    action:
+      `Pegá en el server_cfg.ini de tu hosting las dos líneas que te damos acá al lado y reiniciá ` +
+      `el servidor de Assetto Corsa para que las tome. Si ya lo hiciste, falta abrir el puerto ` +
+      `${input.udpLocalPort} (UDP) en tu router hacia esta PC.`,
+  };
+}
+
+function checkOutgoingCommands(input: DiagnosticsInput): Check {
+  if (isLoopback(input.remoteHost)) {
+    return {
+      id: "commands",
+      title: "Órdenes hacia el servidor",
+      state: "fail",
+      detail: "Todavía no sabemos a qué servidor mandárselas.",
+      action:
+        "Se averigua sola apenas llegue la primera señal del servidor de carrera, así que " +
+        "arreglá eso primero. Si tu hosting no se identifica, escribí su dirección acá abajo.",
+    };
+  }
+  if (input.udp.commandsSent === 0) {
+    return {
+      id: "commands",
+      title: "Órdenes hacia el servidor",
+      state: "pending",
+      detail: `Sabemos a dónde mandarlas (${input.remoteHost}) pero todavía no mandamos ninguna.`,
+      action: "",
+    };
+  }
+  if (input.udp.commandSendErrors > 0) {
+    return {
+      id: "commands",
+      title: "Órdenes hacia el servidor",
+      state: "warn",
+      detail: `${input.udp.commandSendErrors} no se pudieron mandar.`,
+      action: "Puede ser un corte momentáneo de internet. Si se repite, revisá tu conexión.",
+    };
+  }
+  return {
+    id: "commands",
+    title: "Órdenes hacia el servidor",
+    state: "ok",
+    detail: `Salieron ${input.udp.commandsSent.toLocaleString("es-AR")} hacia ${input.remoteHost}, sin errores.`,
+    action: "",
+  };
+}
+
+function checkDriverPort(input: DiagnosticsInput): Check {
+  if (input.driversReporting > 0) {
+    return {
+      id: "drivers",
+      title: "La app de los pilotos",
+      state: "ok",
+      detail: `${input.driversReporting} de ${input.driversConnected} en pista están reportando.`,
+      action: "",
+    };
+  }
+  if (input.driversConnected === 0) {
+    return {
+      id: "drivers",
+      title: "La app de los pilotos",
+      state: "pending",
+      detail: "No hay nadie en pista todavía, así que no hay nada que comprobar.",
+      action: "",
+    };
+  }
+  return {
+    id: "drivers",
+    title: "La app de los pilotos",
+    state: "fail",
+    detail: `Hay ${input.driversConnected} en pista y ninguno llega hasta acá.`,
+    action:
+      input.network.clientPortMapped === true
+        ? `Tu router dejó abierto el puerto ${input.clientPort}, así que lo más probable es que a ` +
+          "los pilotos les falte instalar la app de Race Control."
+        : `Abrí el puerto ${input.clientPort} (TCP) en tu router hacia esta PC, o pedile a los ` +
+          "pilotos que confirmen que tienen la app instalada y activada en Content Manager.",
+  };
+}

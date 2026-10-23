@@ -1,11 +1,21 @@
 import express, { Express } from "express";
 import * as path from "path";
-import { AppConfig, applyConfigPatch, isFirstRun } from "../config";
+import { AppConfig, applyConfigPatch, applyPreset, isFirstRun } from "../config";
+import { ACTION_LABELS, AUTO_PENALTY_ALLOWED, PRESETS, PresetName } from "../incident/catalog";
 import { FormationStart } from "../instances/formationStart";
-import { PenaltyEngine } from "../penalty/penaltyEngine";
+import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
 import { StateTracker } from "../state/stateTracker";
 import { ConnectivityManager } from "../net/connectivity";
+import { runDiagnostics, summarize } from "../net/diagnostics";
+import { AcUdpClient } from "../udp/client";
+import { Incident, IncidentEngine } from "../incident/incidentEngine";
+import { SessionTracker } from "../session/sessionInfo";
+import { TrackLearner } from "../track/trackLearner";
+import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
+import { brandOf, brandSlug } from "../cars/carBadges";
+import { computeStandings } from "../state/standings";
+import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
 export interface AdminApiDeps {
   config: AppConfig;
@@ -13,12 +23,36 @@ export interface AdminApiDeps {
   formationStart: FormationStart;
   formationPenaltyEngine: PenaltyEngine;
   pitPenaltyEngine: PenaltyEngine;
+  stewardPenaltyEngine: PenaltyEngine;
   presenceWatchdog: PresenceWatchdog;
   connectivity: ConnectivityManager;
-  buildEmperorServersSnippet: () => string;
+  udpClient: AcUdpClient;
+  incidentEngine: IncidentEngine;
+  trackLearner: TrackLearner;
+  sessionTracker: SessionTracker;
+  telemetryStore: DriverTelemetryStore;
+  /** Tipo de sesión actual del servidor de AC (3 = carrera). Decide si la torre de tiempos se
+   * ordena por progreso o por mejor vuelta. */
+  getSessionType: () => number;
+  /** Fase interna de la carrera (`idle`/`formation`/`race`/`finished`) — la bandera animada de la
+   * barra superior ondea solo en `race`. */
+  getPhase: () => string;
+  /** Kick manual pedido por el admin desde la tabla de pilotos. Se inyecta en vez de llamar a
+   * `udpClient.kick` directo para que index.ts lo registre en el journal como manual. */
+  manualKick: (carId: number) => void;
+  buildServerSnippet: () => string;
+  /** Puertos realmente en uso. Pueden no ser los de la config si el preferido estaba ocupado y el
+   * arranque se corrió al siguiente libre — y en ese caso es justo lo que el panel tiene que
+   * mostrar, porque es lo que el admin necesita poner en el router. */
+  getActivePorts: () => { adminPort: number; clientPort: number; portsMoved: boolean };
 }
 
 const TELEMETRY_STALE_MS = 2000;
+
+/** Versión de producto, de dos números. `package.json` queda en semver de tres porque npm lo
+ * exige, pero ese valor es interno: el admin ve este. Sin esto no había forma de saber qué build
+ * está corriendo quien reporta un problema. */
+export const APP_VERSION = "0.3";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
@@ -33,25 +67,127 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.get("/api/state", (_req, res) => {
     deps.connectivity.refreshTelemetryFlag();
     const now = Date.now();
+    const connected = deps.stateTracker.getConnected();
+    const standings = computeStandings(connected, deps.getSessionType());
     res.json({
+      version: APP_VERSION,
       firstRun: isFirstRun(deps.config),
       leagueName: deps.config.leagueName,
       shadowMode: deps.config.shadowMode,
       lightState: deps.formationStart.getLightState(),
-      cars: deps.stateTracker.getConnected().map((car) => ({
+      phase: deps.getPhase(),
+      cars: connected.map((car) => ({
         ...car,
+        position: standings.get(car.carId) ?? null,
+        /** Marca deducida del nombre del modelo, y el archivo de logo que le corresponde en la
+         * biblioteca empaquetada. `brandLogo: null` = no hay logo para esa marca y el panel
+         * dibuja el escudo con monograma, sin pedir una imagen que va a dar 404. */
+        brand: brandOf(car.carModel),
+        brandLogo: brandSlug(brandOf(car.carModel)),
         telemetryStale: car.lastUpdate === 0 || now - car.lastUpdate > TELEMETRY_STALE_MS,
+        /** Round-trip de la app del piloto contra el backend. `null` = no tiene la app reportando. */
+        pingMs: deps.presenceWatchdog.getPing(car.driverGuid),
+        /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
+         * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
+        telemetry: deps.telemetryStore.get(car.driverGuid),
       })),
       formationPenalties: deps.formationPenaltyEngine.getAll(),
       pitPenalties: deps.pitPenaltyEngine.getAll(),
+      stewardPenalties: deps.stewardPenaltyEngine.getAll(),
+      incidents: deps.incidentEngine.getAll(),
+      /** Contador aparte para el badge de la barra: la pantalla principal no muestra la bandeja,
+       * así que sin esto un incidente nuevo pasaría desapercibido hasta entrar a /sanciones. */
+      pendingIncidents: deps.incidentEngine.getPending().length,
+      /** Solo el progreso, no el trazado: son ~600 puntos y esto se pide una vez por segundo. El
+       * dibujo se baja aparte de /api/track, que el panel vuelve a pedir cuando esto cambia. */
+      track: { coverage: deps.trackLearner.getCoverage() },
+      /** Condiciones de la sesión en curso: circuito, clima, temperaturas, grip y cuánto falta.
+       * `null` hasta que llegue el primer SESSION_INFO del servidor. */
+      session: deps.sessionTracker.get(),
       network: {
         ...deps.connectivity.getStatus(),
-        emperorServersSnippet: deps.buildEmperorServersSnippet(),
+        ...deps.getActivePorts(),
+        serverSnippet: deps.buildServerSnippet(),
+        /** A dónde salen los comandos (chat, kick, ballast). Si queda en loopback con telemetría
+         * entrando, es la señal de que el servidor de AC todavía no se identificó. */
+        acServer: deps.udpClient.getRemoteTarget(),
+        /** Separado de `receivingTelemetry` a propósito: el servidor puede estar mandando
+         * telemetría perfecta mientras ningún piloto logra alcanzar el puerto de clientes. */
+        driversReporting: deps.presenceWatchdog.getReportingCount(),
       },
     });
   });
 
+  /** Trazado aprendido del circuito. Devuelve 204 mientras no haya suficiente como para dibujar. */
+  app.get("/api/track", (_req, res) => {
+    const outline = deps.trackLearner.getOutline();
+    if (!outline) {
+      res.status(204).end();
+      return;
+    }
+    res.json(outline);
+  });
+
   app.get("/api/config", (_req, res) => res.json(deps.config));
+
+  /**
+   * "Probar conexión": los cuatro chequeos, cada uno con qué hacer si falló.
+   *
+   * Reintenta primero la detección de IP pública, porque es el único de los cuatro que puede
+   * haber fallado por algo ya resuelto (no había internet al arrancar, la VPN estaba prendida) y
+   * que no se reintenta solo. Los otros tres leen contadores vivos.
+   */
+  app.post("/api/network/test", async (_req, res) => {
+    await deps.connectivity.redetectPublicIp();
+    deps.connectivity.refreshTelemetryFlag();
+    const ports = deps.getActivePorts();
+    const presence = deps.presenceWatchdog.getReportingCount();
+    const checks = runDiagnostics({
+      network: deps.connectivity.getStatus(),
+      udp: deps.udpClient.getStats(),
+      remoteHost: deps.config.acUdp.remoteHost,
+      udpLocalPort: deps.config.acUdp.localPort,
+      clientPort: ports.clientPort,
+      driversConnected: presence.connected,
+      driversReporting: presence.reporting,
+    });
+    res.json({ checks, summary: summarize(checks) });
+  });
+
+  /**
+   * Catálogo para armar el panel: qué infracciones hay, qué acciones admite cada una y qué
+   * presets existen.
+   *
+   * Lo manda el backend en vez de duplicarlo en el JavaScript del panel porque la regla de qué
+   * tipos aceptan sanción automática es una decisión de producto, no de presentación: si vive en
+   * dos lados, tarde o temprano el panel ofrece una opción que el servidor va a rechazar.
+   */
+  app.get("/api/catalog", (_req, res) => {
+    res.json({
+      actions: ACTION_LABELS,
+      autoPenaltyAllowed: [...AUTO_PENALTY_ALLOWED],
+      presets: Object.entries(PRESETS).map(([name, preset]) => ({
+        name,
+        label: preset.label,
+        description: preset.description,
+      })),
+    });
+  });
+
+  app.post("/api/config/preset", (req, res) => {
+    const preset = (req.body ?? {}).preset as PresetName;
+    if (!(preset in PRESETS)) {
+      res.status(400).json({ ok: false, error: "Preset desconocido" });
+      return;
+    }
+    try {
+      applyPreset(deps.config, preset);
+      res.json(deps.config);
+    } catch (err) {
+      console.error("[admin-api] No se pudo aplicar el preset:", err);
+      res.status(500).json({ ok: false, error: "No se pudo guardar la configuración: " + String(err) });
+    }
+  });
 
   app.post("/api/config", (req, res) => {
     if (typeof req.body !== "object" || req.body === null || Array.isArray(req.body)) {
@@ -84,6 +220,134 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
   });
 
+  /** Las que el comisario puede aplicar a mano. `TIME` es la más habitual en una liga: se suma al
+   * resultado final sin interrumpir la carrera. */
+  const MANUAL_TYPES: PenaltyType[] = ["TIME", "DT", "SG", "BALLAST"];
+
+  /**
+   * Resolución de un incidente de la bandeja.
+   *
+   * Con `status: "penalized"` además de marcar el incidente se **emite una sanción de verdad**:
+   * le llega al piloto por chat y aparece en la tabla de sanciones aplicadas. Antes el botón
+   * "Sancionar" solo tachaba el incidente y no pasaba nada más, que es lo contrario de lo que el
+   * nombre promete.
+   */
+  app.post("/api/incidents/:id/resolve", (req, res) => {
+    const body = req.body ?? {};
+    const status = body.status;
+    if (status !== "dismissed" && status !== "warned" && status !== "penalized") {
+      res.status(400).json({ ok: false, error: "Estado inválido" });
+      return;
+    }
+    const resolution = typeof body.resolution === "string" ? body.resolution : undefined;
+
+    // Validar ANTES de resolver: `resolve` es irreversible, y un tipo de sanción inválido dejaría
+    // el incidente marcado como sancionado sin ninguna sanción detrás.
+    let penaltyType: PenaltyType = "TIME";
+    let seconds = 5;
+    let target: { carId: number; driverGuid: string; driverName?: string } | null = null;
+    if (status === "penalized") {
+      penaltyType = MANUAL_TYPES.indexOf(body.penaltyType) >= 0 ? body.penaltyType : "TIME";
+      seconds = Number.isFinite(body.seconds) ? Math.min(600, Math.max(1, Math.round(body.seconds))) : 5;
+      const pending = deps.incidentEngine.getAll().find((i) => i.id === req.params.id);
+      // Un toque tiene dos partes y el servidor no sabe de quién fue la culpa: el comisario elige
+      // a quién sanciona. Si no eligió, se toma la primera, que es quien reportó el evento.
+      const parties = pending?.parties || [];
+      target = parties.find((p) => p.carId === body.carId) || parties[0] || null;
+      if (!target) {
+        res.status(404).json({ ok: false, error: "El incidente no existe o no tiene pilotos asociados" });
+        return;
+      }
+    }
+
+    const incident = deps.incidentEngine.resolve(req.params.id, status, resolution);
+    if (!incident) {
+      res.status(404).json({ ok: false, error: "El incidente no existe o ya fue resuelto" });
+      return;
+    }
+
+    let penalty = null;
+    if (status === "penalized" && target) {
+      const reason = `Comisario: ${describeIncident(incident)}`;
+      penalty = deps.stewardPenaltyEngine.issuePenalty(target.carId, target.driverGuid, reason, penaltyType, {
+        timePenaltySeconds: seconds,
+        incidentId: incident.id,
+      });
+    }
+    res.json({ ok: true, incident, penalty });
+  });
+
+  /**
+   * Kick manual desde la tabla de pilotos.
+   *
+   * Se ejecuta SIEMPRE, incluso con el modo sombra activo. El modo sombra existe para que el
+   * motor automático no sancione sin supervisión — no para bloquear una orden explícita del
+   * admin, que por definición ya está supervisada. Queda en el journal como `kick.manual`,
+   * distinguible del automático.
+   */
+  app.post("/api/cars/:carId/kick", (req, res) => {
+    const carId = Number(req.params.carId);
+    if (!Number.isInteger(carId) || carId < 0) {
+      res.status(400).json({ ok: false, error: "Auto inválido" });
+      return;
+    }
+    const car = deps.stateTracker.get(carId);
+    if (!car || !car.connected) {
+      res.status(404).json({ ok: false, error: "Ese auto no está conectado" });
+      return;
+    }
+    deps.manualKick(carId);
+    res.json({ ok: true, carId, driverName: car.driverName });
+  });
+
+  /**
+   * Informe de carrera, descargable.
+   *
+   * Es un CSV y no un PDF ni una página: lo que el admin hace con esto es pegarlo en la planilla
+   * del campeonato, no leerlo lindo. El mismo contenido está en `/api/report` como JSON, para
+   * quien quiera automatizarlo.
+   */
+  app.get("/api/report.csv", (_req, res) => {
+    const report = currentReport();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${reportFileName(report)}"`);
+    res.send(toCsv(report));
+  });
+
+  app.get("/api/report", (_req, res) => res.json(currentReport()));
+
+  function currentReport() {
+    return buildReport({
+      leagueName: deps.config.leagueName,
+      version: APP_VERSION,
+      // `getAll` y no `getConnected`: quien abandonó en la vuelta 3 también va en el informe, con
+      // las sanciones que se haya llevado.
+      cars: deps.stateTracker.getAll(),
+      sessionType: deps.getSessionType(),
+      session: deps.sessionTracker.get(),
+      penaltiesByEngine: [
+        ["formation", deps.formationPenaltyEngine.getAll()],
+        ["pit", deps.pitPenaltyEngine.getAll()],
+        ["steward", deps.stewardPenaltyEngine.getAll()],
+      ],
+      incidents: deps.incidentEngine.getAll(),
+      now: Date.now(),
+    });
+  }
+
+  /**
+   * El panel usa rutas del lado del cliente (`/sanciones`). Sin esto, recargar esa URL o abrirla
+   * de un marcador devuelve 404: Express solo conoce `/index.html`. Va al final, después de los
+   * estáticos y de toda la API, para no tapar una ruta real.
+   */
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+  });
+
   // Red de seguridad: cualquier excepción no prevista en una ruta devuelve JSON, no la página de
   // error HTML por defecto de Express — el panel siempre espera poder parsear la respuesta.
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -93,3 +357,23 @@ export function createAdminApi(deps: AdminApiDeps): Express {
 
   return app;
 }
+
+/** Los mismos nombres que muestra la bandeja, para que el motivo de la sanción que le llega al
+ * piloto por chat sea reconocible contra lo que el comisario estaba mirando. */
+const INCIDENT_LABELS: Record<string, string> = {
+  "car-contact": "toque entre autos",
+  "env-collision": "choque en solitario",
+  "track-limits": "límites de pista",
+  "telemetry-mismatch": "telemetría inconsistente",
+  "wrong-way": "en contramano",
+  disconnect: "desconexión en carrera",
+};
+
+function describeIncident(incident: Incident): string {
+  const what = INCIDENT_LABELS[incident.kind] || "incidente";
+  const bits = [`${what} en la vuelta ${incident.lap}`];
+  if (typeof incident.impactSpeedKmh === "number") bits.push(`impacto a ${Math.round(incident.impactSpeedKmh)} km/h`);
+  if (incident.detail) bits.push(incident.detail);
+  return bits.join(", ");
+}
+

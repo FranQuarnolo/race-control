@@ -16,7 +16,10 @@ const MAX_RETRIES = 5;
 export class BackendAnnouncer {
   private pendingByGuid = new Map<string, { carId: number; attempts: number; timer: NodeJS.Timeout }>();
 
-  constructor(private udpClient: AcUdpClient, private getClientAddress: () => string) {}
+  /** `getClientAddress` devuelve `null` mientras no se sepa la dirección propia. En ese caso no se
+   * anuncia nada: mandarle `127.0.0.1` a un piloto lo hace intentar conectarse a su propia PC, y
+   * ese fallo es invisible para todos — ni el piloto ni el admin se enteran de por qué no anda. */
+  constructor(private udpClient: AcUdpClient, private getClientAddress: () => string | null) {}
 
   onNewConnection(data: NewConnection): void {
     this.cancel(data.driverGuid);
@@ -33,7 +36,10 @@ export class BackendAnnouncer {
       this.pendingByGuid.delete(driverGuid);
       return;
     }
-    this.udpClient.sendChatToCar(carId, `${BACKEND_ANNOUNCE_PREFIX}${this.getClientAddress()}`);
+    const address = this.getClientAddress();
+    // Sin dirección se reintenta igual en vez de abandonar: la detección puede estar todavía en
+    // curso cuando el primer piloto entra, y en unos segundos ya va a haber algo que anunciar.
+    if (address) this.udpClient.sendChatToCar(carId, `${BACKEND_ANNOUNCE_PREFIX}${address}`);
     const timer = setTimeout(() => this.announce(carId, driverGuid, attempt + 1), RETRY_INTERVAL_MS);
     this.pendingByGuid.set(driverGuid, { carId, attempts: attempt + 1, timer });
   }

@@ -3,6 +3,574 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.3] — 2026-10-23
+
+Auditoría completa del proyecto. A partir de acá el versionado pasa a ser de **dos números**
+(0.3, 0.4, … 1.0): el tercer número no estaba comunicando nada útil a un admin de liga, que es
+quien ve el número en la página de descargas. `server/package.json` se mantiene en `0.3.0` porque
+npm exige semver de tres partes, pero ese valor es interno y no se muestra en ningún lado.
+
+Ocho tandas. La primera son cuatro bugs que impedían que el producto funcionara contra un hosting
+remoto —el caso de uso para el que fue escrito—: estaban activos en la 0.2.3 y ninguno daba error
+visible, el panel mostraba todo en verde mientras nada funcionaba. Las otras siete son el motor de
+incidentes, el rediseño del panel en una sola pantalla, la torre de tiempos, los límites de pista,
+el catálogo de infracciones configurable, el enlatado, la persistencia con informe de carrera y la
+tanda de ajustes sobre el panel ya funcionando.
+
+Las tandas están ordenadas por tema, no cronológicamente, y la primera queda al final: es la que
+menos dice sobre qué hace hoy el producto.
+
+---
+
+## Segunda tanda: incidentes en pista y panel nuevo
+
+### El motor no veía nada de lo que genera conflicto en una liga
+
+Hasta acá Race Control detectaba exceso de velocidad y nada más. Los toques entre pilotos, los
+choques contra el muro y los trompos —lo que de verdad discute una liga el lunes siguiente— no se
+registraban en ningún lado, aunque el paquete que los trae (`CLIENT_EVENT`, opcode 130) **ya
+llegaba al backend y se descartaba sin decodificar**.
+
+- `server/src/udp/protocol.ts` decodifica ahora el paquete completo. El orden de lectura importa:
+  `other_car_id` existe **solo** cuando el choque es contra otro auto; leerlo siempre desfasaría un
+  byte la velocidad de impacto y las dos posiciones, y el bug se vería como números absurdos en vez
+  de como un error. Hay un test que arma los dos layouts a mano justamente para fijar eso.
+- `server/src/incident/incidentEngine.ts` convierte esos eventos en incidentes con contexto.
+
+Tres cosas que el motor resuelve y que son la razón de que no sea un simple `map()`:
+
+1. **Doble reporte.** Ante un toque, el servidor emite un `CLIENT_EVENT` por **cada** auto
+   involucrado. Sin correlacionarlos, la bandeja mostraría cada toque dos veces y señalaría a los
+   dos pilotos. Se agrupan los dos que comparten `(car_id, other_car_id)` invertido dentro de 500 ms.
+2. **Flood.** Un trompo contra el muro genera decenas de eventos en dos segundos. Se agrupan los
+   del mismo involucrado dentro de 3 s en un único incidente que conserva el impacto más fuerte y
+   un contador. La clave de agrupación identifica a los *involucrados* (`contact:3,9`), no a un
+   auto: agrupar por auto a secas metería en la misma entrada un toque del 3 contra el 9 y otro del
+   3 contra el 5 un segundo después, listando mal a las partes.
+3. **Contexto perdido.** El paquete trae posiciones pero no dice quién es quién ni a qué velocidad
+   iban. Eso se cruza con el `StateTracker` **en el instante del impacto** y se guarda como copia:
+   el tracker muta el mismo objeto con cada actualización, así que leerlo al emitir el incidente
+   —hasta medio segundo después— daría la velocidad de después del choque, no la del choque.
+
+**Los incidentes no se auto-sancionan.** Van a una bandeja para que decida un comisario. El
+servidor sabe que hubo contacto, no quién tuvo la culpa: un `rear-end` puede ser culpa del de
+adelante por frenar en seco. La geometría del toque (trompa contra cola / rueda a rueda / frontal)
+se deduce cruzando las dos perspectivas y se presenta como un dato que acompaña al incidente, no
+como un veredicto. Con una sola perspectiva queda en "sin determinar" en vez de adivinar.
+
+Los umbrales son configurables (`config.incidents`) y existen para que un roce de parrilla o un
+piano no llenen la bandeja antes de la primera vuelta.
+
+### El panel: todo en una pantalla
+
+Era una grilla plana de siete tarjetas donde configurar la zona de pit ocupaba el mismo espacio
+visual que ver la carrera en vivo, y había que scrollear para ver quién estaba en pista.
+
+- **Sin scroll de página**, al 95% del ancho. Las tablas largas scrollean dentro de su propia caja
+  con el encabezado fijo: con 24 pilotos no hay layout que entre, y achicar la fuente hasta que
+  entre es peor.
+- **Largada y Autos conectados arriba, lado a lado** — son los protagonistas. El mapa abajo,
+  tomando todo el alto restante.
+- **Red pasó a ser un botón** en la barra, que se pinta verde solo si las dos mitades están bien
+  (servidor identificado **y** telemetría entrando). Media conexión es tan inútil como ninguna.
+- **El modo de aplicación es un switch siempre visible** en la barra. Antes era un checkbox dentro
+  de una tarjeta y se podía correr una carrera entera sin notar que el motor no sancionaba nada.
+- **Los botones de guardar se apagan** y se ponen verdes cuando no hay nada que guardar. Se compara
+  contra los últimos valores guardados y no contra un flag de "tocado": si el admin cambia un valor
+  y lo deja como estaba, el botón se apaga solo.
+- **Botones de largada con estado**: "Verde" y "Reset" ya no se pueden apretar cuando el servidor
+  los va a ignorar en silencio.
+- Las sanciones y la bandeja de incidentes se mudaron a **`/sanciones`**, con router de History API
+  y fallback de Express para que recargar esa URL no dé 404.
+
+### Mapa del circuito en vivo
+
+El trazado **se aprende solo**, sin pedirle archivos de pista a nadie: `CAR_UPDATE` ya trae
+`posX`/`posZ` en coordenadas reales del mundo junto con la posición normalizada en la vuelta
+(`server/src/track/trackLearner.ts`). Se indexa por posición de vuelta y no por orden de llegada,
+así el dibujo sale ordenado aunque las muestras lleguen mezcladas de 20 autos repartidos por toda
+la pista — cuantos más autos hay, más rápido se completa. Se guarda por circuito y queda para
+siempre.
+
+- Render en `<canvas>` con interpolación entre muestras, porque el panel consulta una vez por
+  segundo y sin interpolar los autos avanzarían a saltos. Un salto grande (reset a boxes) no se
+  interpola: dibujaría el auto cruzando el circuito en línea recta por el medio.
+- **Hover** sobre un auto muestra nombre y número. **Click** en un piloto de la tabla lo resalta en
+  amarillo en el mapa, y al revés. Es una sola variable de selección para los dos sentidos:
+  sincronizar dos estados por separado es la forma segura de que se desincronicen.
+
+### Tabla de pilotos: ping y kick
+
+- **"Señal" pasó a "Ping"**, en milisegundos, medido por la app del piloto en su heartbeat. Honesto
+  sobre qué mide: el protocolo UDP de AC **no expone** el ping del piloto al servidor de carrera.
+  Esto es el round-trip hacia Race Control. Sirve igual para lo que el admin quiere saber —quién
+  tiene conexión inestable— y se etiqueta sin prometer de más.
+- **Kick por fila con doble confirmación**: el botón se arma, cambia de color y se desarma solo a
+  los 4 s. Expulsar a alguien a mitad de carrera no se deshace y no puede salir de un click fallido
+  en una tabla que se actualiza sola. (Un `confirm()` nativo tampoco servía: bloquea el hilo y
+  congela el mapa mientras está abierto.)
+- El kick manual se ejecuta **siempre, aunque el modo sombra esté activo**. El modo sombra existe
+  para que el motor automático no sancione sin supervisión, no para bloquear una orden explícita
+  del admin, que por definición ya está supervisada. Queda en el journal como `kick.manual`,
+  distinguible del automático.
+
+### Identidad visual
+
+Hasta acá no había ninguna marca: el navegador mostraba el favicon genérico y el panel abría con
+texto plano. `brand/icon.svg` es una bandera a cuadros con un arco de señal emitiendo desde la
+esquina. Dos elementos y no más, porque a 16 px cualquier tercero se vuelve una mancha: la bandera
+comunica "carreras" al instante y el arco comunica "telemetría", que es lo que distingue a esta app
+de cualquier otra herramienta de sim racing. La paleta no se inventa, son las variables CSS que el
+panel ya definía.
+
+### Tests
+
+El proyecto no tenía ninguno. Al cierre de la 0.3, `npm test` corre **123 casos** con el runner de
+Node (sin agregar dependencias) sobre lo que más conviene testear: lógica pura sobre paquetes
+decodificados.
+
+- Decodificador de `CLIENT_EVENT`, incluido el contrato de no tumbar el proceso ante un paquete
+  truncado — se prueba cortándolo en todas las longitudes posibles.
+- Las rarezas de codificación del protocolo: `CAR_INFO` con las cinco cadenas anchas, y
+  `NEW_CONNECTION` mezclando anchas (nombre, GUID) con angostas (modelo, skin). Y que en
+  `NEW_SESSION` la duración viene **antes** de las vueltas y en minutos: invertir esos dos campos
+  no rompe nada visible —da una carrera "a 10 vueltas" sin reloj, que es exactamente lo que parece
+  una carrera por vueltas— y por eso necesita un test y no una lectura atenta.
+- Motor de incidentes con reloj falso: correlación de las dos perspectivas, clasificación
+  geométrica, antiflood, no agrupar toques contra rivales distintos, y que el contexto guardado sea
+  el del momento del impacto.
+- Aprendizaje del trazado: persistencia entre reinicios, no mezclar circuitos, nombres de pista con
+  barras, y descarte de posiciones en (0,0).
+- Clasificación en vivo y deducción de marca, incluido que una marca que no está en la biblioteca
+  devuelva `null` en vez de un slug optimista.
+- Límites de pista: umbral de ruedas, mínimo de duración, reincidencia, ganancia de tiempo medida
+  contra la mejor vuelta limpia, validación cruzada contra los cortes del servidor, y que un
+  reporte con basura no cuente ni rompa.
+- Restauración desde el journal: división por motor, última escritura gana, corte por antigüedad,
+  línea final truncada, y que restaurar no vuelva a emitir los avisos de cada sanción.
+- Rotación de `raw.bin` y armado del informe de carrera.
+
+---
+
+## Tercera tanda: torre de tiempos en vivo
+
+### "Autos conectados" era una tabla de cuatro columnas
+
+Piloto, velocidad, vuelta y ping no alcanzan para dirigir una carrera. Ahora es una **torre de
+tiempos**: posición, logo de marca del auto, velocidad, vueltas, tiempos por sector, última vuelta,
+mejor vuelta, paradas en boxes, compuesto, combustible y ping. La mejor vuelta absoluta de la
+sesión va en morado y la mejor propia en verde, que es el código de color de cualquier timing de
+sim racing y por eso no hay que explicarlo.
+
+La posición se calcula en vivo: por progreso (vueltas + avance en el trazado) en carrera, y por
+mejor vuelta en práctica y clasificación. Ordenar una tanda libre por progreso daría un orden sin
+ningún significado — lidera el que más vueltas lleva dando, no el más rápido.
+
+Una vuelta con cortes cuenta como última vuelta pero **no** como mejor vuelta. El dato de cortes ya
+venía del servidor y se estaba ignorando.
+
+### La mitad de esas columnas no existe en el protocolo de AC
+
+Esto hay que decirlo claro: el UDP de Assetto Corsa **no transporta** tiempos por sector, compuesto,
+combustible ni paradas en boxes. `LAP_COMPLETED` trae el tiempo total de la vuelta y los cortes, y
+se acabó. La única fuente es la Shared Memory del juego, que corre en la PC de cada piloto.
+
+Así que esas columnas vienen de la app del piloto, por el mismo heartbeat que ya existía — un solo
+canal, misma validación, mismo modo de fallo. El intervalo bajó de 5 s a 2 s para que la torre se
+sienta en vivo. Un piloto sin la app aparece con todo lo autoritativo (posición, velocidad, vueltas,
+tiempos de vuelta) y guiones en el resto: degrada bien, y de paso convierte la app en algo que el
+piloto quiere tener instalado en vez de algo que se le impone.
+
+En el cliente, las structs de Shared Memory pasaron a declararse completas con `ctypes` en vez de
+calcular offsets a mano. No es cosmético: **el offset de la bandera que había (68) caía dentro del
+array `lastTime`** — estaba mal, y estaba mal porque un número suelto no hay forma de revisarlo.
+Declarada la struct, los offsets los calcula ctypes y ese error no puede volver a pasar.
+
+Queda pendiente de verificación en pista si `lastSectorTime` es acumulado desde el inicio de la
+vuelta o ya viene por sector. Se asume acumulado (el consenso de las implementaciones
+comunitarias), con detección del otro caso y descarte de valores absurdos: ante la duda la columna
+muestra un guion, nunca un número inventado.
+
+### Logos de marca, de la propia instalación de Assetto Corsa
+
+El logo de cada auto sale de `content/cars/<modelo>/ui/badge.png` del juego instalado en la PC del
+admin. Se busca solo (registro de Steam, más `libraryfolders.vdf` para instalaciones en otro
+disco) y se puede corregir a mano desde el cajón de reglas.
+
+> **Revertido en la octava tanda.** Obligaba a que el admin tuviera Assetto Corsa instalado en la
+> misma PC que el backend, que no es el caso de quien dirige la carrera sin correrla. Se reemplazó
+> por una biblioteca de logos empaquetada con la app.
+
+### Layout y barra superior
+
+- El mapa pasó a ocupar **la mitad** del ancho de la torre, al costado, en vez de una fila entera
+  abajo.
+- La largada pasó de tarjeta cuadrada a **banda horizontal arriba**: el semáforo y sus tres botones
+  en una sola fila, un sexto del alto que ocupaban. Va arriba y no abajo porque es lo único de la
+  pantalla que es secuencial —se usa una vez, al principio— y dejarla abajo obligaría a bajar la
+  vista en el único momento de la carrera en que el admin no puede distraerse.
+- Orden de la barra: **Control de carrera** (antes "En pista") → Sanciones → Reglas → **Conexión**
+  (antes el botón de "Sin señal"). El switch de modo queda donde estaba.
+- "Control de carrera" lleva una **bandera a cuadros que ondea solo con la carrera en curso**. Antes
+  había que buscar el semáforo de la tarjeta de largada y leerlo; con el panel en una segunda
+  pantalla, eso es justo lo que no se quiere tener que hacer. Respeta `prefers-reduced-motion`: ahí
+  se queda quieta y el estado lo comunica el color.
+- Los cajones laterales scrollean por dentro, documentado como segunda excepción deliberada a la
+  regla de "una sola pantalla" (la primera son las tablas). Cinco secciones de configuración no
+  entran en 768 px de alto en ninguna resolución realista, y el cajón es una capa flotante **por
+  encima** de la pantalla de carrera, no parte de ella.
+
+---
+
+## Cuarta tanda: límites de pista
+
+### Las salidas de pista no las puede ver el servidor
+
+El UDP de Assetto Corsa no dice si un auto tiene ruedas afuera. Lo único que manda es `cuts` al
+cerrar la vuelta: cuántos cortes hizo, sin decir dónde, cuándo ni de qué tamaño. Así que la
+detección la hace la app del piloto leyendo `numberOfTyresOut` de la Shared Memory.
+
+Lo que viaja al backend son **transiciones**, no un stream: la salida se encola recién cuando
+termina, con cuánto duró y cuántas ruedas llegó a tener afuera. Mandar el valor instantáneo cada
+2 segundos no serviría — una salida típica dura menos que eso y caería justo entre dos muestras.
+El muestreo es a 4 Hz, que es lo que corresponde a una app corriendo dentro del juego: no debe
+competir por CPU con el render.
+
+El umbral (2 o 4 ruedas) lo aplica el **servidor**, no el cliente: el cliente detecta todo desde 2
+ruedas y manda el máximo observado. Así, cambiar la regla desde el panel no obliga a que 24 pilotos
+actualicen la app.
+
+Configurable desde el cajón de reglas: si se controla o no, cuántas ruedas cuentan, cuántas salidas
+antes de avisar, cuánto dura la salida mínima, y si una salida con ganancia de tiempo va directo a
+la bandeja. Por defecto: 4 ruedas, 3 salidas, 300 ms. Se avisa a la reincidencia y no a la primera,
+que es el modelo de "track limits" de las categorías reales.
+
+### Ganancia de tiempo: contra la mejor vuelta *limpia*
+
+Una salida es un error; una salida en la vuelta más rápida del piloto es otra cosa. La comparación
+es contra su mejor vuelta **sin salidas y sin cortes**, no contra su mejor vuelta a secas: si no, la
+primera vuelta sucia y rápida sube el listón y tapa todas las siguientes.
+
+### El cliente es editable, así que se contrasta
+
+El cliente es un `.py` en texto plano en la PC del piloto. La defensa no es cifrarlo, es
+contrastarlo contra lo que el servidor sí sabe. Si el servidor viene contando cortes que la app del
+piloto nunca informó, eso mismo entra en la bandeja como *telemetría inconsistente*.
+
+La comparación es **acumulada por sesión, no vuelta a vuelta**, y esto importa: el heartbeat viaja
+cada 2 s, así que una salida justo antes de la línea de meta llega después del `LAP_COMPLETED` y
+queda contada en la vuelta siguiente. Vuelta a vuelta, ese desfasaje daría falsos positivos todo el
+tiempo. Lo que un desfasaje no puede producir es una diferencia que crece y nunca se cierra — por
+eso la tolerancia es de 3 y la cuenta es acumulada.
+
+Un piloto **sin** la app nunca genera este aviso: sin telemetría no hay nada que contrastar, y
+reclamarle incoherencia a quien no reporta nada sería acusarlo por no tener la app instalada.
+
+Los contadores están indexados por `driverGuid` y **sobreviven a una desconexión**. Borrarlos al
+desconectar convertiría el Alt+F4 en una forma de limpiar el contador de límites de pista.
+
+### `isValidLap` no existe en Assetto Corsa
+
+Es un campo de ACC, no de AC. La página `acpmf_graphics` de AC termina en `mandatoryPitDone` y no
+expone validez de vuelta. O sea que `cuts` del servidor no es *una* señal de vuelta invalidada: es
+la única que hay, lo cual es justamente lo que hace que valga la pena cruzarla.
+
+### La bandeja ahora tiene cuatro tipos
+
+Toque entre autos, choque en solitario, límites de pista y telemetría inconsistente — en la misma
+lista a propósito: para el comisario son todos "algo que revisar", y partirlos en dos lo obligaría a
+mirar en dos lados durante la carrera. Los que no son colisión no muestran velocidad de impacto: el
+backend manda el campo ausente en vez de un cero, así que el panel omite la línea en lugar de
+afirmar "impacto a 0 km/h", que sería un dato que nadie midió.
+
+Como el resto de la bandeja: **reporta, no sanciona**.
+
+---
+
+## Quinta tanda: catálogo de infracciones y presets
+
+### Dos bloques gemelos de velocidad no son un catálogo
+
+La configuración eran dos bloques con la misma forma (largada y pit lane) y, por cada tipo nuevo de
+infracción, un `enabled` booleano. Eso dejaba afuera la única decisión que un admin de liga
+realmente quiere tomar: no *si* se mira, sino **qué pasa cuando ocurre**.
+
+De ahí `action`, que es el mismo campo en todos los tipos: `No controlar` / `Solo registrar` /
+`Mandar a revisar` / `Sancionar solo`.
+
+**La sanción automática solo se ofrece donde el hecho es objetivo.** Hoy eso es un tipo solo:
+límites de pista. Contar ruedas afuera no se interpreta. En un toque el servidor sabe que hubo
+contacto, **no de quién fue la culpa**: ofrecer "sancionar solo" ahí sería prometer un juicio que
+el dato no respalda. La lista de qué tipos lo admiten la manda el backend en `/api/catalog`, no la
+duplica el panel: si vive en dos lados, tarde o temprano el panel ofrece una opción que el servidor
+va a rechazar.
+
+### Presets por tipo de torneo
+
+Un admin no técnico no tiene forma de saber qué umbral de impacto poner. Elige *Carrera casual*,
+*Campeonato* o *Simulación estricta* y todos los números quedan puestos; después puede tocar lo que
+quiera, y tocar algo a mano no invalida el preset — es un punto de partida, no un candado.
+
+Cada preset es un **patch** sobre los valores por defecto, no un catálogo completo: así, agregar un
+tipo de infracción nuevo no obliga a tocar los tres presets ni deja huecos silenciosos.
+
+---
+
+## Sexta tanda: el enlatado
+
+### El wizard decía que detectaba cosas que eran constantes
+
+El asistente de primer arranque pedía el nombre de la liga y afirmaba que "el resto (puertos, IP
+pública) se detecta solo", lo cual era falso para los puertos: eran constantes en el código. Ahora
+son cuatro pasos —liga → tipo de torneo → conexión → comprobación en vivo— y el último de verdad
+verifica que llegue telemetría antes de dejar pasar.
+
+### "Probar conexión" en castellano llano
+
+Cuatro chequeos en orden, cada uno con qué hacer si falló: tu dirección en internet, señal del
+servidor de carrera, órdenes hacia el servidor, y la app de los pilotos. Los dos últimos están
+separados a propósito: el servidor puede estar mandando telemetría perfecta mientras ningún piloto
+logra alcanzar el puerto de clientes, y antes eso se veía todo verde.
+
+### Puertos ocupados y guía genérica
+
+- Si el 3000 está tomado por otro programa, el arranque se corre al siguiente libre y abre el
+  navegador ahí. Antes el panel no abría y el error salía solo por consola.
+- La guía dejó de ser "de EmperorServers": el snippet que genera (`UDP_PLUGIN_LOCAL_PORT` /
+  `UDP_PLUGIN_ADDRESS`) es estándar de Assetto Corsa y sirve para cualquier hosting. Era solo
+  cuestión de nombrarlo y documentarlo como tal.
+
+---
+
+## Séptima tanda: persistencia, informe de carrera y sanciones del comisario
+
+### Las sanciones vivían solo en memoria
+
+Si el proceso se reiniciaba a mitad de carrera, se perdían todas. El journal ya registraba todo en
+JSONL; lo que faltaba era reconstruir el estado al arrancar. Ahora se reconstruyen sanciones e
+incidentes desde el journal, con corte por antigüedad y descartando lo anterior al último
+`NEW_SESSION` —una sanción de la carrera de ayer no tiene por qué revivir hoy—.
+
+**Dos bugs que aparecieron al escribir esto, y que importan más que la función:**
+
+- **El journal escribía con un `WriteStream`.** El buffer de un stream se pierde entero si el
+  proceso se corta sin cerrarlo, que es *exactamente* el caso que la restauración existe para
+  cubrir. Pasó a escritura sincrónica: son unos pocos eventos por vuelta y el costo no se nota.
+- **La rotación de `raw.bin` no rotaba nunca en Windows.** `stream.end()` cierra el archivo de
+  forma asincrónica, y renombrar un archivo todavía abierto falla con EBUSY — el error caía en el
+  `catch` que existía para no tumbar la carrera por un problema de disco, y la rotación quedaba
+  atrapada ahí en silencio. En el único sistema operativo donde corre esto. También pasó a
+  descriptor y `closeSync`. Hay tests que verifican que rote, que no parta un registro entre dos
+  archivos, que no conserve un historial y que dos rotaciones en el mismo milisegundo no se pisen.
+
+### Informe de carrera descargable
+
+Botón "Descargar informe de carrera" en la vista de sanciones: un CSV con la clasificación, los
+segundos de penalización de cada piloto, todas las sanciones y todos los incidentes revisados. Es
+un CSV y no un PDF porque lo que el admin hace con esto es pegarlo en la planilla del campeonato.
+Separado por `;` y con BOM: Excel en español parte por coma decimal, y sin BOM rompe los acentos
+de los nombres de los pilotos en la primera fila.
+
+**Lo que el informe no trae: tiempo total de carrera por piloto.** El UDP de AC no lo transporta —
+`LAP_COMPLETED` manda el tiempo de *esa* vuelta y nada más—. Acumular vueltas daría un número
+parecido al oficial y distinto, que es la peor clase de dato en un informe que decide un
+campeonato. Por eso la clasificación es por progreso y los segundos de penalización van en su
+propia columna, para sumarlos sobre el resultado del servidor.
+
+### "Sancionar" en la bandeja no sancionaba
+
+Resolver un incidente como *sancionado* solo cambiaba el estado del incidente. No se le avisaba al
+piloto, no quedaba en la tabla de sanciones aplicadas, no se persistía y no sobrevivía a un
+reinicio: la decisión del comisario se perdía.
+
+Ahora hay un tercer motor de sanciones (`steward`) con sus propias reglas, separado de las de pit
+lane para que cambiar la gracia de pit no altere lo que decide un comisario. Al sancionar se elige
+**a quién** —un toque tiene dos pilotos y el servidor no sabe de quién fue la culpa— y **qué**:
+penalización de tiempo, Drive-Through, Stop & Go o lastre. La sanción resultante se chatea al
+piloto, aparece en la tabla, se persiste y se restaura.
+
+Esto cerró además un pendiente viejo: `timePenaltySeconds` estaba definido desde la 0.1 y no se
+usaba en ningún lado. Ahora es el tipo de sanción `TIME`, que es inmediata (no tiene nada que
+"cumplir": son segundos al resultado final) y es la que alimenta la columna del informe.
+
+La validación va **antes** de resolver: `resolve()` es irreversible, y un tipo de sanción inválido
+dejaría un incidente marcado "sancionado" sin ninguna sanción detrás.
+
+---
+
+## Octava tanda: pedidos sobre el panel ya funcionando
+
+### El auto se ve por su logo, no por su nombre
+
+Un nombre obliga a leer; una forma constante se reconoce de un vistazo, que es para lo que existe
+un logo. La columna "Auto" muestra el logo de la marca.
+
+**El logo dejó de salir de la instalación de Assetto Corsa.** La idea anterior (leerlo de
+`content/cars/<modelo>/ui/badge.png`) funcionaba, pero obligaba a que el admin tuviera el juego
+instalado en la misma PC que el backend —que no es el caso de quien dirige la carrera sin
+correrla— y a hurgar en el registro de Steam para encontrarlo. Ahora viene una **biblioteca de 126
+SVG empaquetada con la app**, armada con los sets MIT `car-brand-logos` y `car-makes-icons`
+(ninguno de los dos alcanza solo: al primero le faltan Lamborghini y Ford, al segundo Pagani,
+Lancia y Alpine). Procedencia y cómo actualizarla, en `server/src/api/public/brands/LEEME.md`.
+
+Las marcas que no están —Lancia, Pagani, Praga, KTM, Tatuus y unas cuantas de competición— caen a
+un **escudo con el monograma** de la marca en un color derivado del nombre. El backend decide cuál
+de las dos cosas va y manda `brandLogo: null` cuando no hay archivo: así el panel dibuja el escudo
+de una, en vez de pedir una imagen, esperar el 404 y reemplazarla —que se veía como un parpadeo en
+cada fila de auto mod—. RUF y Shelby llevan el logo de la marca sobre la que están construidos.
+
+### "Carrera en curso" se nota
+
+Dada la luz verde, la banda de largada se enciende con un borde verde y un indicador pulsante.
+Antes el único cambio era el texto del semáforo, que es exactamente lo que no se ve de reojo
+desde una segunda pantalla. La animación respeta `prefers-reduced-motion`.
+
+El botón de reset pasó a llamarse **"Reiniciar largada"** y explica qué hace al pasar el mouse:
+vuelve el semáforo a "Esperando" y apaga el control de velocidad de formación, para rearmar una
+largada abortada. No borra las sanciones ya emitidas ni toca el servidor de Assetto Corsa.
+
+### El mapa en vivo muestra las condiciones de la sesión
+
+Arriba del trazado: circuito y variante, nombre y tipo de sesión, duración, clima, temperatura de
+aire y pista, y agarre. Abajo, el **tiempo restante** en grande, que se pone ámbar sobre el final.
+
+**No hay viento ni hora del juego, y no es un olvido: no existen en Assetto Corsa.** Son campos de
+ACC. La `SPageFileGraphic` de AC termina en `mandatoryPitDone`. Poner esas columnas con un "--"
+permanente sería peor que no ponerlas: parecería que algo está mal configurado.
+
+### Menos preguntas en el cajón de reglas
+
+Se sacaron las que un admin no sabe cómo responder y que estaban puestas por completitud, no por
+necesidad: el umbral de "registrar desde (km/h)" de toques y choques en solitario (sigue en la
+config, con su valor por defecto), y el aviso de ganancia de tiempo en salidas de pista.
+
+**Las banderas azules se quitaron por completo**, no se escondieron. Detectar "retención" con el
+spline y un contador de segundos produce falsos positivos en cualquier curva lenta con tren de
+autos, y un detector que sigue llenando la bandeja sin forma de configurarlo es peor que no
+tenerlo. Se borró el vigía, su configuración y sus tests.
+
+### El ejecutable dice "Race Control"
+
+El `.exe` muestra el logo en el Explorador, y SmartScreen y el Firewall dicen "Race Control" en vez
+de "node" — que es el momento exacto en el que un admin no técnico desconfía y cierra todo.
+
+El intento de la 0.2.1 corría `rcedit` sobre el `.exe` ya armado por pkg y corrompía su payload
+("Pkg: Error reading from file" al arrancar). El diagnóstico era correcto, la conclusión no: **el
+problema era el orden, no la herramienta**. Ahora se marca el *binario base de Node* —antes de que
+pkg le inyecte nada— y se le dice a pkg que use ese, con `PKG_NODE_PATH`. Como rcedit toca el PE
+cuando todavía no hay payload, no hay nada que corromper. Verificado ejecutando el `.exe`
+resultante desde una carpeta nueva, que es el escenario que destapó los bugs de la 0.2.1.
+
+El `.ico` multi-resolución (16 a 256 px) se genera de `brand/icon.svg` y se versiona, para que
+empaquetar no dependa de tener un rasterizador instalado.
+
+### Exigir la app del piloto ahora es una decisión, no un hecho consumado
+
+`presence.enforce` existía en la config desde la primera tanda y **no estaba en ninguna pantalla**:
+venía activado y la única forma de apagarlo era editar el `config.json` a mano, que es exactamente
+lo que este proyecto existe para evitar. Con el default puesto, un piloto sin la app se iba del
+servidor al minuto y el admin no tenía dónde cambiar eso.
+
+Está en **Reglas → App de los pilotos**, junto con el tiempo de espera. Se descubrió revisando la
+documentación contra el código: el README prometía que la app era opcional y el código no lo
+cumplía. La corrección podía ir de los dos lados; se eligió el que le da la decisión al admin.
+
+---
+
+## Primera tanda: bloqueantes contra un hosting remoto
+
+### El backend le hablaba a sí mismo
+
+`acUdp.remoteHost` estaba fijo en `127.0.0.1` y no era configurable desde ningún lado: ni el
+panel, ni el snippet, ni la guía lo tocaban. Contra un servidor en un hosting, **todo** el tráfico
+saliente moría en loopback: el chat de penalización, los kicks, `/ballast` y el keepalive que abre
+el pinhole de NAT del que depende la estrategia de red `"direct"`. El backend recibía telemetría
+perfecta y no podía contestar absolutamente nada.
+
+Esto explica, además, por qué la conectividad "directa" nunca podía funcionar sola: el pinhole se
+abre mandando tráfico al servidor, y ese tráfico no salía de la PC.
+
+- **Fix**: el servidor de AC se identifica solo. `adoptRemoteHostIfNeeded()` en
+  `server/src/udp/client.ts` toma la dirección de origen del primer datagrama recibido y la adopta
+  si la configurada sigue siendo loopback. El admin no tiene que saber la IP de su servidor, que
+  era justamente la promesa del README ("ni una IP que tipear").
+- Se adopta la dirección pero **no** el puerto de origen: el puerto de comandos es el que el admin
+  declaró en `UDP_PLUGIN_LOCAL_PORT`, y ese es el valor autoritativo. El puerto de origen igual se
+  registra en el journal, porque sería el dato que explicaría un fallo si alguna versión del
+  servidor se comportara distinto. (En la prueba local el origen fue un puerto efímero, lo que
+  confirma que adoptarlo a ciegas habría sido frágil.)
+- El host detectado se persiste en `config.json`, así el siguiente arranque ya sale configurado.
+- El panel ahora muestra **a dónde salen los comandos**, y lo marca en rojo si sigue en loopback
+  mientras entra telemetría — el síntoma exacto de este bug. Se agregó también un campo manual
+  para hostings que no se identifiquen solos.
+
+### El modo sombra no frenaba los kicks
+
+`PresenceWatchdog` llamaba a `udpClient.kick()` directo, sin pasar por `dispatchOrSuppress` y sin
+dejar rastro en el journal. Con el modo sombra activado por defecto, la primera carrera de prueba
+—el escenario que el README recomienda explícitamente— expulsaba a todo piloto sin la app
+instalada a los 15 segundos. Lo contrario de lo que el panel promete, sin evidencia de qué pasó, y
+en el momento de máxima desconfianza hacia la herramienta.
+
+- **Fix**: el watchdog ya no conoce al `udpClient`. Recibe un `dispatchKick` que `index.ts` cablea
+  con el mismo `dispatchOrSuppress` que usan las sanciones, así el modo sombra vale también acá y
+  todo kick queda en el journal.
+- Un solo kick por piloto por conexión. En modo sombra el kick se suprime, así que el piloto sigue
+  conectado y la condición volvía a dispararse en cada tick: sin esto, el arreglo anterior habría
+  inundado el journal con el mismo evento cada 5 segundos durante toda la carrera.
+- Gracia configurable (`presence.graceSeconds`) y subida de 15 s a 60 s. Los 15 s anteriores eran
+  **menores** que la ventana de auto-discovery (5 reintentos × 4 s): un piloto que activaba la app
+  después de entrar al servidor era expulsado antes de poder recibir la dirección del backend.
+- `presence.enforce` permite desactivar el kick por presencia sin apagar el resto del motor.
+
+### Las sanciones de largada nunca se podían cumplir
+
+`PitComplianceTracker` se instanciaba solo con el motor de pit, así que `markServed()` nunca se
+llamaba para una sanción de formación. Con el default `penaltyType: "DT"`, un piloto sancionado en
+la largada cumplía el Drive-Through correctamente y escalaba a DQ igual al agotar las vueltas de
+gracia. El mensaje que recibía —"Tenés N vuelta(s) para cumplirla"— era literalmente falso.
+
+- **Fix**: el tracker recibe ahora la lista de motores. El pit lane es físicamente uno solo: una
+  sanción se cumple pasando por ahí, sin importar qué motor la emitió.
+- La velocidad legal de pit se pasa explícitamente desde `config.pit`, en vez de leerse del motor
+  que emitió la sanción — el límite del pit lane no cambia según por qué te sancionaron.
+
+### El puerto de los pilotos no se abría
+
+El mapeo UPnP del puerto TCP de clientes vivía dentro de la rama de fallo del UDP. El problema es
+que el pinhole de NAT que hace entrar la telemetría UDP no abre nada para el TCP entrante de los
+pilotos: con el UDP entrando "directo", la función retornaba temprano y ese puerto no se tocaba
+nunca. El panel mostraba "directa / recibiendo" en verde mientras ningún piloto podía mandar
+heartbeat — y todos terminaban kickeados por el watchdog.
+
+- **Fix**: el puerto de clientes se mapea siempre, antes de cualquier otra cosa.
+- El panel separa ahora **"señal del servidor"** de **"pilotos reportando"**. Son dos cosas
+  distintas que fallan por separado, y mostrarlas juntas era lo que hacía que el estado diera todo
+  verde justo antes de que empezaran los kicks.
+
+### Robustez de config
+
+- `validateConfig` valida puertos y dirección remota, que antes no se validaban.
+- Guarda contra un `config.json` con `null` o un escalar donde se espera un objeto: `mergeConfigInto`
+  solo recursa cuando ambos lados son objetos, así que lo copiaba tal cual y el arranque moría con
+  un `TypeError` al leer un campo anidado.
+
+### Verificación
+
+El host remoto se probó end-to-end simulando un servidor de AC que manda un `NEW_SESSION` desde la
+IP de LAN: el backend lo detectó, lo persistió y lo registró en el journal. El cumplimiento de
+sanciones de largada y el modo sombra del watchdog se verificaron con un script contra el código
+compilado (7 casos, incluido el negativo de pasar por el pit por encima del límite).
+
+Para la segunda tanda, además de los 18 tests: un servidor de AC falso mandando tráfico UDP real
+(sesión, tres pilotos, dos vueltas de telemetría, un toque entre autos y un trompo de 15 impactos)
+contra el backend corriendo. Resultado: dos incidentes en la bandeja y no dieciséis —el toque
+unificado con las dos perspectivas y clasificado como trompa contra cola, el trompo agrupado con su
+contador—, el circuito aprendido y guardado en disco, el kick manual ejecutado y los automáticos
+suprimidos por el modo sombra. El panel se verificó en Chromium a 1920×1080 y 1366×768: sin scroll
+de página en ninguna de las dos vistas, sin errores de consola, el trazado efectivamente dibujado
+en el canvas, y la doble confirmación del kick armando y desarmándose sola.
+
 ## [0.2.3] — 2026-10-09
 
 Tercer intento sobre el mismo síntoma — esta vez probado con un navegador real (Playwright +

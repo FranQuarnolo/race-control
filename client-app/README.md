@@ -18,8 +18,13 @@ reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 - Muestra en un overlay separado los avisos de sanción (PENALIDAD) que le manda el servidor.
 - Muestra en otro overlay la bandera de pista actual (leída directo de la Shared Memory del
   juego, no depende del servidor).
-- Manda un heartbeat al backend cada 5 segundos — si no lo hace, el sistema puede kickear al
-  piloto del servidor (la app no es opcional).
+- Manda un heartbeat al backend cada 2 segundos. Si el admin dejó activado "Exigir que todos la
+  tengan" (Reglas → App de los pilotos, que viene activado), el piloto que no la tenga es
+  expulsado del servidor pasado el tiempo de espera.
+- Reporta en ese mismo heartbeat la telemetría que el protocolo UDP de Assetto Corsa **no**
+  transporta y que solo existe dentro del juego: tiempos por sector, compuesto, combustible,
+  paradas en boxes y salidas de pista. Es lo que llena la torre de tiempos del panel; un piloto
+  sin la app aparece ahí con guiones en esas columnas.
 - La ventana es una app normal de Content Manager: el piloto la puede mover/redimensionar como
   cualquier otra.
 
@@ -42,7 +47,11 @@ Ver `server/src/udp/announcer.ts`.
 ## Pendiente de verificar contra la API real de AC (ver docs/spike-protocolo.md)
 
 - Nombre/firma exacta de `ac.addOnChatMessageListener` y `ac.getUserSteamID()`.
-- Offset exacto del campo `flag` dentro de la Shared Memory (`Local\acpmf_graphics`) que usa el
-  overlay de bandera de pista — tomado de referencias comunitarias, no confirmado todavía.
-- Si hace falta, migrar la detección de corte de pista (futuro) a lectura de Shared Memory
-  (`numberOfTyresOut`) — no implementado todavía, solo documentado como iteración futura en el plan.
+- Si `lastSectorTime` es acumulado desde el inicio de la vuelta (y los sectores salen por
+  diferencia) o ya viene por sector. Se asume acumulado, con detección del otro caso y descarte de
+  valores absurdos: ante la duda la columna del panel muestra un guion, nunca un número inventado.
+
+Los offsets de Shared Memory ya **no** están en esta lista: las páginas `acpmf_physics` y
+`acpmf_graphics` se declaran como structs completas de `ctypes` y los offsets los calcula él. El
+offset de la bandera que había antes a mano (68) caía dentro del array `lastTime` — era un número
+suelto, y un número suelto no hay forma de revisarlo.

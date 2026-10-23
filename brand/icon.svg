@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Race Control">
+  <!--
+    Marca de Race Control: bandera a cuadros + arco de señal.
+
+    Dos elementos, no más: el ícono tiene que seguir siendo legible a 16x16 px en la barra de
+    tareas y en la pestaña del navegador, y ahí cualquier tercer elemento se vuelve una mancha.
+    La bandera comunica "carreras" al instante; el arco comunica "telemetría / control remoto",
+    que es lo que distingue a esta app de cualquier otra herramienta de sim racing.
+
+    La paleta no se inventa: son las mismas variables CSS que define el panel (index.html), así
+    que el ícono y la interfaz quedan coherentes sin trabajo extra.
+  -->
+  <defs>
+    <clipPath id="rc-flag-clip">
+      <rect x="44" y="76" width="128" height="104" rx="8" />
+    </clipPath>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="#0f1115" />
+
+  <!-- Bandera a cuadros 2x2. Sin más subdivisiones: a 16 px un damero de 4x4 se gris-ifica. -->
+  <g clip-path="url(#rc-flag-clip)">
+    <rect x="44" y="76" width="128" height="104" fill="#e6e8ec" />
+    <rect x="44" y="76" width="64" height="52" fill="#3fa9f5" />
+    <rect x="108" y="128" width="64" height="52" fill="#3fa9f5" />
+  </g>
+  <rect x="44" y="76" width="128" height="104" rx="8" fill="none" stroke="#272b35" stroke-width="4" />
+
+  <!-- Mástil: ancla la bandera para que no flote y da el eje vertical del conjunto. -->
+  <rect x="32" y="68" width="14" height="128" rx="7" fill="#8b93a3" />
+
+  <!-- Arco de señal emitiendo desde la esquina superior derecha. -->
+  <g fill="none" stroke="#35c76e" stroke-width="13" stroke-linecap="round">
+    <path d="M181 92 a34 34 0 0 1 24 24" />
+    <path d="M181 60 a66 66 0 0 1 56 56" opacity="0.55" />
+  </g>
+</svg>

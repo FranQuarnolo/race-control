@@ -1,0 +1,877 @@
+/*
+  Panel de Race Control.
+
+  Regla de oro del layout: TODO entra en una sola pantalla, sin scroll de página. Durante una
+  carrera el admin mira dos cosas —la torre de tiempos y el mapa— y no puede estar scrolleando
+  para encontrarlas.
+
+  Dos excepciones deliberadas, las dos adentro de su propia caja y nunca en la página:
+
+  1. Las tablas scrollean con el encabezado fijo. Con 24 pilotos en parrilla no hay layout que
+     entre sin eso, y la alternativa —achicar la fuente hasta que entre— es peor.
+  2. Los cajones laterales (Reglas, Conexión) scrollean. Cinco secciones de configuración no
+     entran en 768 px de alto en ninguna resolución realista. Son una capa flotante POR ENCIMA de
+     la pantalla de carrera, no parte de ella: que scrolleen no rompe lo que la regla protege.
+*/
+
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-border: #272b35;
+  --text: #e6e8ec;
+  --muted: #8b93a3;
+  --accent: #3fa9f5;
+  --green: #35c76e;
+  --yellow: #e0b84b;
+  --red: #e05555;
+  --purple: #b47ff0;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden; /* la regla de oro, ver arriba */
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------------------------------------------------------------- barra superior */
+
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2.5%;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+
+.topbar .brand { display: flex; align-items: center; gap: 9px; }
+.topbar .brand img { width: 26px; height: 26px; display: block; }
+.topbar h1 { font-size: 15px; margin: 0; letter-spacing: 0.01em; white-space: nowrap; }
+.topbar .version { color: var(--muted); font-size: 12px; }
+.topbar .league {
+  color: var(--muted);
+  font-size: 13px;
+  padding-left: 10px;
+  border-left: 1px solid var(--panel-border);
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar .spacer { flex: 1 1 auto; }
+
+nav.views { display: flex; gap: 4px; }
+nav.views a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+nav.views a:hover { background: #20242e; color: var(--text); }
+nav.views a[aria-current="page"] { background: #20242e; color: var(--text); }
+
+.count-badge {
+  background: var(--red);
+  color: #1a0505;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.count-badge[hidden] { display: none; }
+
+/* Bandera a cuadros que ondea solo cuando la carrera está en curso. Es el indicador que faltaba:
+   antes había que deducir si la carrera arrancó mirando el semáforo de la tarjeta de largada. */
+.flag-icon { display: flex; flex: 0 0 auto; }
+.flag-icon svg { width: 15px; height: 15px; display: block; overflow: visible; }
+.flag-icon .mast { stroke: var(--muted); stroke-width: 1.4; stroke-linecap: round; }
+.flag-icon .cloth { fill: var(--muted); transform-origin: 4px 5px; }
+.flag-icon .cloth-bg { fill: rgba(139, 147, 163, 0.25); }
+
+.flag-icon.racing .mast { stroke: var(--green); }
+.flag-icon.racing .cloth { fill: var(--green); animation: flag-wave 0.75s ease-in-out infinite alternate; }
+.flag-icon.racing .cloth-bg { fill: rgba(53, 199, 110, 0.28); }
+
+@keyframes flag-wave {
+  from { transform: skewY(-7deg) scaleX(1); }
+  to { transform: skewY(7deg) scaleX(0.9); }
+}
+
+/* Un indicador de estado no puede depender solo del movimiento: con el movimiento apagado el
+   color sigue diciendo lo mismo. */
+@media (prefers-reduced-motion: reduce) {
+  .flag-icon.racing .cloth { animation: none; }
+}
+
+/* El botón de conexión se pinta solo: verde si hay servidor confirmado y entra telemetría, rojo
+   si falta algo. Es el estado que el admin necesita mirar de reojo, no uno que deba ocupar un
+   cuarto de la pantalla como antes. */
+.status-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--panel-border);
+  background: #20242e;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.status-button:hover { border-color: #39404f; }
+.status-button .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: 0 0 auto;
+}
+.status-button.ok { border-color: rgba(53, 199, 110, 0.45); color: var(--green); }
+.status-button.ok .dot { background: var(--green); box-shadow: 0 0 7px rgba(53, 199, 110, 0.7); }
+.status-button.bad { border-color: rgba(224, 85, 85, 0.45); color: var(--red); }
+.status-button.bad .dot { background: var(--red); box-shadow: 0 0 7px rgba(224, 85, 85, 0.7); }
+
+/* Switch de modo. Antes era un checkbox dentro de una tarjeta entera; se podía correr una
+   carrera completa sin notar que el motor no estaba sancionando. Ahora está siempre visible. */
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 7px;
+  padding: 5px 11px 5px 12px;
+  background: #20242e;
+  cursor: pointer;
+  user-select: none;
+}
+.mode-switch .mode-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.mode-switch.shadow { border-color: rgba(224, 184, 75, 0.45); }
+.mode-switch.shadow .mode-label { color: var(--yellow); }
+.mode-switch.live { border-color: rgba(53, 199, 110, 0.45); }
+.mode-switch.live .mode-label { color: var(--green); }
+
+.mode-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.mode-switch .track {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: #3a3f4c;
+  position: relative;
+  transition: background 0.15s;
+  flex: 0 0 auto;
+}
+.mode-switch .track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s;
+}
+.mode-switch.live .track { background: var(--green); }
+.mode-switch.live .track::after { transform: translateX(16px); }
+.mode-switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- vistas */
+
+main {
+  flex: 1 1 auto;
+  min-height: 0; /* sin esto el grid desborda el flex y reaparece el scroll de página */
+  width: 95%;
+  margin: 0 auto;
+  padding: 12px 0;
+  display: grid;
+  gap: 12px;
+}
+
+main[hidden] { display: none; }
+
+/* Largada como banda horizontal arriba, y debajo la torre de tiempos con el mapa al costado.
+   El mapa a 1fr contra 2fr de la torre: la mitad del ancho, que es todo lo que necesita.
+
+   La largada va ARRIBA y no abajo porque es lo único de la pantalla que es secuencial — se usa
+   una vez, al principio, y después no se toca. Dejarla abajo obligaría a bajar la vista en el
+   único momento de la carrera en que el admin no puede distraerse. */
+#view-live {
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "start  start"
+    "timing map";
+}
+#card-start { grid-area: start; }
+#card-timing { grid-area: timing; }
+#card-map { grid-area: map; }
+
+#view-sanciones {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.card > h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.card > h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; }
+
+/* Acción secundaria dentro del encabezado de una tarjeta: se lee como enlace, no compite con los
+   botones de la bandeja de incidentes, que son los que deciden una sanción. */
+.hint-action {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.hint-action:hover { border-color: var(--accent); }
+.hint-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- largada (banda) */
+
+#card-start {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 9px 15px;
+}
+#card-start > h2 { margin: 0; flex: 0 0 auto; }
+#card-start .semaforo { margin: 0; flex: 0 0 auto; }
+#card-start .btn-row { flex: 0 0 auto; }
+#card-start .start-hint { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
+
+.semaforo {
+  font-size: 19px;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px 0;
+  border-radius: 8px;
+  letter-spacing: 0.04em;
+  min-width: 170px;
+}
+.semaforo.idle { background: #1d2029; color: var(--muted); }
+.semaforo.formation { background: rgba(224, 184, 75, 0.15); color: var(--yellow); }
+.semaforo.green { background: rgba(53, 199, 110, 0.15); color: var(--green); }
+
+/* Carrera largada. La banda entera se enciende: borde verde, barra lateral y un aviso que late.
+   Es lo único de la pantalla que se mueve solo, así que se detecta por el rabillo del ojo sin
+   tener que leer nada — que es justo lo que se necesita con el panel en una segunda pantalla. */
+#card-start.racing {
+  border-color: rgba(53, 199, 110, 0.45);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+#card-start.racing .semaforo.green {
+  background: rgba(53, 199, 110, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(53, 199, 110, 0.45);
+}
+.race-live {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.race-live[hidden] { display: none; }
+.race-live .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: race-pulse 1.5s ease-in-out infinite;
+}
+@keyframes race-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(53, 199, 110, 0.55); }
+  60% { box-shadow: 0 0 0 8px rgba(53, 199, 110, 0); }
+}
+/* Mismo criterio que la bandera de la barra: sin animación, el estado sigue comunicándose por
+   color y por texto. Nadie se entera menos por tener el sistema en modo reducido. */
+@media (prefers-reduced-motion: reduce) {
+  .race-live .dot { animation: none; }
+}
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+button {
+  background: var(--accent);
+  color: #05121e;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+}
+button.secondary { background: #2a2f3a; color: var(--text); }
+button.danger { background: var(--red); color: #1a0505; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Botón de guardar que ya guardó: verde y deshabilitado hasta que algo cambie. Se compara
+   contra los últimos valores guardados, no contra un flag — así, si el admin cambia un valor y
+   lo vuelve a dejar como estaba, el botón se apaga solo. */
+button.saved,
+button.saved:disabled {
+  background: rgba(53, 199, 110, 0.18);
+  color: var(--green);
+  opacity: 1;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------- tablas */
+
+.table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--panel-border); }
+th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
+th.num, td.num { text-align: right; }
+td.num { font-variant-numeric: tabular-nums; }
+th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
+
+tbody tr.selectable { cursor: pointer; }
+tbody tr.selectable:hover { background: #1d2029; }
+/* Selección compartida con el mapa, en los dos sentidos: click acá resalta el auto allá. */
+tbody tr.selected, tbody tr.selected:hover { background: rgba(224, 184, 75, 0.14); }
+tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
+
+.empty { color: var(--muted); font-size: 13px; padding: 14px 6px; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge.ok { background: rgba(53, 199, 110, 0.15); color: var(--green); }
+.badge.warn { background: rgba(224, 184, 75, 0.15); color: var(--yellow); }
+.badge.bad { background: rgba(224, 85, 85, 0.15); color: var(--red); }
+.badge.neutral { background: rgba(139, 147, 163, 0.15); color: var(--muted); }
+
+.btn-mini {
+  background: #2a2f3a;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.btn-mini:hover { background: #343a47; color: var(--text); }
+/* Segundo paso del kick: el botón cambia de texto y de color, y se desarma solo a los 4 s. El
+   admin tiene que apretar dos veces a propósito, no puede expulsar a alguien de un click fallido. */
+.btn-mini.arming { background: var(--red); color: #1a0505; }
+
+/* ---------------------------------------------------------------- torre de tiempos */
+
+/*
+  Muchas columnas en poco ancho. Dos decisiones para que entre sin achicar la tipografía hasta lo
+  ilegible: todo lo numérico va en `nowrap` con tipografía tabular, y la columna del piloto se
+  queda con TODO el espacio sobrante (`width: 100%`), lo que empuja a las demás a su ancho mínimo.
+*/
+#timing-table { font-size: 12.5px; }
+#timing-table th, #timing-table td { padding: 5px 5px; white-space: nowrap; }
+#timing-table th.c-driver { width: 100%; }
+#timing-table td.c-driver { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+.c-pos {
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  width: 1%;
+}
+tbody tr.selected .c-pos { color: var(--yellow); }
+
+/* Logo de marca leído de la instalación local de Assetto Corsa. Fondo claro tenue porque los
+   badges del juego son logos a color pensados sobre fondo claro: sobre el panel oscuro, varios
+   (Porsche, Lotus) quedan casi invisibles. */
+.car-badge {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
+  background: rgba(230, 232, 236, 0.9);
+  border-radius: 4px;
+  padding: 1px;
+}
+/* Sin Assetto Corsa instalado, o auto mod sin badge: escudo con el monograma de la marca, del
+   mismo tamaño que el logo real para que la columna no salte de ancho al mezclarse las dos
+   fuentes en la misma parrilla. La forma se dibuja con clip-path: no hay archivos de logos de
+   terceros en el repo. */
+.brand-shield {
+  --shield: #3a4050;
+  --shield-ink: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--shield);
+  color: var(--shield-ink);
+  clip-path: polygon(50% 0%, 100% 14%, 100% 58%, 50% 100%, 0% 58%, 0% 14%);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+/* El monograma se sube un pelo: el escudo se angosta hacia abajo y centrado a la caja el texto
+   queda ópticamente bajo. */
+.brand-shield > span { transform: translateY(-1px); }
+.brand-shield.empty { clip-path: none; background: none; color: var(--muted); font-size: 11px; }
+td.c-car { width: 1%; }
+
+.sectors { display: flex; gap: 7px; font-variant-numeric: tabular-nums; }
+.sectors span { min-width: 5.2ch; text-align: right; color: var(--muted); font-size: 11.5px; }
+td.c-sectors { width: 1%; }
+
+.lap-time { font-variant-numeric: tabular-nums; }
+/* Mejor vuelta absoluta de la sesión. Es el dato que se busca primero en cualquier torre de
+   tiempos, y encontrarlo entre 24 números iguales sin un color es trabajo manual. */
+.lap-time.session-best { color: var(--purple); font-weight: 700; }
+.lap-time.personal-best { color: var(--green); }
+
+/* Fila de quien está en el pit lane ahora. El tinte vale más que la columna: se ve de un vistazo
+   quién está parado sin leer número por número. */
+tbody tr.in-pit { background: rgba(63, 169, 245, 0.07); }
+tbody tr.in-pit.selected { background: rgba(224, 184, 75, 0.14); }
+
+/* Columnas que solo existen con la app del piloto instalada. El guion es deliberado: el UDP de
+   Assetto Corsa no transporta estos datos, no hay forma de completarlos desde el servidor. */
+.nodata { color: #4d5564; }
+
+/* ---------------------------------------------------------------- mapa */
+
+/* Banda de condiciones, arriba del trazado. `flex: 0 0 auto` para que no le robe alto al mapa:
+   el mapa es el que absorbe lo que sobra (`flex: 1 1 auto`), no al revés. */
+#session-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 12px;
+}
+#session-bar[hidden] { display: none; }
+.session-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+.session-line:empty,
+.session-line > span:empty { display: none; }
+#ses-track { font-size: 14px; }
+
+/* El reloj de carrera: lo que el director mira de reojo. Tipografía tabular para que el número no
+   bailotee de ancho a cada segundo, que es lo que vuelve ilegible un cronómetro. */
+#session-clock {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+}
+#session-clock[hidden] { display: none; }
+#session-clock .label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#session-clock .value {
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+/* Último minuto: el aviso que importa cuando hay que decidir si entra una vuelta más. */
+#session-clock.ending .value { color: var(--warn); }
+
+#map-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+#map-canvas { display: block; width: 100%; height: 100%; }
+
+#map-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: #0c0e12;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+  transform: translate(-50%, -140%);
+  z-index: 2;
+}
+#map-tooltip[hidden] { display: none; }
+#map-tooltip .car-number { color: var(--muted); }
+
+#map-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 0 24px;
+}
+#map-empty[hidden] { display: none; }
+#map-progress {
+  width: 200px;
+  height: 5px;
+  border-radius: 999px;
+  background: #272b35;
+  overflow: hidden;
+}
+#map-progress > div { height: 100%; background: var(--accent); width: 0; transition: width 0.4s; }
+
+/* ---------------------------------------------------------------- incidentes */
+
+.incident {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 9px;
+  background: #1b1d25;
+}
+.incident.resolved { opacity: 0.55; }
+.incident .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+.incident .who { font-weight: 600; }
+.incident .meta { color: var(--muted); font-size: 12px; }
+.incident .ctx { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.incident .btn-row { gap: 6px; }
+
+/* Formulario de sanción manual. Una sola fila: a quién, qué, cuánto, aplicar. */
+.penalty-form {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.penalty-form select,
+.penalty-form input.seconds {
+  background: #15181f;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+.penalty-form input.seconds { width: 5.5ch; }
+.penalty-form input.seconds[hidden] { display: none; }
+.penalty-form select:disabled { opacity: 0.7; }
+
+/* ---------------------------------------------------------------- cajones laterales */
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 9, 0.6);
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+}
+.drawer-backdrop[hidden] { display: none; }
+
+.drawer {
+  width: min(460px, 92vw);
+  height: 100%;
+  background: var(--panel);
+  border-left: 1px solid var(--panel-border);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Excepción deliberada a la regla de oro, ver la cabecera del archivo: el cajón es una capa
+     flotante por encima de la pantalla de carrera, no parte de ella. `overscroll-behavior`
+     impide que al llegar al final el scroll se propague a la página de atrás. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.drawer header { display: flex; align-items: center; justify-content: space-between; }
+.drawer h2 { font-size: 15px; margin: 0; }
+.drawer h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 8px 0;
+}
+.drawer section { border-top: 1px solid var(--panel-border); padding-top: 13px; }
+.drawer section:first-of-type { border-top: none; padding-top: 0; }
+
+.btn-close {
+  background: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 8px;
+}
+.btn-close:hover { color: var(--text); }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.row > label { font-size: 13px; color: var(--muted); }
+.row > span { font-size: 13px; text-align: right; }
+.row span.bad { color: var(--red); font-weight: 600; }
+.row span.ok { color: var(--green); font-weight: 600; }
+
+input[type="number"], input[type="text"], select {
+  background: #0c0e12;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  width: 130px;
+  font-size: 13px;
+  font-family: inherit;
+}
+/* Los números entran en 130 px; las opciones de sanción ("Drive-Through (pasar por pits sin
+   parar)") no, y cortadas a la mitad dejan de explicar lo que la etiqueta larga venía a explicar. */
+.drawer select { width: 230px; }
+.drawer input.wide { width: 230px; }
+.drawer .row { align-items: baseline; }
+.drawer .row > label { flex: 1 1 auto; }
+input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+
+pre.snippet {
+  background: #0c0e12;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0 0 8px 0;
+}
+
+.muted { color: var(--muted); font-size: 12px; margin: 0 0 8px 0; }
+
+/* ---------------------------------------------------- diagnóstico de conexión */
+
+.warn-box {
+  background: rgba(224, 184, 75, 0.1);
+  border: 1px solid rgba(224, 184, 75, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.45;
+}
+
+.check {
+  border: 1px solid var(--panel-border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+/* El color del borde izquierdo lleva el estado: a 12 px es lo único que se distingue de un
+   vistazo, y el admin solo quiere encontrar rápido cuál de los cuatro está en rojo. */
+.check.ok { border-left-color: var(--green); }
+.check.warn { border-left-color: var(--yellow); }
+.check.fail { border-left-color: var(--red); }
+.check.pending { border-left-color: var(--muted); }
+.check-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.check-head strong { font-size: 13px; }
+.check-head span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+.check.ok .check-head span { color: var(--green); }
+.check.warn .check-head span { color: var(--yellow); }
+.check.fail .check-head span { color: var(--red); }
+.check.pending .check-head span { color: var(--muted); }
+.check p { font-size: 12px; color: var(--muted); margin: 5px 0 0 0; line-height: 1.45; }
+.check-action { color: var(--text) !important; }
+
+/* ------------------------------------------------ presets y catálogo de infracciones */
+
+.preset-list { display: grid; gap: 8px; }
+.preset {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #0c0e12;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.preset:hover { border-color: var(--accent); }
+/* El elegido se marca con borde y fondo, no solo con color de texto: a 12 px un cambio de tinte
+   es exactamente lo que no se ve de reojo durante una carrera. */
+.preset[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: rgba(63, 169, 245, 0.1);
+}
+.preset strong { display: block; font-size: 13px; color: var(--text); margin-bottom: 3px; }
+.preset span { display: block; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.4; }
+
+.infraction {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.infraction > h4 { font-size: 13px; margin: 0 0 4px 0; font-weight: 600; }
+.infraction > p { font-size: 12px; color: var(--muted); margin: 0 0 8px 0; line-height: 1.4; }
+/* Los umbrales se apagan cuando el tipo está en "no controlar": siguen visibles —así se ve qué
+   se estaría controlando— pero dejan de pedir una decisión que no se va a usar. */
+.infraction.off .row:not(:first-child) { opacity: 0.4; }
+
+/* ---------------------------------------------------------------- wizard y toast */
+
+#wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 9, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+/* Sin esto, el `display: flex` de arriba le gana a la regla nativa del navegador para [hidden]
+   (display: none): el atributo se setea bien desde JS pero el modal nunca se oculta. Este fue el
+   bug real detrás de "el modal nunca cierra". */
+#wizard-overlay[hidden] { display: none; }
+#wizard-overlay .card { max-width: 480px; width: 92vw; }
+#wizard-overlay .card h2 { margin-bottom: 8px; }
+/* Tercera (y última) excepción a "sin scroll": los pasos con la lista de presets o los cuatro
+   chequeos no entran en 768 px de alto. Scrollea la tarjeta, no la página. */
+.wizard { max-height: 88vh; overflow-y: auto; }
+.wizard .row { align-items: baseline; }
+.wizard .row > label { flex: 1 1 auto; }
+.wizard input[type="text"] { width: 230px; }
+
+.wizard-steps { display: flex; gap: 6px; margin-bottom: 14px; }
+.wizard-dot {
+  flex: 1 1 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--panel-border);
+}
+.wizard-dot.done { background: var(--green); }
+.wizard-dot.current { background: var(--accent); }
+
+/* Atrás a la izquierda, Siguiente a la derecha: el orden en que se leen, y deja el botón que
+   avanza siempre en el mismo lugar entre pasos. */
+.wizard-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
+.wizard-nav button:only-child { margin-left: auto; }
+
+#toast {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 40;
+  max-width: 50vw;
+}
+#toast.show { opacity: 1; }
+
+/* Pantallas bajas (portátiles de 768 px de alto): la banda de largada se compacta todavía más
+   para cederle alto a la torre y al mapa, que es donde el alto sí hace falta. */
+@media (max-height: 820px) {
+  .card { padding: 10px 12px; }
+  #card-start { padding: 7px 12px; gap: 12px; }
+  .semaforo { font-size: 17px; padding: 6px 0; min-width: 150px; }
+}
+
+/* Pantallas angostas: el mapa no entra al costado sin ahogar la torre, así que pasa abajo. */
+@media (max-width: 1180px) {
+  #view-live {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1.4fr) minmax(0, 1fr);
+    grid-template-areas: "start" "timing" "map";
+  }
+  #view-sanciones { grid-template-columns: minmax(0, 1fr); }
+  .topbar .league { display: none; }
+}

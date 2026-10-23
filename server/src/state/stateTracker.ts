@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import { CarUpdate, ConnectionClosed, LapCompleted, NewConnection } from "../udp/protocol";
+import { CarInfo, CarUpdate, ConnectionClosed, LapCompleted, NewConnection } from "../udp/protocol";
 
 export interface CarState {
   carId: number;
@@ -14,6 +14,11 @@ export interface CarState {
   normalizedSplinePosition: number;
   lapCount: number;
   lastUpdate: number;
+  /** Última vuelta cerrada, en ms. `null` hasta que complete la primera. Viene de `LAP_COMPLETED`,
+   * que es autoritativo del servidor — no se toma del cliente aunque la app también lo sepa. */
+  lastLapMs: number | null;
+  /** Mejor vuelta de la sesión, en ms. Se deriva acá y no se pide a nadie. */
+  bestLapMs: number | null;
 }
 
 const MAX_PLAUSIBLE_SPEED_KMH = 400;
@@ -32,8 +37,15 @@ function emptyState(carId: number): CarState {
     normalizedSplinePosition: 0,
     lapCount: 0,
     lastUpdate: 0,
+    lastLapMs: null,
+    bestLapMs: null,
   };
 }
+
+/** Una vuelta de AC por debajo de ~15 s no es una vuelta real de ningún circuito: es el servidor
+ * cerrando una vuelta parcial al entrar en sesión o al teletransportarse a boxes. Dejarla pasar
+ * ensucia la mejor vuelta de forma permanente. */
+const MIN_PLAUSIBLE_LAP_MS = 15_000;
 
 /** Tabla en memoria de telemetría por auto, alimentada por el UDP client. */
 export class StateTracker extends EventEmitter {
@@ -59,6 +71,24 @@ export class StateTracker extends EventEmitter {
     state.connected = true;
     if (!isDuplicateOfCurrentOccupant) state.lapCount = 0;
     this.emit("connected", state);
+  }
+
+  /**
+   * Respuesta a una consulta nuestra por un slot de la parrilla, no un evento de la carrera.
+   *
+   * A diferencia de `onNewConnection`, nunca toca el contador de vueltas: esto llega después de
+   * un reinicio del backend, con la carrera ya corriendo, y poner las vueltas en cero sería peor
+   * que no saber el nombre. Un slot vacío se ignora en vez de crear un auto fantasma.
+   */
+  onCarInfo(data: CarInfo): void {
+    if (!data.isConnected || data.driverGuid.length === 0) return;
+    const state = this.getOrCreate(data.carId);
+    const wasConnected = state.connected;
+    state.driverName = data.driverName;
+    state.driverGuid = data.driverGuid;
+    state.carModel = data.carModel;
+    state.connected = true;
+    if (!wasConnected) this.emit("connected", state);
   }
 
   onConnectionClosed(data: ConnectionClosed): void {
@@ -96,7 +126,25 @@ export class StateTracker extends EventEmitter {
   onLapCompleted(data: LapCompleted): void {
     const state = this.getOrCreate(data.carId);
     state.lapCount += 1;
+    if (Number.isFinite(data.lapTimeMs) && data.lapTimeMs >= MIN_PLAUSIBLE_LAP_MS) {
+      state.lastLapMs = data.lapTimeMs;
+      // Una vuelta con cortes no cuenta como mejor vuelta: es el criterio de cualquier liga, y el
+      // dato ya viene del servidor. Sí queda como última vuelta — pasó, y el admin la ve.
+      if (data.cuts === 0 && (state.bestLapMs === null || data.lapTimeMs < state.bestLapMs)) {
+        state.bestLapMs = data.lapTimeMs;
+      }
+    }
     this.emit("lapCompleted", { carId: data.carId, lapCount: state.lapCount, lapTimeMs: data.lapTimeMs, cuts: data.cuts });
+  }
+
+  /** Arranca una sesión nueva: los tiempos de la anterior no valen más. No se borran los autos
+   * —siguen conectados— solo lo que es propio de la sesión que terminó. */
+  onNewSession(): void {
+    for (const state of this.cars.values()) {
+      state.lapCount = 0;
+      state.lastLapMs = null;
+      state.bestLapMs = null;
+    }
   }
 
   get(carId: number): CarState | undefined {
