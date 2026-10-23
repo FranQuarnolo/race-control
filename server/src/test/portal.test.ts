@@ -274,6 +274,30 @@ test("con sesión, el portal lista solo las ligas propias", async () => {
   assert.equal(data.leagues[0].sendAddress, "203.0.113.5:39000");
 });
 
+// Un despliegue sin `RC_PUBLIC_IP` es un caso real: la IPv4 dedicada se pide aparte y puede no
+// estar todavía. Lo que no puede pasar es que el admin vea ":39000" como si fuera una dirección:
+// la pega, reinicia su servidor, y no llega nada nunca sin un solo síntoma que apunte a la causa.
+test("sin IP pública no se inventa media dirección", async () => {
+  const otro = createPortal({
+    port: 0,
+    dataRoot: fs.mkdtempSync(path.join(os.tmpdir(), "rc-portal-sin-ip-")),
+    publicHost: "race-control.test",
+    publicIp: "",
+    udpPortFrom: 39200,
+    udpPortTo: 39209,
+    loopbackPortFrom: 39300,
+    secureCookies: false,
+  });
+  otro.supervisor.start = () => {};
+  const { league } = await otro.createLeague({
+    slug: "liga-c",
+    name: "Liga C",
+    email: "caro@example.com",
+    password: CLAVE_A,
+  });
+  assert.equal(otro.supervisor.sendAddressOf(league), "");
+});
+
 test("el login deja entrar y el logout cierra de verdad", async () => {
   const login = await pedir("POST", "/api/portal/login", {
     body: { email: "ANA@example.com", password: CLAVE_A },

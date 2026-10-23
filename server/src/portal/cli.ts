@@ -88,7 +88,12 @@ async function main(): Promise<void> {
       { start: false }
     );
     console.log(`Liga creada: ${creds.league.name}  (/l/${creds.league.slug})`);
-    console.log(`Send Address que va a ver el admin: ${portal.supervisor.sendAddressOf(creds.league)}`);
+    const sendAddress = portal.supervisor.sendAddressOf(creds.league);
+    console.log(
+      sendAddress
+        ? `Send Address que va a ver el admin: ${sendAddress}`
+        : "SIN Send Address: falta RC_PUBLIC_IP, así que el admin no va a tener qué pegar en su hosting."
+    );
     console.log("");
     console.log("Pasale ESTO al admin:");
     console.log(`  Dirección:  ${creds.loginUrl}`);

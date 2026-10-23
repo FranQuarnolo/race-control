@@ -20,11 +20,32 @@ function marcarConectado() {
   }, 1800);
 }
 
+/**
+ * Sin dirección no hay nada que pegar, y mostrar media —`:30000`— sería peor que no mostrar nada:
+ * se ve como un dato bueno, el admin lo copia, reinicia su servidor y no llega nunca un paquete,
+ * sin un solo síntoma que apunte a la causa. Es algo que tiene que arreglar quien opera el
+ * servicio, así que el único mensaje honesto es decirlo y no mandarlo a probar cosas.
+ */
+function sinDireccion() {
+  $("send-address").textContent = "Todavía no hay dirección";
+  $("btn-copiar").hidden = true;
+  const estado = $("estado");
+  estado.textContent =
+    "Esta liga todavía no tiene una dirección pública asignada. Es algo de nuestro lado, no tuyo: " +
+    "escribinos y lo resolvemos. Mientras tanto no hay nada que configurar en tu hosting.";
+  estado.style.color = "var(--yellow)";
+}
+
 async function revisar() {
   const liga = await api("/api/portal/liga/" + encodeURIComponent(SLUG));
-  $("send-address").textContent = liga.sendAddress;
   $("link-panel").href = "/l/" + liga.slug + "/";
   document.title = liga.name + " — Race Control";
+
+  if (!liga.sendAddress) {
+    sinDireccion();
+    return;
+  }
+  $("send-address").textContent = liga.sendAddress;
 
   if (liga.receiving) {
     marcarConectado();

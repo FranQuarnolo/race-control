@@ -56,9 +56,17 @@ export class Supervisor {
     return `${this.options.publicHost}/l/${league.slug}`;
   }
 
-  /** El renglón que el admin pega en el "Send Address" del panel de su hosting. */
+  /**
+   * El renglón que el admin pega en el "Send Address" del panel de su hosting.
+   *
+   * Cadena vacía mientras el despliegue no tenga una IP pública configurada (`RC_PUBLIC_IP`). Es
+   * importante que sea vacía y no `":30000"`: ese renglón se ve como un dato válido, el admin lo
+   * pega, reinicia su servidor y no llega nada nunca, sin un solo síntoma que apunte a la causa.
+   * Vacío obliga a las pantallas a decir que todavía no hay dirección.
+   */
   sendAddressOf(league: League): string {
-    return `${this.options.publicIp}:${league.udpPort}`;
+    const ip = this.options.publicIp.trim();
+    return ip ? `${ip}:${league.udpPort}` : "";
   }
 
   isRunning(leagueId: string): boolean {

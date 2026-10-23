@@ -80,8 +80,12 @@ function pintar() {
         const enlace = el("a", "principal", liga.name);
         enlace.href = "/l/" + liga.slug + "/";
         tdLiga.appendChild(enlace);
-        const dir = el("div", "muted mono", liga.sendAddress);
-        dir.title = "Send Address de esta liga";
+        // Sin RC_PUBLIC_IP no hay Send Address que darle a nadie, y conviene que se vea acá:
+        // es tu problema para resolver, no del admin, y él no tiene cómo enterarse.
+        const dir = el("div", "muted mono", liga.sendAddress || "sin IP pública configurada");
+        dir.title = liga.sendAddress
+          ? "Send Address de esta liga"
+          : "Falta RC_PUBLIC_IP: el admin no tiene qué pegar en su hosting";
         tdLiga.appendChild(dir);
       }
     }
