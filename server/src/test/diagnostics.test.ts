@@ -27,10 +27,12 @@ function input(over: Over = {}): DiagnosticsInput {
       lastPacketAt: Date.now(),
       commandsSent: 40,
       commandSendErrors: 0,
+      lastSourcePort: 11000,
       ...(udp || {}),
     },
     remoteHost: "200.9.9.9",
     udpLocalPort: 12000,
+    udpRemotePort: 11000,
     clientPort: 3001,
     driversConnected: 3,
     driversReporting: 3,
@@ -134,6 +136,36 @@ describe("runDiagnostics", () => {
   it("con el host remoto todavía en loopback, las órdenes no salen a ningún lado", () => {
     const check = by(runDiagnostics(input({ remoteHost: "127.0.0.1" })), "commands");
     assert.strictEqual(check.state, "fail");
+  });
+
+  // Un hosting que impone sus propios puertos (udp_plugin_local_port=8008) deja todo lo demás en
+  // verde: la telemetría entra perfecta y los comandos "se mandan" sin error, a un puerto donde
+  // nadie escucha. Es la falla más cara de diagnosticar del producto, así que el chequeo tiene que
+  // nombrar los dos números y las dos salidas posibles.
+  it("si el servidor habla desde otro puerto que al que le mandamos, lo dice con los dos números", () => {
+    const check = by(
+      runDiagnostics(input({ udp: { lastSourcePort: 8008 }, udpRemotePort: 11000 })),
+      "commands"
+    );
+    assert.strictEqual(check.state, "fail");
+    assert.match(check.detail, /8008/);
+    assert.match(check.detail, /11000/);
+    assert.match(check.action, /8008/);
+    assert.match(check.action, /UDP_PLUGIN_LOCAL_PORT/);
+  });
+
+  it("el desajuste de puertos pesa más que el resto: no sirve de nada que lo demás esté verde", () => {
+    const checks = runDiagnostics(input({ udp: { lastSourcePort: 8008 }, udpRemotePort: 11000 }));
+    assert.strictEqual(summarize(checks).state, "fail");
+    assert.strictEqual(by(checks, "telemetry").state, "ok");
+  });
+
+  it("mientras el servidor no habló, no se inventa un desajuste de puertos", () => {
+    const check = by(
+      runDiagnostics(input({ udp: { lastSourcePort: 0, commandsSent: 0 }, udpRemotePort: 11000 })),
+      "commands"
+    );
+    assert.strictEqual(check.state, "pending");
   });
 
   it("errores de envío son aviso y nombran cuántos", () => {

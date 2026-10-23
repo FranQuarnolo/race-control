@@ -464,6 +464,27 @@ resultante desde una carpeta nueva, que es el escenario que destapó los bugs de
 El `.ico` multi-resolución (16 a 256 px) se genera de `brand/icon.svg` y se versiona, para que
 empaquetar no dependa de tener un rasterizador instalado.
 
+### Los puertos UDP se configuran, y el desajuste se avisa
+
+Un hosting real (EmperorServers) llegó con `udp_plugin_local_port=8008` ya puesto en su panel. Race
+Control asumía 11000/12000 **y no tenía dónde cambiarlos**: estaban en la config y en ninguna
+pantalla. El resultado habría sido el peor modo de fallo posible — telemetría entrando perfecta,
+los cuatro chequeos en verde, y ni una sanción llegando nunca al servidor, sin nada en pantalla que
+apuntara a la causa.
+
+Dos cosas, entonces:
+
+- Los dos puertos del lado de Assetto Corsa se editan en **Conexión → Puertos**. El texto para
+  pegar en el `server_cfg.ini` se regenera con los valores nuevos, así que las dos puntas siguen
+  coincidiendo solas.
+- El diagnóstico compara el puerto **desde el que habla** el servidor contra el puerto al que le
+  mandamos, y si no coinciden lo dice en rojo con los dos números y las dos formas de arreglarlo.
+
+Esto último se apoya en un supuesto: que el acServer usa un solo socket para el plugin, y entonces
+manda desde el mismo puerto que declara en `UDP_PLUGIN_LOCAL_PORT`. Es lo que hacen las tres
+implementaciones de referencia, pero no está verificado contra un servidor real — anotado como tal
+en `docs/spike-protocolo.md`, con dónde desactivarlo si resulta que no.
+
 ### Exigir la app del piloto ahora es una decisión, no un hecho consumado
 
 `presence.enforce` existía en la config desde la primera tanda y **no estaba en ninguna pantalla**:

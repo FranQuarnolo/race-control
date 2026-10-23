@@ -30,6 +30,8 @@ export interface DiagnosticsInput {
   udp: UdpStats;
   remoteHost: string;
   udpLocalPort: number;
+  /** Puerto al que le mandamos los comandos: el `UDP_PLUGIN_LOCAL_PORT` del hosting. */
+  udpRemotePort: number;
   clientPort: number;
   driversConnected: number;
   driversReporting: number;
@@ -134,6 +136,23 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
       action:
         "Se averigua sola apenas llegue la primera señal del servidor de carrera, así que " +
         "arreglá eso primero. Si tu hosting no se identifica, escribí su dirección acá abajo.",
+    };
+  }
+  // Desajuste de puertos: la falla más silenciosa de todas. La telemetría entra perfecta —así que
+  // los otros tres chequeos dan verde— y ni un solo comando llega, porque le estamos hablando a un
+  // puerto donde el servidor no escucha. Sin esto, el síntoma es "las sanciones no se aplican" y no
+  // hay absolutamente nada en pantalla que apunte a la causa.
+  const source = input.udp.lastSourcePort;
+  if (source > 0 && source !== input.udpRemotePort) {
+    return {
+      id: "commands",
+      title: "Órdenes hacia el servidor",
+      state: "fail",
+      detail: `Tu servidor nos habla desde el puerto ${source}, pero le estamos mandando las órdenes al ${input.udpRemotePort}.`,
+      action:
+        `Son dos números que tienen que ser el mismo. Poné ${source} en "Puerto del servidor de AC", ` +
+        `acá abajo en Puertos — o cambiá el UDP_PLUGIN_LOCAL_PORT de tu hosting a ${input.udpRemotePort}. ` +
+        "Hasta que coincidan, el servidor te manda todo y no recibe nada: ni sanciones, ni avisos, ni kicks.",
     };
   }
   if (input.udp.commandsSent === 0) {

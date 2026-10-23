@@ -31,6 +31,12 @@ export interface UdpStats {
   lastPacketAt: number;
   commandsSent: number;
   commandSendErrors: number;
+  /** Puerto desde el que nos habló el servidor de AC. 0 si todavía no habló.
+   *
+   * Es el dato que delata la falla más silenciosa que hay: el servidor manda telemetría perfecta
+   * y ningún comando nuestro le llega, porque su `UDP_PLUGIN_LOCAL_PORT` no es el que tenemos
+   * configurado. El diagnóstico lo contrasta y lo dice con los dos números a la vista. */
+  lastSourcePort: number;
 }
 
 /** Habla el protocolo ACSP con el servidor dedicado de Assetto Corsa. Ver protocol.ts. */
@@ -42,6 +48,7 @@ export class AcUdpClient extends EventEmitter {
     lastPacketAt: 0,
     commandsSent: 0,
     commandSendErrors: 0,
+    lastSourcePort: 0,
   };
 
   constructor(private config: AcUdpConfig) {
@@ -112,6 +119,7 @@ export class AcUdpClient extends EventEmitter {
   private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo): void {
     this.stats.packetsReceived += 1;
     this.stats.lastPacketAt = Date.now();
+    this.stats.lastSourcePort = rinfo.port;
     this.adoptRemoteHostIfNeeded(rinfo);
     this.emit("rawPacket", msg);
 

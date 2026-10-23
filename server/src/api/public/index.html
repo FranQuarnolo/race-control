@@ -243,6 +243,21 @@
           <label for="h-client-port">App de los pilotos</label>
           <input id="h-client-port" type="number" min="1024" max="65535" />
         </div>
+        <div class="row">
+          <label for="u-local-port">Telemetría que entra</label>
+          <input id="u-local-port" type="number" min="1024" max="65535" />
+        </div>
+        <div class="row">
+          <label for="u-remote-port">Puerto del servidor de AC</label>
+          <input id="u-remote-port" type="number" min="1024" max="65535" />
+        </div>
+        <p class="muted">
+          Estos dos últimos tienen que coincidir con los de tu hosting: "Telemetría que entra" es
+          el puerto del <code>UDP_PLUGIN_ADDRESS</code>, y "Puerto del servidor de AC" es el
+          <code>UDP_PLUGIN_LOCAL_PORT</code>. Si tu hosting te obliga a usar otros números,
+          cambialos acá en vez de pelearte con el panel del hosting. El texto para copiar de arriba
+          se actualiza solo.
+        </p>
         <button id="btn-save-ports" data-form="ports">Guardar</button>
       </section>
     </div>

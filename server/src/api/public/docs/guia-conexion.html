@@ -60,6 +60,33 @@ UDP_PLUGIN_ADDRESS=TU_DIRECCION:12000</pre>
     "Probar conexión". Te dice cuál de las cuatro cosas falta y qué hacer con ella.
   </div>
 
+  <h2>Si tu hosting no te deja cambiar los puertos</h2>
+  <p>Algunos paneles traen esas dos líneas ya completadas con sus propios números y no dejan
+  tocarlas, o usan un archivo de configuración en otro formato (JSON) donde se llaman
+  <code>udp_plugin_local_port</code> y <code>udp_plugin_address</code>. Es lo mismo con otro
+  nombre.</p>
+  <p>En ese caso no pelees con el hosting: <b>cambiá los números de este lado</b>. En el panel de
+  Race Control, <b>"Conexión" → "Puertos"</b>:</p>
+  <ul>
+    <li><b>"Puerto del servidor de AC"</b> ← poné el <code>UDP_PLUGIN_LOCAL_PORT</code> de tu
+    hosting.</li>
+    <li><b>"Telemetría que entra"</b> ← el puerto que va después de los dos puntos en el
+    <code>UDP_PLUGIN_ADDRESS</code>. Este sí lo elegís vos: es un puerto de <i>tu</i> PC.</li>
+  </ul>
+  <div class="why">Que estos dos números no coincidan con los del hosting es la falla más
+  traicionera que hay, porque <b>no se ve</b>: la telemetría entra perfecta, el panel muestra a
+  todos los pilotos corriendo, y las sanciones no le llegan nunca al servidor porque salen hacia
+  un puerto donde nadie escucha. Por eso "Probar ahora" lo chequea aparte y te muestra los dos
+  números cuando difieren.</div>
+
+  <h2>Ojo: Assetto Corsa admite un solo plugin</h2>
+  <p>El <code>UDP_PLUGIN_ADDRESS</code> es uno solo. Si tu hosting ya tenía algo ahí —un sistema de
+  tiempos en vivo, un bot de Discord, el propio panel— ponerle Race Control <b>se lo saca a eso
+  otro</b>. No es un problema de Race Control, es del juego.</p>
+  <p>Si ves que apuntaba a <code>127.0.0.1</code> (la propia máquina del servidor), lo más probable
+  es que sea algo del hosting. Antes de pisarlo, fijate si tu panel tiene una pantalla de "plugins"
+  que permita encadenar varios, o preguntale al soporte.</p>
+
   <h2>Dónde está el <code>server_cfg.ini</code> en cada hosting</h2>
   <table>
     <tr><th>Hosting</th><th>Dónde buscarlo</th></tr>

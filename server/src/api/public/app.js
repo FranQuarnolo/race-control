@@ -251,8 +251,11 @@ function setupForms() {
   registerForm(
     "ports",
     "btn-save-ports",
-    ["h-admin-port", "h-client-port"],
-    () => ({ http: { adminPort: num("h-admin-port"), clientPort: num("h-client-port") } }),
+    ["h-admin-port", "h-client-port", "u-local-port", "u-remote-port"],
+    () => ({
+      http: { adminPort: num("h-admin-port"), clientPort: num("h-client-port") },
+      acUdp: { localPort: num("u-local-port"), remotePort: num("u-remote-port") },
+    }),
     () => toast("Guardado. Los puertos nuevos se usan la próxima vez que abras Race Control.", 5000)
   );
 }
@@ -510,6 +513,8 @@ function fillConfigForm(config) {
   $("net-public-host").value = config.http.publicHost || "";
   $("h-admin-port").value = config.http.adminPort;
   $("h-client-port").value = config.http.clientPort;
+  $("u-local-port").value = config.acUdp.localPort;
+  $("u-remote-port").value = config.acUdp.remotePort;
 
   for (const name of Object.keys(forms)) markFormSaved(name);
 }

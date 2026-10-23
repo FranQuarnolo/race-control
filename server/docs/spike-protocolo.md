@@ -49,6 +49,7 @@ leer código — ningún agente de IA puede resolverlo):
 | Informe de carrera | Descargalo al terminar y abrilo con Excel | Si los acentos salen rotos o todo cae en una columna, revisar el BOM y el separador en `raceReport.ts` |
 | Reinicio a mitad de carrera | Cerrá el `.exe` con una sanción emitida y volvé a abrirlo | Las sanciones e incidentes tienen que seguir ahí. Si no, revisar la lectura del journal en el arranque |
 | Logos de marca | Mirá la columna "Auto" con una parrilla variada | Lo esperable es logo en las marcas conocidas y escudo con monograma en el resto. Un hueco vacío sí es un bug |
+| **Puerto de origen del servidor** | Con los puertos bien puestos, "Órdenes hacia el servidor" tiene que dar **verde** | **Supuesto sin verificar.** El chequeo asume que el acServer usa un solo socket para el plugin, y entonces manda desde el mismo puerto que declara en `UDP_PLUGIN_LOCAL_PORT`. Si en realidad manda desde un puerto efímero, este chequeo va a dar rojo siempre y hay que sacarlo: está en `checkOutgoingCommands` de `net/diagnostics.ts` |
 
 ## Si algo no cierra: ahí sí, Wireshark
 

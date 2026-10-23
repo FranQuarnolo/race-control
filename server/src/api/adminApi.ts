@@ -147,6 +147,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       udp: deps.udpClient.getStats(),
       remoteHost: deps.config.acUdp.remoteHost,
       udpLocalPort: deps.config.acUdp.localPort,
+      udpRemotePort: deps.config.acUdp.remotePort,
       clientPort: ports.clientPort,
       driversConnected: presence.connected,
       driversReporting: presence.reporting,
