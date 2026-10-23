@@ -26,7 +26,21 @@ export interface AppConfig {
      * sin que nada en el panel dijera que algo salió mal. */
     publicHost: string;
   };
-  acUdp: { localPort: number; remoteHost: string; remotePort: number };
+  acUdp: {
+    localPort: number;
+    remoteHost: string;
+    remotePort: number;
+    /** De dónde salió `remotePort`, igual que `publicHostSource` para la dirección.
+     *
+     * `"default"` es el valor de fábrica que nadie confirmó: el puerto se adopta del primer
+     * datagrama que manda el servidor. `"detected"` es un valor ya adoptado así. `"manual"` es un
+     * número que el admin escribió en el panel, y ese no se pisa nunca.
+     *
+     * Existe para que nadie tenga que buscar el "Listen Address" en el panel de su hosting: es el
+     * dato más difícil de encontrar de toda la puesta en marcha, cambia de nombre según la versión
+     * del panel, y el servidor lo dice solo con cada paquete que manda. */
+    remotePortSource: "default" | "manual" | "detected";
+  };
   /** Única fuente de verdad de las reglas de largada: la usa tanto el detector como la sanción. */
   formation: { penalty: PenaltyRules };
   /** Única fuente de verdad de las reglas de pit lane: el límite de velocidad es el mismo valor
@@ -81,7 +95,7 @@ function defaultConfig(): AppConfig {
   return {
     leagueName: "",
     http: { adminPort: 3000, clientPort: 3001, publicHost: "" },
-    acUdp: { localPort: 12000, remoteHost: "127.0.0.1", remotePort: 11000 },
+    acUdp: { localPort: 12000, remoteHost: "127.0.0.1", remotePort: 11000, remotePortSource: "default" },
     formation: { penalty: defaultPenalty() },
     pit: { zone: { splineStart: 0.97, splineEnd: 0.995 }, stopGoSeconds: 30, penalty: defaultPenalty() },
     presence: { graceSeconds: 60, enforce: true },
@@ -270,6 +284,12 @@ function validateConfig(config: AppConfig): void {
   if (!isPlausibleHost(config.acUdp.remoteHost)) config.acUdp.remoteHost = "127.0.0.1";
   config.acUdp.localPort = clampPort(config.acUdp.localPort, 12000);
   config.acUdp.remotePort = clampPort(config.acUdp.remotePort, 11000);
+  // Un config.json de una versión anterior no trae el campo. Se asume "default" —o sea, que el
+  // puerto se puede autodetectar— porque hasta ahora nadie podía haberlo elegido a conciencia:
+  // el campo recién existe en el panel desde la 0.3.
+  if (!["default", "manual", "detected"].includes(config.acUdp.remotePortSource)) {
+    config.acUdp.remotePortSource = "default";
+  }
   config.http.adminPort = clampPort(config.http.adminPort, 3000);
   config.http.clientPort = clampPort(config.http.clientPort, 3001);
   // Los dos puertos se pueden editar desde el panel, y poner el mismo número en los dos es un
@@ -333,7 +353,18 @@ export function saveConfig(config: AppConfig): void {
 
 /** Aplica un patch parcial (ej. desde POST /api/config) manteniendo vivas las referencias internas. */
 export function applyConfigPatch(config: AppConfig, patch: Record<string, unknown>): void {
+  const previousRemotePort = config.acUdp.remotePort;
   mergeConfigInto(config, patch);
+  // Si el admin escribió un puerto distinto del que había, manda él: a partir de acá la
+  // autodetección no lo vuelve a pisar. Se compara el valor y no la mera presencia del campo
+  // porque el panel manda el formulario de puertos completo en cada guardado, y apretar "Guardar"
+  // sin tocar nada no es una decisión sobre el puerto.
+  if (config.acUdp.remotePort !== previousRemotePort) {
+    // Dejar el campo vacío en el panel llega acá como 0, y es la forma de decir "no sé el número,
+    // deducilo vos". Cualquier otro cambio es una decisión del admin y manda él.
+    const cleared = !(typeof config.acUdp.remotePort === "number" && config.acUdp.remotePort > 0);
+    config.acUdp.remotePortSource = cleared ? "default" : "manual";
+  }
   validateConfig(config);
   saveConfig(config);
 }

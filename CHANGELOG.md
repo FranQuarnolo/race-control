@@ -3,6 +3,78 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.3.1] — 2026-10-23
+
+Primera prueba contra un servidor real de EmperorServers. No se llegó a correr: la puesta en
+marcha resultó impracticable antes de eso. El reporte, textual, fue que los pasos 2 y 3 no se
+podían hacer, que el asistente no se abrió en el 5, que el 6 "no lo va a saber hacer el usuario" y
+que el 8 era "súper técnico". Es exactamente el usuario para el que está escrito el producto, así
+que el problema es del producto.
+
+Esta versión ataca la causa concreta. El cambio de fondo —pasar de un `.exe` a un portal web, para
+que el admin no descargue nada— está planificado para la 0.4.
+
+### El puerto más difícil de encontrar ya no hay que encontrarlo
+
+Para conectar Race Control hacían falta dos números. El segundo —en qué puerto escucha el servidor
+de Assetto Corsa las órdenes que le mandamos— es el peor dato de toda la configuración: vive en el
+panel del hosting bajo un nombre que cambió entre versiones, en muchos planes directamente no es
+editable, y equivocarlo produce la falla más cara de diagnosticar que tiene el producto. La
+telemetría entra perfecta, el panel se pone verde entero, y ni una sola sanción llega nunca.
+
+El servidor ese número lo dice solo, en cada paquete que manda. Ahora lo tomamos de ahí
+(`adoptRemotePortIfNeeded` en `server/src/udp/client.ts`), igual que ya se hacía con la dirección.
+El admin no toca ningún puerto: pega una línea en su hosting y listo.
+
+Tres detalles que hacen que esto sea seguro y no una adivinanza:
+
+- **Un puerto escrito a mano no se pisa nunca.** `config.acUdp.remotePortSource` distingue el valor
+  de fábrica (`default`, se autodetecta), el deducido (`detected`) y el que escribió el admin
+  (`manual`). Ese último manda, porque es el único caso en que él sabe más que nosotros: un hosting
+  que relaye los datagramas tendría un origen distinto del destino correcto. Borrar el campo y
+  guardar vuelve a pedir la detección.
+- **Si el servidor hablara desde un puerto distinto cada vez, se detecta y se abandona.** Toda la
+  idea se apoya en un supuesto —que el acServer usa un solo socket para el plugin— que solo se
+  confirma contra un servidor real. Si fuera falso, adoptar el origen sería adoptar basura nueva en
+  cada paquete. En vez de eso se deja de adoptar, se avisa, y el diagnóstico manda a buscar el dato
+  real al panel del hosting. Queda anotado como pendiente de pista en `docs/spike-protocolo.md`.
+- **El diagnóstico dejó de ofrecer un número que ya caducó.** Antes, ante un desajuste, decía
+  "poné 8008". Si el puerto es efímero ese consejo es falso, así que ese caso ahora tiene su propio
+  texto.
+
+### La guía nombraba campos que ya no existen
+
+El changelog de Assetto Corsa Server Manager confirma que en la **2.4.8** los campos se
+renombraron: "UDP Plugin Local Port" pasó a llamarse **"Listen Address"** y "UDP Plugin Address" a
+**"Send Address"**. La guía mandaba a buscar los nombres viejos. Por eso no se encontraban.
+
+La misma versión trae algo que invalida una advertencia que dábamos: *"It is now possible to
+specify multiple plugin listeners in the Server Options"*. O sea que Race Control **no desplaza**
+los plugins que ya estuvieran configurados. La sección "Ojo: Assetto Corsa admite un solo plugin"
+estaba asustando sin motivo, y con ella la idea de que había que desactivar las sanciones
+automáticas del propio panel (`custom_cuts_enabled`, `collision_penalties_enabled`) — que, además,
+en el plan del usuario no eran editables. Se pueden dejar como estén.
+
+`guia-conexion.html` se reescribió entera: pasó de 4 pasos con dos líneas de configuración a 4
+pasos con **un** dato, con los nombres reales de cada panel y una sección nueva sobre la lista de
+IPs permitidas, que es otro modo de fallo completamente silencioso.
+
+### El panel pide un dato, no un bloque de configuración
+
+- "Configuración del servidor" muestra ahora solo el **Send Address** (`191.81.189.89:12000`), con
+  su botón de copiar. Las dos líneas del `server_cfg.ini` siguen ahí para quien edite el archivo a
+  mano, pero plegadas: dejaron de ser lo primero que se ve.
+- El paso 3 del asistente de primer arranque, igual.
+- En Puertos, el "Puerto del servidor de AC" ahora explica de dónde salió el número que muestra. Sin
+  eso, el admin veía un puerto que nunca escribió y no tenía forma de saber si era un valor de
+  fábrica a corregir o el bueno de verdad.
+
+Seis tests nuevos, cuatro de ellos con sockets UDP reales sobre loopback en vez de un doble de
+prueba: lo que se está verificando es justamente qué trae el `rinfo` de Node, y un mock daría por
+cierto el dato que se quiere comprobar. Total: 132.
+
+---
+
 ## [0.3] — 2026-10-23
 
 Auditoría completa del proyecto. A partir de acá el versionado pasa a ser de **dos números**

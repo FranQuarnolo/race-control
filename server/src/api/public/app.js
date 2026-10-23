@@ -515,6 +515,14 @@ function fillConfigForm(config) {
   $("h-client-port").value = config.http.clientPort;
   $("u-local-port").value = config.acUdp.localPort;
   $("u-remote-port").value = config.acUdp.remotePort;
+  // Decirle al admin de dónde salió ese número. Sin esto, ve un puerto que él nunca escribió y no
+  // tiene forma de saber si es un valor de fábrica que hay que corregir o el bueno de verdad.
+  $("u-remote-port-note").textContent =
+    config.acUdp.remotePortSource === "detected"
+      ? "Este número nos lo dijo tu servidor solo: no hace falta que lo busques en el panel del hosting."
+      : config.acUdp.remotePortSource === "manual"
+        ? "Lo escribiste vos, así que no lo vamos a pisar. Borralo y guardá para volver a detectarlo solo."
+        : "Todavía es el valor de fábrica. Se corrige solo en cuanto llegue la primera señal del servidor.";
 
   for (const name of Object.keys(forms)) markFormSaved(name);
 }
@@ -1513,7 +1521,8 @@ function renderNetwork(network) {
   $("net-signal").textContent = network.receivingTelemetry ? "recibiendo" : "sin señal todavía";
   $("net-strategy").textContent = STRATEGY_LABELS[network.strategy] || network.strategy;
   $("net-snippet").textContent = network.serverSnippet;
-  $("wizard-snippet").textContent = network.serverSnippet;
+  $("net-send-address").textContent = network.sendAddress;
+  $("wizard-snippet").textContent = network.sendAddress;
 
   // "Llega telemetría" y "los pilotos alcanzan el backend" son dos cosas distintas que fallan por
   // separado: el UDP del servidor puede entrar perfecto mientras el puerto de los pilotos está
@@ -1743,12 +1752,17 @@ function wireButtons() {
     }
   });
 
-  $("btn-copy-snippet").addEventListener("click", () => {
-    navigator.clipboard.writeText($("net-snippet").textContent).then(
-      () => toast("Copiado"),
-      () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
-    );
-  });
+  for (const [boton, origen] of [
+    ["btn-copy-snippet", "net-snippet"],
+    ["btn-copy-send-address", "net-send-address"],
+  ]) {
+    $(boton).addEventListener("click", () => {
+      navigator.clipboard.writeText($(origen).textContent).then(
+        () => toast("Copiado"),
+        () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
+      );
+    });
+  }
 
   wireWizard();
 }

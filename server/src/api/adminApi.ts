@@ -41,6 +41,8 @@ export interface AdminApiDeps {
    * `udpClient.kick` directo para que index.ts lo registre en el journal como manual. */
   manualKick: (carId: number) => void;
   buildServerSnippet: () => string;
+  /** El "Send Address" solo: lo único que el admin tiene que copiar al panel de su hosting. */
+  buildSendAddress: () => string;
   /** Puertos realmente en uso. Pueden no ser los de la config si el preferido estaba ocupado y el
    * arranque se corrió al siguiente libre — y en ese caso es justo lo que el panel tiene que
    * mostrar, porque es lo que el admin necesita poner en el router. */
@@ -49,10 +51,11 @@ export interface AdminApiDeps {
 
 const TELEMETRY_STALE_MS = 2000;
 
-/** Versión de producto, de dos números. `package.json` queda en semver de tres porque npm lo
- * exige, pero ese valor es interno: el admin ve este. Sin esto no había forma de saber qué build
- * está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.3";
+/** Versión de producto. Las versiones son de dos números (0.3, 0.4, … 1.0); el tercero aparece
+ * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
+ * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
+ * esto no había forma de saber qué build está corriendo quien reporta un problema. */
+export const APP_VERSION = "0.3.1";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
@@ -108,6 +111,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         ...deps.connectivity.getStatus(),
         ...deps.getActivePorts(),
         serverSnippet: deps.buildServerSnippet(),
+        sendAddress: deps.buildSendAddress(),
         /** A dónde salen los comandos (chat, kick, ballast). Si queda en loopback con telemetría
          * entrando, es la señal de que el servidor de AC todavía no se identificó. */
         acServer: deps.udpClient.getRemoteTarget(),
@@ -148,6 +152,8 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       remoteHost: deps.config.acUdp.remoteHost,
       udpLocalPort: deps.config.acUdp.localPort,
       udpRemotePort: deps.config.acUdp.remotePort,
+      udpRemotePortSource: deps.config.acUdp.remotePortSource,
+      udpRemotePortUnstable: deps.udpClient.hasUnstableRemotePort(),
       clientPort: ports.clientPort,
       driversConnected: presence.connected,
       driversReporting: presence.reporting,

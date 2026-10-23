@@ -30,8 +30,13 @@ export interface DiagnosticsInput {
   udp: UdpStats;
   remoteHost: string;
   udpLocalPort: number;
-  /** Puerto al que le mandamos los comandos: el `UDP_PLUGIN_LOCAL_PORT` del hosting. */
+  /** Puerto al que le mandamos los comandos: el "Listen Address" del hosting. */
   udpRemotePort: number;
+  /** De dónde salió ese puerto. Cambia qué se le pide al admin cuando algo no cierra: si lo
+   * escribió él, hay que decirle que lo corrija; si lo dedujimos nosotros, no tiene nada que ver. */
+  udpRemotePortSource: "default" | "manual" | "detected";
+  /** El servidor habló desde más de un puerto: la autodetección no sirve y hace falta el dato real. */
+  udpRemotePortUnstable: boolean;
   clientPort: number;
   driversConnected: number;
   driversReporting: number;
@@ -142,6 +147,21 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
   // los otros tres chequeos dan verde— y ni un solo comando llega, porque le estamos hablando a un
   // puerto donde el servidor no escucha. Sin esto, el síntoma es "las sanciones no se aplican" y no
   // hay absolutamente nada en pantalla que apunte a la causa.
+  //
+  // Normalmente el puerto se deduce solo del primer paquete, así que acá solo caen dos casos: que
+  // el admin haya escrito un número a mano, o que el servidor no use un puerto fijo.
+  if (input.udpRemotePortUnstable) {
+    return {
+      id: "commands",
+      title: "Órdenes hacia el servidor",
+      state: "fail",
+      detail: "Tu servidor nos habla desde un puerto distinto cada vez, así que no podemos deducir a cuál contestarle.",
+      action:
+        'Entrá al panel de tu hosting, buscá "Listen Address" (en paneles viejos, ' +
+        "UDP_PLUGIN_LOCAL_PORT) y copiá ese número en \"Puerto del servidor de AC\", acá abajo en " +
+        "Puertos. Hasta entonces el servidor te manda todo y no recibe nada: ni sanciones, ni avisos, ni kicks.",
+    };
+  }
   const source = input.udp.lastSourcePort;
   if (source > 0 && source !== input.udpRemotePort) {
     return {
@@ -150,8 +170,9 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
       state: "fail",
       detail: `Tu servidor nos habla desde el puerto ${source}, pero le estamos mandando las órdenes al ${input.udpRemotePort}.`,
       action:
-        `Son dos números que tienen que ser el mismo. Poné ${source} en "Puerto del servidor de AC", ` +
-        `acá abajo en Puertos — o cambiá el UDP_PLUGIN_LOCAL_PORT de tu hosting a ${input.udpRemotePort}. ` +
+        `Son dos números que tienen que ser el mismo, y el que vale es el del servidor. Poné ${source} ` +
+        `en "Puerto del servidor de AC", acá abajo en Puertos — o cambiá el "Listen Address" de tu ` +
+        `hosting (UDP_PLUGIN_LOCAL_PORT en paneles viejos) a ${input.udpRemotePort}. ` +
         "Hasta que coincidan, el servidor te manda todo y no recibe nada: ni sanciones, ni avisos, ni kicks.",
     };
   }
@@ -173,11 +194,14 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
       action: "Puede ser un corte momentáneo de internet. Si se repite, revisá tu conexión.",
     };
   }
+  const how = input.udpRemotePortSource === "detected" ? " (el puerto nos lo dijo él solo)" : "";
   return {
     id: "commands",
     title: "Órdenes hacia el servidor",
     state: "ok",
-    detail: `Salieron ${input.udp.commandsSent.toLocaleString("es-AR")} hacia ${input.remoteHost}, sin errores.`,
+    detail:
+      `Salieron ${input.udp.commandsSent.toLocaleString("es-AR")} hacia ` +
+      `${input.remoteHost}:${input.udpRemotePort}${how}, sin errores.`,
     action: "",
   };
 }

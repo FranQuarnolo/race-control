@@ -212,11 +212,24 @@ function detectPublicIp(): Promise<string | null> {
 }
 
 /**
+ * El único dato que el admin tiene que llevar a su hosting: a dónde mandarnos la telemetría.
+ *
+ * Va solo y sin nombre de campo al lado porque es lo que se pega en el "Send Address" del panel,
+ * que es un cuadro de texto que espera exactamente esto y nada más. El otro número del par —el
+ * puerto de escucha del servidor— ya no hace falta pedirlo: se deduce del primer paquete que
+ * llega (ver `adoptRemotePortIfNeeded` en udp/client.ts).
+ */
+export function buildSendAddress(publicIp: string | null, udpLocalPort: number): string {
+  return `${publicIp ?? "<TU_IP_PUBLICA>"}:${udpLocalPort}`;
+}
+
+/**
  * Arma el bloque listo para copiar/pegar en el `server_cfg.ini` del hosting.
  *
- * Sirve para cualquier hosting de Assetto Corsa, no solo EmperorServers: `UDP_PLUGIN_LOCAL_PORT`
- * y `UDP_PLUGIN_ADDRESS` son del propio Assetto Corsa, no de ninguna empresa en particular. Lo
- * único que cambia entre hostings es dónde está el botón para editar ese archivo.
+ * Sigue haciendo falta para quien edita el archivo a mano, donde sí hay que declarar las dos
+ * líneas. Sirve para cualquier hosting de Assetto Corsa, no solo EmperorServers:
+ * `UDP_PLUGIN_LOCAL_PORT` y `UDP_PLUGIN_ADDRESS` son del propio juego, no de ninguna empresa en
+ * particular — en los paneles modernos aparecen como "Listen Address" y "Send Address".
  */
 export function buildServerSnippet(publicIp: string | null, udpLocalPort: number, acRemotePort: number): string {
   const ip = publicIp ?? "<TU_IP_PUBLICA>";

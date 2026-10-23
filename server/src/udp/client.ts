@@ -14,9 +14,12 @@ import {
 export interface AcUdpConfig {
   /** Puerto local donde este proceso escucha los paquetes que manda el acServer. */
   localPort: number;
-  /** Host/puerto del acServer al que le mandamos comandos (UDP_PLUGIN_ADDRESS del server_cfg.ini). */
+  /** Host/puerto del acServer al que le mandamos comandos — el "Send Address" del panel del
+   * hosting (`UDP_PLUGIN_ADDRESS` en el server_cfg.ini). */
   remoteHost: string;
   remotePort: number;
+  /** Ver `AppConfig["acUdp"]`. Si falta, se trata como `"default"` y el puerto se autodetecta. */
+  remotePortSource?: "default" | "manual" | "detected";
 }
 
 /** `0.0.0.0` incluido a propósito: como destino de un `send()` es equivalente a loopback. */
@@ -50,6 +53,7 @@ export class AcUdpClient extends EventEmitter {
     commandSendErrors: 0,
     lastSourcePort: 0,
   };
+  private remotePortAdoptionGaveUp = false;
 
   constructor(private config: AcUdpConfig) {
     super();
@@ -99,10 +103,7 @@ export class AcUdpClient extends EventEmitter {
    * abre el pinhole de NAT del que depende la estrategia de red "direct". El backend recibía
    * telemetría perfecta y no podía contestar nada.
    *
-   * Solo se adopta la dirección de origen, no el puerto: el puerto de comandos es el que el admin
-   * declaró en `UDP_PLUGIN_LOCAL_PORT` de su `server_cfg.ini`, y ese es el valor autoritativo. Si
-   * el origen no coincide se emite igual para que quede registrado en el journal, porque es el
-   * dato que explicaría por qué los comandos no llegan si alguna versión del servidor difiere.
+   * El puerto se adopta aparte, con reglas propias: ver `adoptRemotePortIfNeeded`.
    */
   private adoptRemoteHostIfNeeded(rinfo: dgram.RemoteInfo): void {
     if (!isLoopback(this.config.remoteHost) || isLoopback(rinfo.address)) return;
@@ -116,11 +117,51 @@ export class AcUdpClient extends EventEmitter {
     });
   }
 
+  /**
+   * El puerto de comandos también lo dice el servidor solo, con cada paquete que manda.
+   *
+   * Esto existe porque encontrar ese número es, por lejos, el paso más difícil de la puesta en
+   * marcha: vive en el panel del hosting bajo un nombre que cambió entre versiones ("Listen
+   * Address" desde Assetto Corsa Server Manager 2.4.8, antes "UDP Plugin Local Port"), en muchos
+   * planes no es editable, y equivocarlo produce la falla más cara de diagnosticar que tiene el
+   * producto: la telemetría entra perfecta, el panel se pone verde entero, y ni una sola sanción
+   * llega nunca al servidor.
+   *
+   * Se apoya en un supuesto que hay que confirmar en pista (ver `docs/spike-protocolo.md`): que el
+   * acServer usa un solo socket para el plugin y entonces manda desde el mismo puerto en el que
+   * escucha. Si resultara falso, el puerto de origen sería efímero y cambiaría solo — ese caso se
+   * detecta acá mismo, se deja de adoptar y se avisa, en vez de quedar pisando el valor bueno con
+   * basura nueva en cada paquete.
+   */
+  private adoptRemotePortIfNeeded(rinfo: dgram.RemoteInfo): void {
+    if (this.config.remotePortSource === "manual") return;
+    // Volver el campo a "default" desde el panel (borrándolo) es pedir explícitamente que se
+    // reintente la detección, incluso si antes la habíamos abandonado por inestable.
+    if (this.config.remotePortSource === "default") this.remotePortAdoptionGaveUp = false;
+    if (this.remotePortAdoptionGaveUp) return;
+    if (rinfo.port === this.config.remotePort) return;
+    const previous = this.config.remotePort;
+    if (this.config.remotePortSource === "detected") {
+      this.remotePortAdoptionGaveUp = true;
+      this.emit("remotePortUnstable", { adopted: previous, alsoSeen: rinfo.port });
+      return;
+    }
+    this.config.remotePort = rinfo.port;
+    this.config.remotePortSource = "detected";
+    this.emit("remotePortDetected", { previous, detected: rinfo.port });
+  }
+
+  /** `true` cuando el servidor habló desde más de un puerto: ninguno sirve como destino fijo. */
+  hasUnstableRemotePort(): boolean {
+    return this.remotePortAdoptionGaveUp;
+  }
+
   private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo): void {
     this.stats.packetsReceived += 1;
     this.stats.lastPacketAt = Date.now();
     this.stats.lastSourcePort = rinfo.port;
     this.adoptRemoteHostIfNeeded(rinfo);
+    this.adoptRemotePortIfNeeded(rinfo);
     this.emit("rawPacket", msg);
 
     const packet = decodePacket(msg);

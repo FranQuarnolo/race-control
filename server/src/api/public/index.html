@@ -203,14 +203,21 @@
 
       <section>
         <h3>Configuración del servidor</h3>
-        <p class="muted">Pegá esto en el <code>server_cfg.ini</code> de tu hosting:</p>
-        <pre class="snippet" id="net-snippet">--</pre>
-        <button class="secondary" id="btn-copy-snippet">Copiar</button>
         <p class="muted">
-          Sirve igual en cualquier hosting de Assetto Corsa: esas dos líneas son del juego, no de
-          ninguna empresa. Lo único que cambia es dónde está el botón para editar ese archivo.
-          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía paso a paso</a>.
+          En el panel de tu hosting, buscá <b>Send Address</b> y pegale esto:
         </p>
+        <pre class="snippet" id="net-send-address">--</pre>
+        <button class="secondary" id="btn-copy-send-address">Copiar</button>
+        <p class="muted">
+          Es lo único que hace falta. El otro puerto nos lo dice tu servidor solo en cuanto
+          arranque. Después reiniciá el servidor de Assetto Corsa para que lo tome.
+          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía</a>.
+        </p>
+        <details>
+          <summary class="muted">Si editás el <code>server_cfg.ini</code> a mano</summary>
+          <pre class="snippet" id="net-snippet">--</pre>
+          <button class="secondary" id="btn-copy-snippet">Copiar las dos líneas</button>
+        </details>
       </section>
 
       <section>
@@ -251,12 +258,14 @@
           <label for="u-remote-port">Puerto del servidor de AC</label>
           <input id="u-remote-port" type="number" min="1024" max="65535" />
         </div>
+        <p class="muted" id="u-remote-port-note"></p>
         <p class="muted">
-          Estos dos últimos tienen que coincidir con los de tu hosting: "Telemetría que entra" es
-          el puerto del <code>UDP_PLUGIN_ADDRESS</code>, y "Puerto del servidor de AC" es el
-          <code>UDP_PLUGIN_LOCAL_PORT</code>. Si tu hosting te obliga a usar otros números,
-          cambialos acá en vez de pelearte con el panel del hosting. El texto para copiar de arriba
-          se actualiza solo.
+          "Telemetría que entra" es el puerto que va después de los dos puntos en el
+          <b>Send Address</b> de tu hosting (<code>UDP_PLUGIN_ADDRESS</code> en paneles viejos):
+          ese lo elegís vos. "Puerto del servidor de AC" es el <b>Listen Address</b>
+          (<code>UDP_PLUGIN_LOCAL_PORT</code>), y ese lo pone el hosting — normalmente no hace
+          falta tocarlo, porque el servidor nos lo dice solo. El texto para copiar de arriba se
+          actualiza con lo que pongas acá.
         </p>
         <button id="btn-save-ports" data-form="ports">Guardar</button>
       </section>
@@ -394,15 +403,15 @@
       <div class="wizard-step" data-step="3" hidden>
         <h2>Conectá tu servidor de Assetto Corsa</h2>
         <p class="muted">
-          Pegá estas dos líneas en el <code>server_cfg.ini</code> de tu hosting y reiniciá el
-          servidor de Assetto Corsa para que las tome. Sirve en cualquier hosting.
+          Entrá al panel de tu hosting, buscá el campo <b>Send Address</b> y pegale esto:
         </p>
         <pre class="snippet" id="wizard-snippet">--</pre>
         <button class="secondary" id="wizard-copy">Copiar</button>
         <p class="muted">
-          ¿No sabés dónde pegarlas?
-          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Abrí la guía paso a paso</a>.
-          Podés dejarla para después: el botón "Conexión" del panel tiene lo mismo.
+          Después reiniciá el servidor de Assetto Corsa. Es lo único que hace falta: el resto lo
+          averiguamos solos. ¿No encontrás ese campo?
+          <a href="/docs/guia-conexion.html" target="_blank" rel="noopener">Abrí la guía</a>.
+          Podés dejarlo para después: el botón "Conexión" del panel tiene lo mismo.
         </p>
       </div>
 

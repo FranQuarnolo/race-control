@@ -22,7 +22,8 @@ una sola pantalla.
 ## 🚦 Forma de uso
 
 1. 🖥️ El admin descarga y abre `RaceControlServer.exe` — se abre un panel en el navegador.
-2. 🔌 El admin copia un texto que el panel le da listo, y lo pega en su hosting.
+2. 🔌 El admin copia una dirección que el panel le da lista, y la pega en el campo
+   **"Send Address"** de su hosting. Es el único dato.
 3. 🎮 El admin le pasa `RaceControlClient.zip` a cada piloto, una sola vez.
 4. 📥 Cada piloto arrastra ese .zip a Content Manager — nada más que hacer.
 5. 🏁 El día de carrera: el admin abre el panel y aprieta los botones de largada. ¡Listo!
@@ -35,8 +36,10 @@ una sola pantalla.
    elegí "Más información" → "Ejecutar de todas formas".
 3. La primera vez te guía un asistente de 4 pasos: nombre de la liga, tipo de torneo, conexión con
    tu servidor, y una comprobación en vivo de que los datos están llegando. ✅
-4. En **"Conexión"** (arriba a la derecha) tenés el texto ya armado para pegar en el panel de tu
-   hosting, un botón "Probar ahora" que te dice qué falta, y la guía paso a paso. 📋
+4. En **"Conexión"** (arriba a la derecha) tenés la dirección ya armada para pegar en el campo
+   **"Send Address"** de tu hosting (en paneles viejos se llama `UDP_PLUGIN_ADDRESS`), un botón
+   "Probar ahora" que te dice qué falta, y la guía. Es el único dato que hay que mover a mano: el
+   resto lo averigua solo. 📋
 5. En **"Reglas"** elegís el tipo de torneo y ajustás qué se controla y qué pasa con cada cosa:
    solo registrar, mandar a revisar o sancionar. 🏎️
 6. 🛡️ **Recomendado**: dejá activado el "modo sombra" en las primeras carreras — el sistema

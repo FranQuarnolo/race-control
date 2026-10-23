@@ -33,6 +33,8 @@ function input(over: Over = {}): DiagnosticsInput {
     remoteHost: "200.9.9.9",
     udpLocalPort: 12000,
     udpRemotePort: 11000,
+    udpRemotePortSource: "detected",
+    udpRemotePortUnstable: false,
     clientPort: 3001,
     driversConnected: 3,
     driversReporting: 3,
@@ -144,18 +146,38 @@ describe("runDiagnostics", () => {
   // nombrar los dos números y las dos salidas posibles.
   it("si el servidor habla desde otro puerto que al que le mandamos, lo dice con los dos números", () => {
     const check = by(
-      runDiagnostics(input({ udp: { lastSourcePort: 8008 }, udpRemotePort: 11000 })),
+      runDiagnostics(input({ udp: { lastSourcePort: 8008 }, udpRemotePort: 11000, udpRemotePortSource: "manual" })),
       "commands"
     );
     assert.strictEqual(check.state, "fail");
     assert.match(check.detail, /8008/);
     assert.match(check.detail, /11000/);
     assert.match(check.action, /8008/);
-    assert.match(check.action, /UDP_PLUGIN_LOCAL_PORT/);
+    assert.match(check.action, /Listen Address/);
+  });
+
+  // Si el servidor no usa un puerto fijo, mandarlo a copiar "el número que vimos" es mandarlo a
+  // copiar un número que ya cambió. Es el único caso en que hay que pedirle que vaya al panel.
+  it("con un puerto de origen que cambia, no se ofrece un número para copiar", () => {
+    const check = by(
+      runDiagnostics(input({ udp: { lastSourcePort: 54321 }, udpRemotePortUnstable: true })),
+      "commands"
+    );
+    assert.strictEqual(check.state, "fail");
+    assert.doesNotMatch(check.action, /54321/);
+    assert.match(check.action, /Listen Address/);
+  });
+
+  it("cuando el puerto se dedujo solo, el verde lo aclara: nadie tuvo que buscarlo", () => {
+    const check = by(runDiagnostics(input({ udpRemotePortSource: "detected" })), "commands");
+    assert.strictEqual(check.state, "ok");
+    assert.match(check.detail, /él solo/);
   });
 
   it("el desajuste de puertos pesa más que el resto: no sirve de nada que lo demás esté verde", () => {
-    const checks = runDiagnostics(input({ udp: { lastSourcePort: 8008 }, udpRemotePort: 11000 }));
+    const checks = runDiagnostics(
+      input({ udp: { lastSourcePort: 8008 }, udpRemotePort: 11000, udpRemotePortSource: "manual" })
+    );
     assert.strictEqual(summarize(checks).state, "fail");
     assert.strictEqual(by(checks, "telemetry").state, "ok");
   });

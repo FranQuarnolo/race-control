@@ -16,6 +16,7 @@
   .step b { color: #3fa9f5; }
   .why { color: #8b93a3; font-size: 14px; margin-top: 8px; }
   .warn { background: rgba(224, 184, 75, 0.1); border: 1px solid rgba(224, 184, 75, 0.3); border-radius: 8px; padding: 12px 16px; }
+  .ok { background: rgba(53, 199, 110, 0.1); border: 1px solid rgba(53, 199, 110, 0.3); border-radius: 8px; padding: 12px 16px; }
   table { border-collapse: collapse; width: 100%; margin-top: 10px; }
   th, td { border: 1px solid #272b35; padding: 8px 10px; text-align: left; font-size: 14px; vertical-align: top; }
   th { color: #8b93a3; font-weight: 600; }
@@ -23,120 +24,113 @@
 </head>
 <body>
   <h1>Conectar Race Control con tu servidor de Assetto Corsa</h1>
-  <p>Esta es la única parte que no se puede resolver automáticamente desde la app, porque el
-  servidor de carrera no lo manejás vos sino tu hosting. Son 2 líneas para pegar — no hace falta
-  entender de redes para hacerlo, pero si tenés curiosidad, acá explicamos el porqué.</p>
+  <p>Es <b>un solo dato</b>: decirle a tu servidor a dónde mandarnos la telemetría. Lo demás lo
+  averiguamos nosotros en cuanto llegue el primer paquete.</p>
 
-  <p>Sirve para <b>cualquier</b> hosting de Assetto Corsa. Las 2 líneas son del propio juego, no
-  de ninguna empresa en particular: lo único que cambia de un hosting a otro es dónde está el
-  botón para editar el archivo.</p>
+  <p>Sirve para <b>cualquier</b> hosting. El campo es del propio Assetto Corsa, no de una empresa
+  en particular: lo único que cambia de un panel a otro es cómo se llama y dónde está.</p>
 
   <div class="step">
-    <b>Paso 1.</b> Abrí Race Control (<code>RaceControlServer.exe</code>) y tocá
-    <b>"Conexión"</b> arriba a la derecha del panel. Ahí vas a ver un bloque de texto de 2 líneas,
-    ya completado con tu dirección y tus puertos, con un botón "Copiar".
+    <b>Paso 1.</b> Abrí Race Control y tocá <b>"Conexión"</b> arriba a la derecha. En
+    "Configuración del servidor" vas a ver una dirección con un botón <b>Copiar</b>. Es algo así
+    como <code>181.45.12.7:12000</code>.
   </div>
 
   <div class="step">
-    <b>Paso 2.</b> Entrá al panel de control de tu hosting y buscá el archivo
-    <code>server_cfg.ini</code>. Abajo está dónde queda en los hostings más usados.
-    <div class="why">Si no lo encontrás, es más rápido preguntarle al soporte de tu hosting
-    "dónde edito el server_cfg.ini" que buscarlo a ciegas. Es una pregunta que reciben todos los
-    días.</div>
+    <b>Paso 2.</b> Entrá al panel de tu hosting y buscá el campo <b>"Send Address"</b>. Pegá ahí
+    lo que copiaste y guardá.
+    <div class="why">Según la versión de tu panel, ese campo puede llamarse <b>"Send Address"</b>,
+    <b>"UDP Plugin Address"</b> o <code>udp_plugin_address</code>. Son el mismo campo con tres
+    nombres distintos. Abajo está dónde encontrarlo en los paneles más usados.</div>
   </div>
 
   <div class="step">
-    <b>Paso 3.</b> Dentro de <code>server_cfg.ini</code> buscá la sección <code>[SERVER]</code> y
-    pegá ahí las 2 líneas que copiaste. Van a verse parecido a esto:
-    <pre>UDP_PLUGIN_LOCAL_PORT=11000
-UDP_PLUGIN_ADDRESS=TU_DIRECCION:12000</pre>
-    Guardá los cambios y <b>reiniciá el servidor de Assetto Corsa</b> desde el panel de tu
-    hosting para que los tome. Sin el reinicio no pasa nada: el servidor lee ese archivo una sola
-    vez, al arrancar.
+    <b>Paso 3.</b> <b>Reiniciá el servidor de Assetto Corsa</b> desde el panel de tu hosting. Sin
+    reiniciar no pasa nada: el servidor lee su configuración una sola vez, al arrancar.
   </div>
 
   <div class="step">
-    <b>Paso 4.</b> Volvé al panel de Race Control y tocá <b>"Probar ahora"</b> en la sección
-    "Probar conexión". Te dice cuál de las cuatro cosas falta y qué hacer con ella.
+    <b>Paso 4.</b> Volvé a Race Control. Cuando el servidor arranque y mande su primer paquete, el
+    botón "Conexión" se pone verde solo. Si querés mirar el detalle, tocá <b>"Probar ahora"</b>.
   </div>
 
-  <h2>Si tu hosting no te deja cambiar los puertos</h2>
-  <p>Algunos paneles traen esas dos líneas ya completadas con sus propios números y no dejan
-  tocarlas, o usan un archivo de configuración en otro formato (JSON) donde se llaman
-  <code>udp_plugin_local_port</code> y <code>udp_plugin_address</code>. Es lo mismo con otro
-  nombre.</p>
-  <p>En ese caso no pelees con el hosting: <b>cambiá los números de este lado</b>. En el panel de
-  Race Control, <b>"Conexión" → "Puertos"</b>:</p>
-  <ul>
-    <li><b>"Puerto del servidor de AC"</b> ← poné el <code>UDP_PLUGIN_LOCAL_PORT</code> de tu
-    hosting.</li>
-    <li><b>"Telemetría que entra"</b> ← el puerto que va después de los dos puntos en el
-    <code>UDP_PLUGIN_ADDRESS</code>. Este sí lo elegís vos: es un puerto de <i>tu</i> PC.</li>
-  </ul>
-  <div class="why">Que estos dos números no coincidan con los del hosting es la falla más
-  traicionera que hay, porque <b>no se ve</b>: la telemetría entra perfecta, el panel muestra a
-  todos los pilotos corriendo, y las sanciones no le llegan nunca al servidor porque salen hacia
-  un puerto donde nadie escucha. Por eso "Probar ahora" lo chequea aparte y te muestra los dos
-  números cuando difieren.</div>
+  <div class="ok">
+    <b>El otro puerto no hace falta buscarlo.</b> El par que pedían las guías viejas eran dos
+    números: a dónde mandar la telemetría (el de arriba) y en cuál escucha el servidor las órdenes
+    que le manda Race Control. El segundo nos lo dice el propio servidor con cada paquete, así que
+    lo tomamos solos. Si tu hosting lo cambia algún día, nos adaptamos sin que hagas nada.
+  </div>
 
-  <h2>Ojo: Assetto Corsa admite un solo plugin</h2>
-  <p>El <code>UDP_PLUGIN_ADDRESS</code> es uno solo. Si tu hosting ya tenía algo ahí —un sistema de
-  tiempos en vivo, un bot de Discord, el propio panel— ponerle Race Control <b>se lo saca a eso
-  otro</b>. No es un problema de Race Control, es del juego.</p>
-  <p>Si ves que apuntaba a <code>127.0.0.1</code> (la propia máquina del servidor), lo más probable
-  es que sea algo del hosting. Antes de pisarlo, fijate si tu panel tiene una pantalla de "plugins"
-  que permita encadenar varios, o preguntale al soporte.</p>
-
-  <h2>Dónde está el <code>server_cfg.ini</code> en cada hosting</h2>
+  <h2>Dónde está ese campo en cada panel</h2>
   <table>
-    <tr><th>Hosting</th><th>Dónde buscarlo</th></tr>
+    <tr><th>Panel</th><th>Dónde buscarlo</th></tr>
     <tr>
-      <td>EmperorServers</td>
-      <td>En el panel, la sección de configuración del servidor — suele llamarse "Server Config",
-      "cfg" o "Configuración avanzada". Los nombres exactos cambian según el plan contratado.</td>
+      <td>Assetto Corsa Server Manager<br />(EmperorServers y muchos otros)</td>
+      <td><b>Server Options</b> → sección <b>UDP Plugin</b> → campo <b>"Send Address"</b>. En
+      versiones anteriores a la 2.4.8 el mismo campo se llamaba <b>"UDP Plugin Address"</b>.</td>
     </tr>
     <tr>
-      <td>Paneles tipo Pterodactyl<br />(GameServerKings, Nitrado, Streamline, muchos otros)</td>
+      <td>Paneles tipo Pterodactyl<br />(GameServerKings, Nitrado, Streamline y otros)</td>
       <td>Pestaña <b>"Files"</b> (o "Administrador de archivos"), carpeta <code>cfg/</code>,
-      archivo <code>server_cfg.ini</code>. Editalo ahí mismo y usá el botón "Restart".</td>
+      archivo <code>server_cfg.ini</code>, sección <code>[SERVER]</code>. Ahí el campo se llama
+      <code>UDP_PLUGIN_ADDRESS</code>. Editalo y usá el botón "Restart".</td>
     </tr>
     <tr>
       <td>Tu propio VPS o PC</td>
-      <td>Está junto al ejecutable del servidor, en la carpeta <code>cfg/</code>. Editalo con el
+      <td><code>cfg/server_cfg.ini</code>, al lado del ejecutable del servidor. Editalo con el
       Bloc de notas y volvé a arrancar <code>acServer.exe</code>.</td>
     </tr>
     <tr>
       <td>Content Manager<br />(servidor local)</td>
-      <td>En la pantalla del servidor, pestaña <b>"Plugins"</b> o el botón "Edit server_cfg.ini".
-      Content Manager puede reescribir el archivo al guardar desde su interfaz: si las 2 líneas
-      desaparecen, cargalas desde su propia sección de plugins.</td>
+      <td>En la pantalla del servidor, pestaña <b>"Plugins"</b>. Cargalo desde ahí y no editando
+      el archivo: Content Manager reescribe el <code>server_cfg.ini</code> al guardar desde su
+      interfaz, y se lleva puesto lo que hayas puesto a mano.</td>
     </tr>
   </table>
 
-  <h2>¿Por qué hace falta esto y qué hace cada línea?</h2>
-  <p>El servidor de Assetto Corsa le manda constantemente datos de velocidad y posición de cada
-  auto a una dirección externa — ahí es donde Race Control los recibe para poder detectar
-  infracciones. También Race Control le manda de vuelta órdenes (sanciones, avisos, kicks). Estas
-  2 líneas le dicen al servidor a dónde mandar y dónde escuchar cada cosa:</p>
-  <ul>
-    <li><code>UDP_PLUGIN_ADDRESS</code>: tu dirección y el puerto donde corre Race Control — es
-    donde el servidor de AC manda la telemetría de cada auto.</li>
-    <li><code>UDP_PLUGIN_LOCAL_PORT</code>: el puerto que el propio servidor de AC abre para
-    recibir las órdenes que le manda Race Control (sanciones, kicks, avisos de largada).</li>
-  </ul>
-  <p>Sin estas 2 líneas, el servidor nunca se entera de que existe Race Control, y nada de esto
-  funciona — ni la largada, ni las sanciones.</p>
+  <p>Si editás el archivo a mano, ahí sí hay que declarar las dos líneas. El panel de Race Control
+  te las da armadas en "Si editás el <code>server_cfg.ini</code> a mano", dentro de la misma
+  sección:</p>
+  <pre>UDP_PLUGIN_LOCAL_PORT=11000
+UDP_PLUGIN_ADDRESS=TU_DIRECCION:12000</pre>
 
-  <h2>¿Qué pasa con el router de mi casa?</h2>
-  <p>Race Control lo intenta resolver solo al arrancar, sin que hagas nada. Si "Probar conexión"
-  te dice que falta abrir un puerto, es porque tu router no aceptó hacerlo automáticamente — en
-  ese caso hay que entrar a su configuración y hacer una "redirección de puertos" (port
-  forwarding) hacia esta PC. El panel te dice exactamente qué número de puerto.</p>
+  <h2>Race Control convive con los plugins que ya tengas</h2>
+  <p>Desde la versión <b>2.4.8</b> de Assetto Corsa Server Manager se pueden declarar
+  <b>varios plugins a la vez</b>, sin encadenarlos entre sí. Si ya tenías Real Penalty, sTracker,
+  KissMyRank, un bot de Discord o un sistema de tiempos en vivo, Race Control se suma a la lista
+  y no le saca el lugar a ninguno.</p>
+  <p>Lo mismo con las sanciones automáticas del propio panel (<code>custom_cuts_enabled</code>,
+  <code>collision_penalties_enabled</code> y similares): podés dejarlas como estén. Race Control
+  no las necesita ni las pisa — lo que hace es llevar lo que detecta a la bandeja del comisario
+  para que decida una persona.</p>
+  <p>En paneles más viejos, en cambio, el campo es uno solo y poner Race Control reemplaza lo que
+  hubiera. Si ves que apuntaba a <code>127.0.0.1</code>, lo más probable es que sea algo del
+  hosting: antes de pisarlo, preguntale al soporte.</p>
+
+  <h2>Si no llega nada</h2>
+  <p>Mirá <b>"Probar ahora"</b> en la sección "Probar conexión": los cuatro chequeos dicen cuál de
+  las cosas falló y qué hacer. Las causas habituales, en orden:</p>
+  <ul>
+    <li><b>No reiniciaste el servidor</b> después de guardar. Es la más común de todas.</li>
+    <li><b>Falta abrir un puerto en tu router.</b> Race Control lo intenta solo al arrancar; si tu
+    router no lo aceptó, el panel te dice exactamente qué número hay que abrir.</li>
+    <li><b>Tu panel tiene una lista de IPs permitidas</b> para el plugin UDP. Si está activa, el
+    servidor descarta en silencio todo lo que venga de una IP que no esté en la lista: hay que
+    agregar la tuya, que es la que figura en "Dirección propia".</li>
+  </ul>
 
   <div class="warn">
     <b>Si tu internet tiene IP dinámica</b> (cambia cada tanto, que es lo normal en una conexión
-    hogareña), vas a tener que repetir el paso 3 cuando cambie. Si eso te resulta molesto, la
+    hogareña), vas a tener que repetir el paso 2 cuando cambie. Si eso te resulta molesto, la
     alternativa es correr Race Control en una VPS barata, que tiene dirección fija.
   </div>
+
+  <h2>¿Por qué hace falta esto?</h2>
+  <p>El servidor de Assetto Corsa manda constantemente la velocidad y la posición de cada auto a
+  una dirección externa — ahí es donde Race Control los recibe para detectar infracciones. Y
+  Race Control le contesta con órdenes: sanciones, avisos, kicks. El "Send Address" es la primera
+  mitad de esa conversación; la segunda la resolvemos solos.</p>
+  <p>Sin ese dato, el servidor nunca se entera de que Race Control existe, y nada funciona: ni la
+  largada, ni las sanciones.</p>
 </body>
 </html>

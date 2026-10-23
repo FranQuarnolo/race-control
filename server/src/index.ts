@@ -15,7 +15,7 @@ import { BackendAnnouncer } from "./udp/announcer";
 import { CarInfo, CarUpdate, ClientEvent, ConnectionClosed, ErrorMessage, LapCompleted, NewConnection, SessionInfo } from "./udp/protocol";
 import { Incident, IncidentEngine } from "./incident/incidentEngine";
 import { ObservedFact, WrongWayWatcher } from "./incident/raceWatchers";
-import { ConnectivityManager, buildServerSnippet } from "./net/connectivity";
+import { ConnectivityManager, buildSendAddress, buildServerSnippet } from "./net/connectivity";
 import { findFreePort } from "./net/ports";
 import { SessionPhaseTracker } from "./session/phase";
 import { SessionTracker } from "./session/sessionInfo";
@@ -64,14 +64,31 @@ export async function createRaceControl(config: AppConfig): Promise<RaceControl>
   udpClient.on("sendError", (err) => journal.log("udp.sendError", { message: String(err) }));
   // El host del servidor de AC se descubre del primer paquete que llega (ver adoptRemoteHostIfNeeded).
   // Se persiste para que el próximo arranque ya salga configurado, sin esperar al primer datagrama.
-  udpClient.on("remoteHostDetected", (info: Record<string, unknown>) => {
-    console.log(`[race-control] Servidor de AC detectado en ${info.detected} — comandos salientes redirigidos.`);
-    journal.log("udp.remoteHostDetected", info);
+  const persistDetectedTarget = (event: string, info: Record<string, unknown>) => {
+    journal.log(event, info);
     try {
       saveConfig(config);
     } catch (err) {
-      journal.log("udp.remoteHostPersistError", { message: String(err) });
+      journal.log("udp.remoteTargetPersistError", { message: String(err) });
     }
+  };
+  udpClient.on("remoteHostDetected", (info: Record<string, unknown>) => {
+    console.log(`[race-control] Servidor de AC detectado en ${info.detected} — comandos salientes redirigidos.`);
+    persistDetectedTarget("udp.remoteHostDetected", info);
+  });
+  // El puerto de comandos también se descubre solo (ver adoptRemotePortIfNeeded). Es el número
+  // que el admin tendría que ir a buscar al panel de su hosting, y el que arruina la carrera en
+  // silencio si se equivoca.
+  udpClient.on("remotePortDetected", (info: Record<string, unknown>) => {
+    console.log(`[race-control] El servidor de AC escucha órdenes en el puerto ${info.detected} — ya apuntamos ahí.`);
+    persistDetectedTarget("udp.remotePortDetected", info);
+  });
+  udpClient.on("remotePortUnstable", (info: Record<string, unknown>) => {
+    console.warn(
+      `[race-control] El servidor nos habló desde ${info.adopted} y también desde ${info.alsoSeen}: ` +
+        "no se puede deducir a qué puerto mandarle las órdenes. Hay que escribirlo a mano en Conexión → Puertos."
+    );
+    journal.log("udp.remotePortUnstable", info);
   });
 
   const rawCapture = new RawCapture(logDir, () => performance.now());
@@ -474,6 +491,7 @@ export async function createRaceControl(config: AppConfig): Promise<RaceControl>
     },
     buildServerSnippet: () =>
       buildServerSnippet(connectivity.getStatus().publicIp, config.acUdp.localPort, config.acUdp.remotePort),
+    buildSendAddress: () => buildSendAddress(connectivity.getStatus().publicIp, config.acUdp.localPort),
     getActivePorts: () => ({ ...activePorts, portsMoved }),
   });
 
