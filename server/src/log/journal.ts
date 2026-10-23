@@ -171,10 +171,9 @@ export interface RetentionPolicy {
 /**
  * Borra los logs viejos de una liga. Se llama al arrancar y una vez por día.
  *
- * Existe por el portal, no por el `.exe`: en la PC del admin el disco es suyo y los datos son de
- * su propia liga, así que borrarle el historial sin preguntar sería un atropello. En un servidor
- * compartido que guarda nombres y SteamID64 de pilotos de ligas ajenas, conservarlos para siempre
- * es lo que no se puede defender. Por eso la política se pasa explícita y el modo local no la usa.
+ * Race Control corre en un servidor compartido y guarda nombres y SteamID64 de pilotos de ligas
+ * ajenas: conservarlos para siempre es lo que no se puede defender. Por eso la política de
+ * retención se pasa explícita y no hay forma de desactivarla.
  *
  * El `raw.bin` en curso no se toca: se lo lleva la rotación por tamaño. Es material de
  * diagnóstico binario, no una lista de nombres.

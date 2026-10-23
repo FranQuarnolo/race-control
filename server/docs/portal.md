@@ -52,36 +52,35 @@ El costo son unas decenas de MB por liga. Se paga.
 
 | Archivo | Qué hace |
 |---|---|
-| `portal/index.ts` | Entry. Levanta el HTTP, arranca el supervisor, maneja las señales |
-| `portal/server.ts` | Todo el Express: sesiones, CSRF, API del portal, ruteo a las ligas |
+| `portal/index.ts` | Entry. Crea la cuenta de operador si falta, levanta el HTTP, arranca el supervisor, maneja las señales |
+| `portal/server.ts` | Todo el Express: sesiones, CSRF, API del portal, API del operador, ruteo a las ligas |
 | `portal/supervisor.ts` | Forkea un worker por liga y lo mantiene vivo |
-| `portal/store.ts` | Cuentas, ligas, membresías e invitaciones en un JSON atómico |
-| `portal/auth.ts` | Hash de contraseñas, sesiones, frenos de login, tokens de invitación |
+| `portal/store.ts` | Cuentas, ligas y membresías en un JSON atómico |
+| `portal/auth.ts` | Hash de contraseñas, sesiones, frenos de login |
 | `portal/proxy.ts` | Reenvío HTTP al worker, sin tocar el cuerpo del request |
-| `portal/cli.ts` | Comandos de operación: crear liga, invitar, listar |
+| `portal/cli.ts` | Los mismos comandos del panel de operador, para cuando el portal está apagado |
 | `worker/leagueWorker.ts` | Entry del hijo. Recibe su configuración por IPC y arma el motor |
 | `worker/messages.ts` | El contrato de esa IPC |
-| `core/raceControl.ts` | El motor. El mismo que usa el `.exe`, parametrizado |
+| `core/raceControl.ts` | El motor de una liga, parametrizado |
 
-## El motor es uno solo
+## El motor no sabe que hay un portal
 
-`createRaceControl(options)` arma todo el backend y recibe por argumento lo que antes leía de
-módulo:
+`createRaceControl(options)` arma todo el backend de **una** liga y recibe por argumento lo que
+antes leía de módulo:
 
 ```ts
 createRaceControl({
   config,                      // el AppConfig ya cargado
   dataDir,                     // config.json, logs/, tracks/, secrets/ cuelgan de acá
-  mode: "local" | "portal",
-  ports,                       // si no se pasan, busca puertos libres (modo local)
-  udpBindAddress,              // "fly-global-services" en Fly; undefined en local
-  discovery,                   // false en el portal: la IP la fija el despliegue
+  ports,                       // los que le asignó el supervisor; los tests los omiten
+  udpBindAddress,              // "fly-global-services" en Fly
   clientBase,                  // lo que se le anuncia al piloto por chat
 })
 ```
 
-`mode` cambia tres cosas y nada más: el panel esconde lo que el portal administra, el token de
-piloto pasa de opcional a obligatorio, y se activa la retención de logs.
+No hay un parámetro de "modo": hay un solo camino de código. El motor no detecta la red, no abre
+puertos en ningún router y no elige dónde escuchar — todo eso se lo dan hecho. El panel que sirve
+tampoco ofrece editar puertos ni direcciones, porque los administra el portal.
 
 El `stop()` que devuelve cierra los timers, el socket UDP, el journal y la captura cruda. Existe
 porque sin él no se puede tener más de una instancia en un proceso, y eso es justo lo que los
@@ -99,23 +98,29 @@ Los workers escuchan en `127.0.0.1` a propósito: un worker alcanzable desde afu
 de una liga ajena abierto sin contraseña.
 
 El rango UDP es chico y está declarado a mano en `fly.toml` (Fly no publica rangos). Por eso el
-alta de ligas es por invitación: un formulario público lo agotaría el primer día. `assignPorts`
+alta de ligas la hace el operador a mano: un formulario público lo agotaría el primer día.
+`assignPorts`
 tira un error explícito cuando se acaba.
 
 ## El ruteo
 
 ```
-/                       → landing, o la lista de tus ligas si ya entraste
-/login                  → formulario
-/invitacion/<token>     → paso 1 del alta
-/conectar/<slug>        → paso 2 del alta
-/api/portal/*           → la API del portal
+/                       → la landing pública: qué hace el producto, con capturas del panel
+/login                  → formulario. Es la única puerta: no hay registro
+/mis-ligas              → a dónde cae un admin después de entrar
+/conectar/<slug>        → la pantalla de puesta en marcha de una liga
+/operador               → el panel de quien vende el servicio
+/api/portal/*           → la API del portal (sesión)
+/api/operador/*         → la API del operador (sesión + rol `operador`)
 /l/<slug>/api/client/*  → al worker, puerto de pilotos, SIN sesión
 /l/<slug>/*             → al worker, puerto del panel, CON sesión y membresía
 cualquier otra cosa     → 404
 ```
 
 Es una allowlist: se enumera lo que pasa y el resto es 404.
+
+`/api/operador/*` contesta **404 y no 403** a quien no tiene el rol. Para un admin común esa
+sección directamente no existe, y no hay nada en el producto que insinúe que está ahí.
 
 El canal de pilotos es el único que viaja sin sesión, porque lo consume la app dentro del juego,
 que no puede tener una. No queda abierto: el worker exige ahí un token firmado. El portal lo deja
@@ -143,26 +148,52 @@ Python no necesitó ningún cambio de ruteo, porque ya armaba su URL como
   siempre quema la máquina y llena el disco.
 - `EADDRINUSE` es `failed` directo: el puerto se lo asignó el portal, así que si está tomado es un
   error de configuración y no una caída.
-- Una liga arranca cuando alguien la pide. Una liga parada no ocupa un puerto UDP por una
-  invitación que quizás nadie abra.
+- Una cuenta desactivada tiene sus ligas paradas. El supervisor no las levanta al arrancar y no
+  las reintenta: no están caídas, están apagadas a propósito.
+
+## Cuentas, roles y cuota
+
+```
+users:    { id, email, pwHash, role: "operador" | "admin", active,
+            paidUntil, lastLoginAt, note, sessionsVersion, createdAt }
+leagues:  { id, slug, name, udpPort, clientPort, adminPort, status, lastError, ownerId }
+```
+
+- **`role`** separa a quien vende el servicio de quien dirige una liga. La cuenta de operador no la
+  crea nadie a mano: el portal la genera en el arranque si `RC_OPERATOR_EMAIL` está puesto y no
+  existe todavía, e imprime la contraseña en el log una sola vez.
+- **`active`** es el interruptor de la suscripción. En `false`, el supervisor **para el worker** de
+  cada liga de esa cuenta y el login deja de andar. Los datos no se tocan: la carpeta con su
+  configuración, sus sanciones y sus registros queda intacta, y reactivar vuelve a levantar todo.
+- **`paidUntil`** es una fecha escrita a mano. No hay pasarela de pago ni cobro automático: el
+  operador cobra por donde quiera y después anota hasta cuándo. `subscriptionOf()` deriva de esa
+  fecha el estado que se ve en la tabla (`al-día`, `por-vencer` a 7 días, `vencido`, `sin-cuota`).
+  **Vencido no desactiva solo**: dar de baja a alguien en medio de su campeonato tiene que ser una
+  decisión, no un `setInterval`.
 
 ## El alta, de punta a punta
 
-1. Vos corrés `crear-liga --nombre "Fast Sim League" --email admin@liga.com`. Sale un link de un
-   solo uso que vence en 48 h.
-2. El admin lo abre, elige una contraseña y queda adentro — sin un segundo login.
-3. La pantalla de conexión le muestra el `Send Address` ya armado y pregunta al worker cada 2
-   segundos si llegó algo.
+1. En `/operador`, "Dar de alta": nombre de la liga, email y —si querés— hasta cuándo pagó. La
+   contraseña la genera el portal y **se muestra una sola vez**.
+2. Le pasás esos tres datos al admin: la dirección, su email y esa contraseña.
+3. Entra por `/login` y cae en la pantalla de conexión de su liga, que le muestra el `Send Address`
+   ya armado y le pregunta al worker cada 2 segundos si llegó algo.
 4. Cuando llega, se pone verde y lo manda al panel.
 
 No se le pide la IP, ni puertos, ni el tipo de torneo. Eso arranca en *Campeonato* y se cambia
 después desde Reglas, donde ya vive.
 
+Lo mismo está en `portal/cli.ts`, para cuando el portal no está levantado. Los comandos que
+escriben se niegan a correr con el portal vivo, y el motivo es concreto: el portal tiene todo
+`portal.json` en memoria y lo reescribe entero cada vez que algo cambia, así que el primer guardado
+después borraría lo que hubiera hecho el CLI. Se detecta con `portal.pid` + `process.kill(pid, 0)`.
+
 ## El estado en disco
 
 ```
 /data/
-  portal.json              cuentas, ligas, membresías, invitaciones (modo 0600)
+  portal.json              cuentas, ligas y membresías (modo 0600)
+  portal.pid               el PID del portal vivo, para que el CLI no escriba a la vez
   leagues/<id>/
     config.json            la configuración de esa liga
     secrets/pilot.key      32 bytes, la clave con la que firma los tokens de sus pilotos
@@ -172,8 +203,8 @@ después desde Reglas, donde ya vive.
     tracks/                los trazados aprendidos
 ```
 
-Es el **mismo layout** que usa el `.exe` en `%APPDATA%\RaceControl`. No es casualidad: así una
-carpeta se puede mover de un lado al otro sin migrar nada.
+Cada liga es una carpeta y nada más que una carpeta: no hay índice que mantener en sincronía ni
+estado de carrera fuera de ahí. Mover una liga de una máquina a otra es copiar el directorio.
 
 `portal.json` se escribe con `tmp` + `rename`, y si alguna vez queda ilegible se renombra a
 `.corrupto-<timestamp>` en vez de pisarse. Ahí adentro están las cuentas de todas las ligas.

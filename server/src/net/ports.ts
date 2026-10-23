@@ -3,16 +3,9 @@ import * as net from "net";
 /**
  * Busca un puerto libre a partir del preferido.
  *
- * Existe porque el fallo de "puerto ocupado" es invisible para el usuario al que apunta el
- * producto: hasta ahora, si otra aplicación tenía tomado el 3000, el `listen` tiraba un
- * `EADDRINUSE` que se imprimía por consola — y en el `.exe` empaquetado la consola se cierra sola.
- * El admin veía una ventana que aparece y desaparece, sin ninguna explicación.
- *
- * Correrse de puerto es seguro para los dos que usa Race Control:
- * - el del panel es loopback y se abre solo en el navegador, así que el número da igual;
- * - el de los pilotos viaja hasta cada cliente en el anuncio del backend, así que también se
- *   propaga solo. Lo único que NO se propaga es una redirección de puertos hecha a mano en el
- *   router, y por eso el cambio se avisa en el panel en vez de hacerse en silencio.
+ * El portal le asigna a cada liga sus puertos de un pool, así que en condiciones normales esto no
+ * se usa. Queda para el replay y los tests, que levantan motores sueltos sin pasar por el portal y
+ * no tienen forma de saber qué está ocupado en la máquina de quien los corre.
  */
 export async function findFreePort(
   preferred: number,

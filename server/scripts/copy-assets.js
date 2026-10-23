@@ -3,9 +3,10 @@ const path = require("path");
 
 const root = path.join(__dirname, "..");
 
-// Dos carpetas de estáticos y no una: la del panel viaja adentro del .exe (está declarada en
-// `pkg.assets` del package.json) y la del portal no, porque el .exe no tiene portal. Mezclarlas
-// metería las pantallas de login en el ejecutable del admin, que no las usa nunca.
+// Dos carpetas de estáticos y no una: la del panel la sirve el worker de cada liga, en su puerto
+// de loopback, y la del portal la sirve el proceso que mira a internet. Son dos servidores
+// distintos con dos raíces distintas; juntarlas haría que cualquiera de los dos pudiera servir
+// archivos del otro.
 const carpetas = [
   ["src/api/public", "dist/api/public"],
   ["src/portal/public", "dist/portal/public"],

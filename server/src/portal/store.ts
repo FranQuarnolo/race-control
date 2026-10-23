@@ -13,6 +13,15 @@ import * as path from "path";
 
 export type LeagueStatus = "stopped" | "starting" | "running" | "failed";
 
+/**
+ * `operador` es quien vende el servicio (uno solo, normalmente); `admin` es el dueño de una liga.
+ *
+ * No hay registro abierto: todas las cuentas las crea el operador. Por eso no hace falta un rol
+ * "invitado" ni un estado "pendiente de confirmar" — una cuenta existe porque alguien la creó a
+ * propósito.
+ */
+export type UserRole = "operador" | "admin";
+
 export interface User {
   id: string;
   email: string;
@@ -20,6 +29,25 @@ export interface User {
   password: string;
   /** Se incrementa al cambiar la contraseña: invalida de golpe todas las sesiones abiertas. */
   sessionsVersion: number;
+  role: UserRole;
+  /**
+   * El interruptor de la suscripción, y el único que corta de verdad.
+   *
+   * En `false` la cuenta no entra y su liga se apaga, pero no se borra nada: config, sanciones y
+   * registros quedan intactos para cuando vuelva a pagar.
+   */
+  active: boolean;
+  /**
+   * Hasta cuándo está paga la cuota (`2026-11-30`). Vacío = sin control de pago.
+   *
+   * A propósito **no** bloquea solo cuando vence. Un corte automático en mitad de una carrera del
+   * domingo por una fecha mal cargada es peor que cualquier impago: lo que hace es avisarle al
+   * admin y ordenar la lista del operador, que decide con el dedo.
+   */
+  paidUntil?: string;
+  lastLoginAt?: string;
+  /** Lo que el operador necesite anotarse: cómo paga, por dónde se contactan, lo que sea. */
+  note?: string;
   createdAt: string;
 }
 
@@ -44,25 +72,15 @@ export interface Membership {
   role: "owner" | "steward";
 }
 
-export interface Invite {
-  /** Hash del token, nunca el token: quien lea el archivo no puede entrar con lo que encuentra. */
-  tokenHash: string;
-  leagueId: string;
-  email: string;
-  expiresAt: number;
-  usedAt?: number;
-}
-
 interface PortalData {
   version: 1;
   users: User[];
   leagues: League[];
   memberships: Membership[];
-  invites: Invite[];
 }
 
 function emptyData(): PortalData {
-  return { version: 1, users: [], leagues: [], memberships: [], invites: [] };
+  return { version: 1, users: [], leagues: [], memberships: [] };
 }
 
 export function newId(): string {
@@ -101,6 +119,12 @@ export class PortalStore {
     try {
       const parsed = JSON.parse(fs.readFileSync(this.file, "utf-8"));
       this.data = { ...emptyData(), ...parsed };
+      // Cuentas de antes del modelo de suscripción: sin `role` ni `active`. Si no se rellenan acá,
+      // `active === undefined` es falsy y todo el mundo quedaría afuera de golpe tras un deploy.
+      for (const user of this.data.users) {
+        if (user.role !== "operador") user.role = "admin";
+        if (typeof user.active !== "boolean") user.active = true;
+      }
     } catch (err) {
       // Mover el archivo ilegible en vez de pisarlo: ahí adentro están las cuentas de las ligas.
       const backup = `${this.file}.corrupto-${Date.now()}`;
@@ -129,12 +153,23 @@ export class PortalStore {
     return this.data.users.find((u) => u.id === id);
   }
 
-  createUser(email: string, password: string): User {
+  users(): User[] {
+    return this.data.users.slice();
+  }
+
+  /** ¿Ya hay alguien al mando? Lo usa el arranque para sembrar la primera cuenta de operador. */
+  hasOperator(): boolean {
+    return this.data.users.some((u) => u.role === "operador");
+  }
+
+  createUser(email: string, password: string, role: UserRole = "admin"): User {
     const user: User = {
       id: newId(),
       email: normalizeEmail(email),
       password,
       sessionsVersion: 1,
+      role,
+      active: true,
       createdAt: new Date().toISOString(),
     };
     this.data.users.push(user);
@@ -150,6 +185,23 @@ export class PortalStore {
     // caso que motiva el cambio —"alguien entró a mi cuenta"— no se resuelve.
     user.sessionsVersion += 1;
     this.save();
+  }
+
+  /**
+   * Cambios que hace el operador sobre una cuenta.
+   *
+   * `sessionsVersion` sube cuando se desactiva, y eso es deliberado: sin ese empujón, el admin que
+   * ya estaba adentro seguiría usando el panel con su cookie vigente hasta que venciera sola.
+   * Desactivar tiene que echarlo ahora.
+   */
+  updateUser(id: string, patch: Partial<Pick<User, "active" | "paidUntil" | "note" | "lastLoginAt">>): User | undefined {
+    const user = this.findUser(id);
+    if (!user) return undefined;
+    const seDesactiva = patch.active === false && user.active;
+    Object.assign(user, patch);
+    if (seDesactiva) user.sessionsVersion += 1;
+    this.save();
+    return user;
   }
 
   // --- Ligas -----------------------------------------------------------------------------------
@@ -173,12 +225,9 @@ export class PortalStore {
     return created;
   }
 
-  /** El dueño se conoce recién cuando alguien acepta la invitación, no cuando se crea la liga. */
-  setOwner(leagueId: string, userId: string): void {
-    const league = this.findLeague(leagueId);
-    if (!league || league.ownerId) return;
-    league.ownerId = userId;
-    this.save();
+  /** Todas las ligas de las que este usuario es dueño. El operador las apaga al desactivarlo. */
+  leaguesOwnedBy(userId: string): League[] {
+    return this.data.leagues.filter((l) => l.ownerId === userId);
   }
 
   updateLeague(id: string, patch: Partial<Pick<League, "status" | "lastError" | "name">>): void {
@@ -212,24 +261,6 @@ export class PortalStore {
   addMembership(membership: Membership): void {
     if (this.hasAccess(membership.userId, membership.leagueId)) return;
     this.data.memberships.push(membership);
-    this.save();
-  }
-
-  // --- Invitaciones ----------------------------------------------------------------------------
-
-  addInvite(invite: Invite): void {
-    this.data.invites.push(invite);
-    this.save();
-  }
-
-  findInvite(tokenHash: string): Invite | undefined {
-    return this.data.invites.find((i) => i.tokenHash === tokenHash);
-  }
-
-  useInvite(tokenHash: string): void {
-    const invite = this.findInvite(tokenHash);
-    if (!invite) return;
-    invite.usedAt = Date.now();
     this.save();
   }
 }

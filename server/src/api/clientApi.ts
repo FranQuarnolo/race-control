@@ -16,15 +16,6 @@ export interface ClientApiDeps {
   onSurfaceGrip: (grip: number) => void;
   /** Devuelve el `steamGuid` que acredita el token, o `null`. Ver security/pilotToken.ts. */
   verifyToken: (token: string | undefined) => string | null;
-  /**
-   * `true` cuando el canal sale a internet (portal): ahí el token es obligatorio.
-   *
-   * En el `.exe` local NO lo es, y no por descuido: ese puerto vive detrás del router de la casa
-   * del admin, y exigirlo de golpe dejaría afuera a todos los pilotos que todavía tengan la app
-   * de la versión anterior — en plena carrera y sin ningún mensaje que lo explique. Local manda
-   * el token igual y lo usa si llega; lo que no hace es rechazar a quien no lo tenga.
-   */
-  requireToken: boolean;
 }
 
 // SteamID64: 17 dígitos numéricos. El rango exacto queda a confirmar contra el spike de protocolo
@@ -100,14 +91,10 @@ export function createClientApi(deps: ClientApiDeps): Express {
       next();
       return;
     }
-    if (deps.requireToken) {
-      anotarFallo(ip);
-      // 401 y no 403: el cliente sabe qué hacer con esto —volver a entrar al servidor para que
-      // el chat le mande un token nuevo— y así lo dice la app.
-      res.status(401).json({ ok: false, error: "Credencial vencida: volvé a entrar al servidor." });
-      return;
-    }
-    next();
+    anotarFallo(ip);
+    // 401 y no 403: el cliente sabe qué hacer con esto —volver a entrar al servidor para que
+    // el chat le mande un token nuevo— y así lo dice la app.
+    res.status(401).json({ ok: false, error: "Credencial vencida: volvé a entrar al servidor." });
   });
 
   app.use(express.json({ limit: "10kb" }));

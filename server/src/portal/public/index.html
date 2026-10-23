@@ -3,51 +3,209 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Race Control</title>
+  <title>Race Control — dirección de carrera para tu liga de Assetto Corsa</title>
+  <meta name="description" content="Largada en movimiento, torre de tiempos en vivo y bandeja de incidentes para tu campeonato de Assetto Corsa. Desde el navegador, sin instalar nada." />
   <link rel="icon" href="/icon.svg" />
-  <link rel="stylesheet" href="/portal.css" />
+  <link rel="stylesheet" href="/landing.css" />
 </head>
 <body>
-  <div class="marca"><img src="/icon.svg" alt="" /> Race Control</div>
 
-  <!-- Sin sesión: qué es esto y cómo se consigue. -->
-  <section class="caja ancha" id="landing" hidden>
-    <h1>Control de carrera para tu liga de Assetto Corsa</h1>
-    <p>
-      Largada en movimiento, torre de tiempos en vivo, bandeja de incidentes y sanciones — todo
-      desde el navegador. Vos no instalás nada: entrás con tu usuario y dirigís la carrera.
-    </p>
+<header class="barra">
+  <div class="contenedor">
+    <a class="marca" href="/"><img src="/icon.svg" alt="" /> Race Control</a>
+    <a class="boton fantasma" href="#como-empieza">Cómo funciona</a>
+    <a class="boton" href="/login">Ingresar</a>
+  </div>
+</header>
 
-    <h2>Cómo pido mi liga</h2>
-    <p class="muted">
-      Las ligas se dan de alta por invitación. Escribinos con el nombre de tu liga y te llega un
-      link: lo abrís, elegís una contraseña y ya tenés tu panel. Lleva dos minutos.
-    </p>
+<main>
 
-    <h2>Y los pilotos</h2>
-    <p class="muted">
-      Cada piloto baja una app, la arrastra a Content Manager una sola vez y listo — sin tipear
-      ninguna dirección. Se la pasás vos desde el panel.
-    </p>
+  <section class="hero">
+    <div class="contenedor">
+      <h1>Dirigí tu carrera, no el software</h1>
+      <p class="bajada">
+        Race Control mira tu servidor de Assetto Corsa en vivo: da la largada, detecta los toques,
+        los cortes de pista y los excesos en boxes, y te deja aplicar las sanciones desde el
+        navegador. Vos no instalás nada.
+      </p>
+      <div class="hero-acciones">
+        <a class="boton grande" href="/login">Ingresar a mi liga</a>
+        <a class="boton fantasma grande" href="#como-empieza">Ver cómo empieza</a>
+      </div>
 
-    <button id="btn-login">Ya tengo cuenta, quiero entrar</button>
+      <figure class="hero-captura">
+        <img src="/capturas/control-de-carrera.png" alt="Panel de Race Control durante una carrera: mapa del circuito con los autos en pista y la torre de tiempos al costado." width="2880" height="1400" fetchpriority="high" />
+      </figure>
+    </div>
   </section>
 
-  <!-- Con sesión: elegir liga. -->
-  <section class="caja ancha" id="mis-ligas" hidden>
-    <h1>Tus ligas</h1>
-    <div id="lista"></div>
-    <p class="muted" id="sin-ligas" hidden>
-      Tu cuenta todavía no tiene ninguna liga asociada. Si acabás de pedirla, revisá el link de
-      invitación que te pasamos.
-    </p>
-    <button id="btn-logout">Cerrar sesión</button>
+  <!-- ------------------------------------------------------------------ control de carrera -->
+  <section class="seccion" id="control">
+    <div class="contenedor fila">
+      <div class="texto">
+        <span class="etiqueta">Control de carrera</span>
+        <h2>Toda la carrera en una pantalla</h2>
+        <p>
+          El circuito dibujado con los autos moviéndose encima, y al lado la torre de tiempos en
+          vivo: posición, vuelta, diferencia con el de adelante y el estado de cada piloto.
+        </p>
+        <p>
+          La largada en movimiento se da desde acá. Race Control forma la grilla, avisa por el chat
+          del juego y marca a quien se adelantó antes del verde.
+        </p>
+        <ul class="lista">
+          <li>Semáforo de largada con aviso sonoro para los pilotos</li>
+          <li>Tiempo de carrera restante, clima, viento y hora del juego</li>
+          <li>Banderas de pista en vivo</li>
+          <li>Expulsar a un piloto en dos clicks, cuando hace falta</li>
+        </ul>
+      </div>
+      <figure class="captura">
+        <img src="/capturas/control-de-carrera.png" alt="Mapa del circuito con los autos en pista, datos de sesión y torre de tiempos." width="2880" height="1400" loading="lazy" decoding="async" />
+        <figcaption>Pantalla de control, con la carrera en curso.</figcaption>
+      </figure>
+    </div>
   </section>
 
-  <p class="error" id="error" hidden></p>
-  <p class="pie">Race Control <span id="version"></span></p>
+  <!-- -------------------------------------------------------------------------- incidentes -->
+  <section class="seccion" id="sanciones">
+    <div class="contenedor fila invertida">
+      <div class="texto">
+        <span class="etiqueta">Incidentes y sanciones</span>
+        <h2>Lo que pasó queda registrado, y decidís vos</h2>
+        <p>
+          Cada toque entre autos, cada choque en solitario y cada corte de pista entra en una
+          bandeja con quién, cuándo, en qué vuelta y a qué velocidad. Nada se sanciona solo: el
+          software junta la evidencia y la decisión es del comisario.
+        </p>
+        <p>
+          Al terminar, un informe descargable con la clasificación, los segundos de penalización de
+          cada piloto y los incidentes revisados.
+        </p>
+        <ul class="lista">
+          <li>Toques entre autos, con los dos involucrados correlacionados</li>
+          <li>Cortes de pista medidos contra el trazado real del circuito</li>
+          <li>Exceso de velocidad en boxes</li>
+          <li>Adelantamientos antes del verde en la largada</li>
+          <li>Modo sombra: el motor mira y registra, pero no sanciona</li>
+        </ul>
+      </div>
+      <figure class="captura">
+        <img src="/capturas/sanciones.png" alt="Bandeja de incidentes con los toques detectados y las sanciones aplicadas." width="2880" height="1400" loading="lazy" decoding="async" />
+        <figcaption>Bandeja del comisario: incidentes detectados y sanciones aplicadas.</figcaption>
+      </figure>
+    </div>
+  </section>
 
-  <script src="/portal.js"></script>
-  <script src="/inicio.js"></script>
+  <!-- ------------------------------------------------------------------------------ reglas -->
+  <section class="seccion" id="reglas">
+    <div class="contenedor fila">
+      <div class="texto">
+        <span class="etiqueta">Reglas</span>
+        <h2>Tu reglamento, no el de otro</h2>
+        <p>
+          Cada liga corre distinto. Acá se define qué se vigila y con qué tolerancia, con
+          interruptores en castellano y sin un solo archivo de configuración a la vista.
+        </p>
+        <ul class="lista">
+          <li>Qué infracciones se detectan y cuáles se ignoran</li>
+          <li>Cuántos segundos vale cada sanción</li>
+          <li>Velocidad máxima en la calle de boxes</li>
+          <li>Si la app de los pilotos es obligatoria</li>
+        </ul>
+      </div>
+      <figure class="captura">
+        <img src="/capturas/reglas.png" alt="Pantalla de reglas con los interruptores de cada tipo de infracción." width="2880" height="1580" loading="lazy" decoding="async" />
+        <figcaption>Reglas: qué se vigila y cuánto cuesta.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------------------- app de pilotos -->
+  <section class="seccion" id="pilotos">
+    <div class="contenedor fila invertida">
+      <div class="texto">
+        <span class="etiqueta">La app de los pilotos</span>
+        <h2>Se instala una vez y no se toca nunca más</h2>
+        <p>
+          Cada piloto arrastra un archivo a Content Manager, como cualquier mod. No escribe ninguna
+          dirección, no configura nada: cuando entra al servidor, Race Control le manda lo que hace
+          falta por el chat interno del juego.
+        </p>
+        <p>
+          Dentro del juego ve el semáforo de largada, la bandera de pista y los avisos de sanción
+          que le mandás desde el panel.
+        </p>
+        <ul class="lista">
+          <li>Semáforo y audio de largada</li>
+          <li>Aviso en pantalla cuando le aplicás una sanción</li>
+          <li>Bandera de pista actual</li>
+          <li>Aporta los tiempos por sector y el compuesto a la torre de tiempos</li>
+        </ul>
+      </div>
+      <figure class="captura">
+        <img src="/capturas/conexion.png" alt="Pantalla de conexión del panel, con la dirección lista para copiar y el estado de la señal." width="2880" height="1120" loading="lazy" decoding="async" />
+        <figcaption>Conexión: lo único que se configura, una sola vez.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------------------ cómo empieza -->
+  <section class="seccion" id="como-empieza">
+    <div class="contenedor">
+      <span class="etiqueta">Puesta en marcha</span>
+      <h2>Tres pasos, una sola vez</h2>
+      <p style="color: var(--muted); max-width: 62ch;">
+        No hay programas que bajar, puertos que abrir ni ventanas que dejar abiertas durante la
+        carrera. Lo único que hacés es decirle a tu servidor a dónde mandar los datos.
+      </p>
+
+      <div class="pasos">
+        <div class="paso">
+          <div class="numero">1</div>
+          <h3>Entrás con tu usuario</h3>
+          <p>Te pasamos usuario y contraseña. Abrís la página, entrás, y ya tenés tu panel.</p>
+        </div>
+        <div class="paso">
+          <div class="numero">2</div>
+          <h3>Pegás un renglón</h3>
+          <p>
+            El panel te muestra una dirección. La pegás en el campo <strong>Send Address</strong>
+            del panel de tu hosting y reiniciás el servidor.
+          </p>
+        </div>
+        <div class="paso">
+          <div class="numero">3</div>
+          <h3>Se pone verde solo</h3>
+          <p>
+            Cuando llega la primera señal, la pantalla cambia sola. Listo: no se vuelve a tocar
+            nunca más.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cierre">
+    <div class="contenedor">
+      <h2>¿Querés tu liga en Race Control?</h2>
+      <p>
+        Las cuentas se crean a pedido, una por liga. Escribinos con el nombre de tu campeonato y te
+        pasamos el acceso.
+      </p>
+      <a class="boton grande" href="/login">Ya tengo cuenta, quiero entrar</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="pie">
+  <div class="contenedor">
+    <span>Race Control <span id="version"></span></span>
+    <span class="separador"><a href="/login">Ingresar</a></span>
+  </div>
+</footer>
+
+<script src="/landing.js"></script>
 </body>
 </html>

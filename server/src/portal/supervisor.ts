@@ -65,9 +65,15 @@ export class Supervisor {
     return this.running.has(leagueId);
   }
 
+  /** Al arrancar el portal: todas las ligas menos las que no corresponde levantar. */
   startAll(): void {
     for (const league of this.store.leagues()) {
-      if (league.status !== "failed") this.start(league.id);
+      if (league.status === "failed") continue;
+      // Una liga cuyo dueño está desactivado no vuelve sola después de un redeploy: si lo hiciera,
+      // reiniciar el servidor sería la forma de saltearse la baja por falta de pago.
+      const dueño = league.ownerId ? this.store.findUser(league.ownerId) : undefined;
+      if (dueño && !dueño.active) continue;
+      this.start(league.id);
     }
   }
 

@@ -53,10 +53,8 @@ async function arrancar(msg: StartMessage): Promise<void> {
   rc = await createRaceControl({
     config,
     dataDir: msg.dataDir,
-    mode: "portal",
     ports: { adminPort: msg.ports.adminPort, clientPort: msg.ports.clientPort },
     udpBindAddress: msg.udpBindAddress,
-    discovery: false,
     clientBase: () => msg.clientBase,
   });
 

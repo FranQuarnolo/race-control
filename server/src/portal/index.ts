@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import { createPortal, portalConfigFromEnv } from "./server";
 
 /**
@@ -6,7 +8,7 @@ import { createPortal, portalConfigFromEnv } from "./server";
  * Toda la configuración viene por variables de entorno porque el destino es un contenedor: en
  * Fly.io se declaran una vez en `fly.toml` y no hay ningún archivo que editar dentro de la imagen.
  */
-function main(): void {
+async function main(): Promise<void> {
   const config = portalConfigFromEnv();
   if (!config.publicIp) {
     console.warn(
@@ -16,6 +18,42 @@ function main(): void {
   }
 
   const portal = createPortal(config);
+
+  /**
+   * La primera cuenta de operador sale del entorno, no de un comando.
+   *
+   * Es el único huevo-y-gallina del sistema: las cuentas se crean desde el panel del operador, y a
+   * ese panel solo entra un operador. Resolverlo por CLI no alcanza, porque el CLI y el portal
+   * escriben el mismo `portal.json` y el que corre segundo pisa al primero. Acá lo hace el propio
+   * portal, antes de empezar a atender, y la contraseña queda en el log una sola vez.
+   */
+  const operadorEmail = process.env.RC_OPERATOR_EMAIL;
+  if (operadorEmail) {
+    try {
+      const clave = await portal.ensureOperator(operadorEmail, process.env.RC_OPERATOR_PASSWORD);
+      if (clave) {
+        console.log("");
+        console.log("====================================================================");
+        console.log(`  Cuenta de operador creada: ${operadorEmail}`);
+        console.log(`  Contraseña: ${clave}`);
+        console.log("  Anotala: este mensaje no se repite en el próximo arranque.");
+        console.log("====================================================================");
+        console.log("");
+      }
+    } catch (err) {
+      console.error(`[portal] no pude crear la cuenta de operador: ${err instanceof Error ? err.message : err}`);
+    }
+  } else {
+    console.warn(
+      "[portal] RC_OPERATOR_EMAIL no está puesto. Sin eso no hay con qué entrar a /operador: " +
+        "ponelo con `fly secrets set RC_OPERATOR_EMAIL=...` y mirá el log del próximo arranque."
+    );
+  }
+
+  // Marca de "el portal está corriendo", para que el CLI no escriba el mismo archivo a la vez.
+  const pidFile = path.join(config.dataRoot, "portal.pid");
+  fs.writeFileSync(pidFile, String(process.pid), "utf-8");
+
   const server = portal.app.listen(config.port, "0.0.0.0", () => {
     console.log(`[portal] escuchando en :${config.port} — público en ${config.publicHost}`);
     console.log(`[portal] puertos UDP para ligas: ${config.udpPortFrom}-${config.udpPortTo}`);
@@ -27,6 +65,11 @@ function main(): void {
     if (cerrando) return;
     cerrando = true;
     console.log(`[portal] cerrando (${signal})...`);
+    try {
+      fs.unlinkSync(pidFile);
+    } catch {
+      // Si no está, mejor: el CLI ya lo considera muerto.
+    }
     portal.supervisor.shutdown();
     server.close(() => process.exit(0));
     // Las conexiones de polling del panel pueden demorar el `close`: 5 s y se corta igual, que
@@ -46,4 +89,7 @@ function main(): void {
   });
 }
 
-main();
+main().catch((err) => {
+  console.error("[portal] no pude arrancar:", err);
+  process.exit(1);
+});

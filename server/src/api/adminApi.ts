@@ -18,12 +18,6 @@ import { computeStandings } from "../state/standings";
 import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
 export interface AdminApiDeps {
-  /**
-   * `"portal"` cierra lo que en una PC de escritorio no importaba y en internet sí: los puertos
-   * y las direcciones los administra el portal, y dejarlos editables desde el panel permitiría
-   * que un admin —o quien le robe la sesión— mueva su liga encima del puerto de otra.
-   */
-  mode?: "local" | "portal";
   config: AppConfig;
   stateTracker: StateTracker;
   formationStart: FormationStart;
@@ -49,10 +43,9 @@ export interface AdminApiDeps {
   buildServerSnippet: () => string;
   /** El "Send Address" solo: lo único que el admin tiene que copiar al panel de su hosting. */
   buildSendAddress: () => string;
-  /** Puertos realmente en uso. Pueden no ser los de la config si el preferido estaba ocupado y el
-   * arranque se corrió al siguiente libre — y en ese caso es justo lo que el panel tiene que
-   * mostrar, porque es lo que el admin necesita poner en el router. */
-  getActivePorts: () => { adminPort: number; clientPort: number; portsMoved: boolean };
+  /** Puertos realmente en uso. Los asigna el portal al arrancar la liga; el panel los muestra
+   * pero no los puede cambiar. */
+  getActivePorts: () => { adminPort: number; clientPort: number };
   /** Registro de quién hizo qué. Ver el middleware de auditoría más abajo. */
   audit?: (entry: { user: string; method: string; path: string }) => void;
 }
@@ -63,7 +56,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
  * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
  * esto no había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.4";
+export const APP_VERSION = "0.5";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
@@ -98,9 +91,6 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     const standings = computeStandings(connected, deps.getSessionType());
     res.json({
       version: APP_VERSION,
-      /** El panel es el mismo en los dos modos, pero esconde lo que en el portal no se puede
-       * tocar (puertos, direcciones) y los pasos que ahí ya están resueltos. */
-      mode: deps.mode ?? "local",
       firstRun: isFirstRun(deps.config),
       leagueName: deps.config.leagueName,
       shadowMode: deps.config.shadowMode,
@@ -162,14 +152,12 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.get("/api/config", (_req, res) => res.json(deps.config));
 
   /**
-   * "Probar conexión": los cuatro chequeos, cada uno con qué hacer si falló.
+   * "¿Algo anda mal?": los chequeos, cada uno con qué hacer si falló.
    *
-   * Reintenta primero la detección de IP pública, porque es el único de los cuatro que puede
-   * haber fallado por algo ya resuelto (no había internet al arrancar, la VPN estaba prendida) y
-   * que no se reintenta solo. Los otros tres leen contadores vivos.
+   * Todos leen contadores vivos, así que el botón es un refresco y no una reconfiguración. La
+   * dirección pública ya no se detecta acá: la fija el portal al arrancar la liga.
    */
   app.post("/api/network/test", async (_req, res) => {
-    await deps.connectivity.redetectPublicIp();
     deps.connectivity.refreshTelemetryFlag();
     const ports = deps.getActivePorts();
     const presence = deps.presenceWatchdog.getReportingCount();
@@ -224,13 +212,11 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   });
 
   /**
-   * Campos que el panel de una liga NO puede tocar cuando corre en el portal.
+   * Campos que el panel de una liga NO puede tocar.
    *
    * Los puertos y la dirección pública se los asigna el supervisor: si el panel pudiera
    * cambiarlos, una liga podría mudarse al puerto UDP de otra (y quedarse con su telemetría) o
-   * dejar al portal haciendo proxy a un puerto donde no hay nadie. En el `.exe` local nada de
-   * esto aplica: ahí el admin es dueño de su propia máquina y editarlos es la forma de resolver
-   * un choque de puertos.
+   * dejar al portal haciendo proxy a un puerto donde no hay nadie.
    */
   function stripManagedFields(patch: Record<string, unknown>): Record<string, unknown> {
     const copy: Record<string, unknown> = { ...patch };
@@ -256,7 +242,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       return;
     }
     try {
-      const patch = deps.mode === "portal" ? stripManagedFields(req.body) : req.body;
+      const patch = stripManagedFields(req.body);
       applyConfigPatch(deps.config, patch);
       res.json(deps.config);
     } catch (err) {

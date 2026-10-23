@@ -67,10 +67,21 @@ Tres defensas, no una, porque cada una falla distinto:
    headers, pero un `fetch` con CORS mal configurado sí.
 3. Chequeo de `Origin` — no llega en algunos clientes.
 
-### Lo que el panel no puede tocar en modo portal
+### Lo que el panel no puede tocar
 
 `POST /api/config` filtra puertos, binds y direcciones (`stripManagedFields`). Los administra el
-portal. El panel además esconde esos formularios, en vez de ofrecer un "Guardar" que no guarda.
+portal, y el panel directamente no muestra esos formularios.
+
+El más importante de esa lista es `acUdp.remoteHost`: es a dónde salen los datagramas que Race
+Control manda. Editable desde el panel, un admin podría apuntarlo a cualquier IP de internet y
+convertir el servicio en un emisor de UDP arbitrario con la IP del servidor como origen.
+
+### La sección del operador no existe para los demás
+
+`/api/operador/*` contesta **404** —no 403— a cualquier sesión que no tenga el rol. Un 403
+confirmaría que la ruta existe. Y la separación no es cosmética: un admin con la sesión robada
+puede hacer destrozos en su propia liga, pero no tiene que poder listar las cuentas de las demás ni
+extenderse la suscripción solo.
 
 ### Auditoría con nombre
 
@@ -162,8 +173,20 @@ nadie se entere. Los workers sí mueren y reinician, porque ahí morir es barato
 
 ### No hay 2FA, ni verificación de email, ni recuperación automática
 
-El alta es por invitación tuya y las ligas son conocidas. Agregar email transaccional es otra
-pieza para operar. La recuperación es manual: una invitación nueva.
+Las cuentas las creás vos a mano, una por una, para ligas que conocés. No hay registro abierto ni
+"olvidé mi contraseña": agregar email transaccional sería otra pieza para operar y otro canal para
+que alguien se haga pasar por otro. La recuperación es un botón tuyo en `/operador` y un mensaje
+por donde ya hablás con esa persona.
+
+Lo que sí hay que cuidar: **el email de la cuenta nunca se verifica**, así que escribirlo mal al
+dar de alta crea una cuenta que nadie va a poder usar. Se arregla dando de alta otra.
+
+### La contraseña se muestra una vez, en claro
+
+Al crear una cuenta o generar una clave nueva, el portal la devuelve en la respuesta y el panel la
+muestra. No se guarda en ningún lado —en disco solo queda el hash— y por eso no se puede volver a
+ver. La contrapartida es que durante ese rato está en la pantalla del operador y en el portapapeles
+si usó "Copiar todo".
 
 ## Datos personales
 
@@ -177,12 +200,15 @@ Los `events-*.jsonl` guardan nombres y SteamID64 en texto plano.
 | Acciones del panel con su autor | `events-*.jsonl` (`audit.action`) | 90 días |
 | Tokens de piloto | solo en memoria | nunca en disco ni en logs |
 
-La retención corre **solo en modo portal**. En el `.exe` no se borra nada: ahí el disco es del
-admin y los datos son de su propia liga.
+La retención corre al arrancar cada worker y una vez por día, en todas las ligas por igual.
+
+**Desactivar una cuenta no borra sus datos.** Es deliberado —una baja por falta de pago no tiene
+por qué destruir el historial de un campeonato— pero significa que una liga dada de baja hace un
+año sigue teniendo sus `events-*.jsonl` en el volumen hasta que la retención de 90 días los alcance
+uno por uno. No hay borrado de cuenta.
 
 Pendientes reconocidos: no hay un comando para borrar a un piloto a pedido, ni un aviso de
-privacidad en la landing ni en el texto de invitación. Régimen aplicable: Ley 25.326. Esto no es
-asesoramiento legal.
+privacidad en la landing. Régimen aplicable: Ley 25.326. Esto no es asesoramiento legal.
 
 ## Si encontrás algo
 

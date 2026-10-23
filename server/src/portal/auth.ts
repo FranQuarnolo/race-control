@@ -177,12 +177,24 @@ export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Token de invitación: se entrega en claro una sola vez y se guarda hasheado. */
-export function newInviteToken(): { token: string; hash: string } {
-  const token = crypto.randomBytes(24).toString("base64url");
-  return { token, hash: crypto.createHash("sha256").update(token).digest("hex") };
-}
+/**
+ * Contraseña para entregar a mano, legible por teléfono.
+ *
+ * El alfabeto no tiene `l`, `I`, `1`, `O` ni `0`: la contraseña viaja por WhatsApp y se tipea a
+ * mano, y una que se confunde al leerla genera un "no me anda" que termina siendo una ele.
+ *
+ * Cuatro grupos de cuatro sobre 31 símbolos son ~79 bits de entropía — más que de sobra, y a la
+ * vez algo que una persona puede dictar sin equivocarse.
+ */
+const ALFABETO = "abcdefghjkmnpqrstuvwxyz23456789";
 
-export function hashInviteToken(token: string): string {
-  return crypto.createHash("sha256").update(token).digest("hex");
+export function generatePassword(): string {
+  const grupos: string[] = [];
+  for (let g = 0; g < 4; g++) {
+    let grupo = "";
+    // `randomInt` y no `% ALFABETO.length`: el módulo sobre bytes sesga las primeras letras.
+    for (let i = 0; i < 4; i++) grupo += ALFABETO[crypto.randomInt(ALFABETO.length)];
+    grupos.push(grupo);
+  }
+  return grupos.join("-");
 }

@@ -1,20 +1,21 @@
 // Login.
 //
-// El destino sale de `?volver=`, que lo pone el portal cuando alguien entra directo a la URL de
-// su liga sin sesión: después de entrar aterriza donde quería ir y no en una lista intermedia.
-// Solo se aceptan rutas propias — un `volver` con host adentro convierte el login en un redirector
+// El destino lo decide el servidor —operador a su panel, admin de una sola liga directo adentro—
+// salvo que haya un `?volver=`, que lo pone el portal cuando alguien entra directo a la URL de su
+// liga sin sesión: ahí aterriza donde quería ir y no en una lista intermedia.
+//
+// Solo se aceptan rutas propias: un `volver` con host adentro convierte el login en un redirector
 // abierto, que es la forma clásica de armar un phishing con un dominio legítimo.
 
-function destino() {
+function volverPedido() {
   const volver = new URLSearchParams(window.location.search).get("volver");
-  if (volver && /^\/[^/\\]/.test(volver)) return volver;
-  return "/";
+  return volver && /^\/[^/\\]/.test(volver) ? volver : null;
 }
 
 alEnviar($("form"), async () => {
-  await api("/api/portal/login", {
+  const res = await api("/api/portal/login", {
     email: $("email").value,
     password: $("password").value,
   });
-  window.location.href = destino();
+  window.location.href = volverPedido() || res.destino || "/mis-ligas";
 });

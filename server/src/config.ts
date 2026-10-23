@@ -61,29 +61,16 @@ export interface AppConfig {
   shadowMode: boolean;
 }
 
-function resolveConfigDir(): string {
-  // Dentro de un ejecutable empaquetado (pkg/@yao-pkg/pkg) el snapshot es de solo lectura —
-  // el config tiene que vivir fuera de él. Usamos %APPDATA%\RaceControl (siempre escribible por
-  // el usuario actual) en vez de "al lado del .exe": esa carpeta puede ser Descargas o cualquier
-  // otra con permisos restringidos por el antivirus/Windows, lo que hacía fallar el guardado en
-  // silencio (ej. el wizard de primer arranque nunca cerraba porque el POST fallaba).
-  if ((process as unknown as { pkg?: unknown }).pkg) {
-    const appData = process.env.APPDATA || path.join(require("os").homedir(), "AppData", "Roaming");
-    return path.join(appData, "RaceControl");
-  }
-  return path.join(__dirname, "..");
-}
-
 /**
  * Carpeta de datos efectiva: `config.json`, `logs/` y `tracks/` cuelgan de acá.
  *
- * Es mutable porque desde la 0.4 el mismo código corre en dos contextos: el `.exe` local, que usa
- * `%APPDATA%\RaceControl`, y el worker de una liga en el portal, que recibe su propia carpeta
- * (`<raíz>/leagues/<id>`) del supervisor. Sigue siendo estado de módulo —y no un parámetro que
- * viaje por todos lados— porque cada liga corre en SU PROPIO proceso: nunca hay dos carpetas
- * vivas a la vez dentro del mismo proceso. El entry la fija una sola vez, antes de `loadConfig()`.
+ * Cada liga tiene la suya (`<raíz>/leagues/<id>`) y se la pasa el supervisor al worker. Es estado
+ * de módulo —y no un parámetro que viaje por todos lados— porque cada liga corre en SU PROPIO
+ * proceso: nunca hay dos carpetas vivas a la vez dentro del mismo proceso. El worker la fija una
+ * sola vez, antes de `loadConfig()`. El valor inicial solo lo usan los tests y el replay, que
+ * corren sueltos sin supervisor.
  */
-let configDir = resolveConfigDir();
+let configDir = path.join(__dirname, "..");
 
 export function getConfigDir(): string {
   return configDir;

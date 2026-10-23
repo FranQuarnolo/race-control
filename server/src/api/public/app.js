@@ -7,13 +7,12 @@
 const POLL_MS = 1000;
 
 /**
- * Prefijo bajo el que está servido el panel.
+ * Prefijo bajo el que está servido el panel: `/l/<slug>`.
  *
- * El mismo HTML se sirve en dos lugares: en la raíz cuando corre el .exe en la PC del admin
- * (`http://localhost:3000/`), y bajo `/l/<slug>/` cuando corre en el portal, donde todas las
- * ligas comparten un dominio y se distinguen por la ruta. Se deduce de la propia URL en vez de
- * inyectarlo desde el servidor: así el archivo es el mismo byte a byte en los dos modos y no hay
- * un paso de plantilla que pueda quedar sin aplicar.
+ * Todas las ligas comparten un dominio y se distinguen por la ruta. Se deduce de la propia URL en
+ * vez de inyectarlo desde el servidor: así el archivo es el mismo byte a byte para todas las ligas
+ * y no hay un paso de plantilla que pueda quedar sin aplicar. Queda `""` cuando se abre el panel
+ * directo contra el puerto del worker, que es como se toman las capturas de la landing.
  */
 const BASE = (function () {
   const m = window.location.pathname.match(/^\/l\/[a-z0-9-]+/);
@@ -41,12 +40,12 @@ async function api(path, options) {
   const opts = Object.assign({}, options);
   // `X-RC-Request` va en TODA request, no solo en los POST: es la marca que el portal exige para
   // aceptar algo que modifica estado. Un formulario de otro sitio no puede agregar headers, así
-  // que sin esto un CSRF pasaría. En el .exe local el header no molesta a nadie.
+  // que sin esto un CSRF pasaría.
   opts.headers = Object.assign({ "X-RC-Request": "1" }, options && options.headers);
   try {
     res = await fetch(BASE + path, opts);
   } catch (err) {
-    throw new Error("No se pudo conectar con el backend (¿sigue abierto RaceControlServer.exe?)");
+    throw new Error("Se cortó la conexión con Race Control. Probá recargar la página.");
   }
   // 401 solo puede venir del portal: la sesión venció mientras el panel seguía haciendo polling.
   // Recargar lo manda al login con `volver`, así vuelve a donde estaba.
@@ -86,10 +85,6 @@ let selectedCarId = null;
 let lastState = null;
 let trackOutline = null;
 let lastTrackCoverage = -1;
-
-/** `null` hasta el primer `/api/state`. En el portal, la red (direcciones, puertos, forwarding) la
- * administra el servidor y el panel no la toca: ver `applyMode`. */
-let portalMode = null;
 
 /** Si el backend no encontró Assetto Corsa, no tiene sentido pedir un logo por auto para cobrar
  * 24 respuestas 404: se va directo a la marca en texto. */
@@ -149,6 +144,11 @@ function wireRouter() {
 
 // ===================================================================== cajones laterales
 
+/** Qué cajón abre cada `#ancla`. Los cajones no son vistas del router —se abren encima de lo que
+ * haya— pero sí tienen que ser enlazables: así el aviso de "revisá la conexión" puede mandar
+ * directo al lugar donde se revisa, en vez de describir dónde está el botón. */
+const DRAWER_HASHES = { "#conexion": "drawer-network", "#reglas": "drawer-rules" };
+
 function openDrawer(id) {
   $(id).hidden = false;
 }
@@ -156,11 +156,21 @@ function openDrawer(id) {
 function closeDrawers() {
   $("drawer-network").hidden = true;
   $("drawer-rules").hidden = true;
+  // Sin esto, cerrar y volver a tocar el mismo botón no haría nada: el hash seguiría puesto y el
+  // navegador no dispara `hashchange` si no cambió.
+  if (window.location.hash) history.replaceState({}, "", window.location.pathname);
+}
+
+function applyDrawerHash() {
+  const id = DRAWER_HASHES[window.location.hash];
+  if (id) openDrawer(id);
 }
 
 function wireDrawers() {
   $("btn-network").addEventListener("click", () => openDrawer("drawer-network"));
   $("btn-rules").addEventListener("click", () => openDrawer("drawer-rules"));
+  window.addEventListener("hashchange", applyDrawerHash);
+  applyDrawerHash();
   for (const btn of document.querySelectorAll("[data-close-drawer]")) {
     btn.addEventListener("click", closeDrawers);
   }
@@ -281,20 +291,6 @@ function setupForms() {
   );
 
   registerForm("league", "btn-save-league", ["league-input"], () => ({ leagueName: $("league-input").value.trim() }));
-
-  // Los puertos son lo único de la config que no se puede aplicar en caliente: los dos listen ya
-  // están abiertos. Se guarda y se avisa que arranca con los nuevos la próxima vez, en vez de
-  // fingir que el cambio ya está hecho.
-  registerForm(
-    "ports",
-    "btn-save-ports",
-    ["h-admin-port", "h-client-port", "u-local-port", "u-remote-port"],
-    () => ({
-      http: { adminPort: num("h-admin-port"), clientPort: num("h-client-port") },
-      acUdp: { localPort: num("u-local-port"), remotePort: num("u-remote-port") },
-    }),
-    () => toast("Guardado. Los puertos nuevos se usan la próxima vez que abras Race Control.", 5000)
-  );
 }
 
 // ===================================================================== catálogo de infracciones
@@ -546,20 +542,6 @@ function fillConfigForm(config) {
   $("pr-grace").value = config.presence.graceSeconds;
 
   $("league-input").value = config.leagueName;
-  $("net-remote-host").value = config.acUdp.remoteHost === "127.0.0.1" ? "" : config.acUdp.remoteHost;
-  $("net-public-host").value = config.http.publicHost || "";
-  $("h-admin-port").value = config.http.adminPort;
-  $("h-client-port").value = config.http.clientPort;
-  $("u-local-port").value = config.acUdp.localPort;
-  $("u-remote-port").value = config.acUdp.remotePort;
-  // Decirle al admin de dónde salió ese número. Sin esto, ve un puerto que él nunca escribió y no
-  // tiene forma de saber si es un valor de fábrica que hay que corregir o el bueno de verdad.
-  $("u-remote-port-note").textContent =
-    config.acUdp.remotePortSource === "detected"
-      ? "Este número nos lo dijo tu servidor solo: no hace falta que lo busques en el panel del hosting."
-      : config.acUdp.remotePortSource === "manual"
-        ? "Lo escribiste vos, así que no lo vamos a pisar. Borralo y guardá para volver a detectarlo solo."
-        : "Todavía es el valor de fábrica. Se corrige solo en cuanto llegue la primera señal del servidor.";
 
   for (const name of Object.keys(forms)) markFormSaved(name);
 }
@@ -1517,66 +1499,19 @@ function resolveButton(id, status, label, cls) {
 
 // ===================================================================== red
 
-const STRATEGY_LABELS = {
-  pending: "detectando...",
-  direct: "directa (sin forwarding)",
-  upnp: "UPnP automático",
-  manual: "requiere forwarding manual",
-};
-
-/**
- * Esconde lo que el portal administra por su cuenta.
- *
- * Se corre una sola vez, con el primer estado: el modo no cambia durante la vida de la página, y
- * recorrer el DOM en cada poll para no cambiar nada es trabajo tirado. Lo que se oculta son los
- * campos que el backend ya rechaza en modo portal (ver `stripManagedFields` en adminApi.ts) y los
- * datos que solo significan algo cuando Race Control corre en la PC del admin: el puerto crudo de
- * los pilotos (en el portal entran por `/l/<liga>/`, no por un puerto) y la estrategia de
- * forwarding (no hay router de por medio).
- */
-function applyMode(mode) {
-  const esPortal = mode === "portal";
-  if (portalMode === esPortal) return;
-  portalMode = esPortal;
-  for (const el of document.querySelectorAll("[data-local-only]")) el.hidden = esPortal;
-}
-
 function renderNetwork(network) {
-  // La dirección propia es el único dato del que depende que un piloto pueda conectarse, y hasta
-  // ahora un fallo de detección se veía igual que una detección en curso: "detectando..." para
-  // siempre. Si falló, se dice que falló.
+  // La dirección de la liga es el único dato del que depende que el servidor de AC pueda
+  // encontrarnos. La asigna el portal al arrancar; si falta, algo está mal de nuestro lado.
   const ipEl = $("net-ip");
   if (network.publicIp) {
-    // El "(a mano)" avisa que el valor lo escribió alguien en vez de detectarse. En el portal la
-    // dirección siempre es fija y puesta por el servidor, así que la aclaración sobraría.
-    const aMano = network.publicHostSource === "manual" && !portalMode;
-    ipEl.textContent = network.publicIp + (aMano ? " (a mano)" : "");
+    ipEl.textContent = network.publicIp;
     ipEl.className = "ok";
-  } else if (network.strategy === "pending") {
-    ipEl.textContent = "detectando...";
-    ipEl.className = "";
   } else {
-    ipEl.textContent = "no se pudo averiguar";
+    ipEl.textContent = "sin asignar";
     ipEl.className = "bad";
   }
 
-  $("net-client-port").textContent = String(network.clientPort || "--");
-  const moved = $("net-ports-moved");
-  moved.hidden = !network.portsMoved;
-  if (network.portsMoved) {
-    moved.textContent =
-      "Los puertos que querías estaban ocupados por otro programa, así que Race Control usa el " +
-      network.adminPort +
-      " para este panel y el " +
-      network.clientPort +
-      " para los pilotos. Funciona igual; si hiciste redirección de puertos en tu router, " +
-      "actualizala al " +
-      network.clientPort +
-      ".";
-  }
-
   $("net-signal").textContent = network.receivingTelemetry ? "recibiendo" : "sin señal todavía";
-  $("net-strategy").textContent = STRATEGY_LABELS[network.strategy] || network.strategy;
   $("net-snippet").textContent = network.serverSnippet;
   $("net-send-address").textContent = network.sendAddress;
   $("wizard-snippet").textContent = network.sendAddress;
@@ -1595,15 +1530,6 @@ function renderNetwork(network) {
   const acEl = $("net-acserver");
   acEl.textContent = ac.autodetected ? ac.host + ":" + ac.port : "esperando la primera señal...";
   acEl.className = !ac.autodetected && network.receivingTelemetry ? "bad" : "";
-
-  // No pisar lo que el admin está tipeando en los campos manuales.
-  const hostInput = $("net-remote-host");
-  if (document.activeElement !== hostInput && ac.autodetected) hostInput.value = ac.host;
-  const publicInput = $("net-public-host");
-  if (document.activeElement !== publicInput && network.publicHostSource === "detected") {
-    publicInput.value = "";
-    publicInput.placeholder = network.publicIp;
-  }
 
   renderNetworkButton(network, ac);
 }
@@ -1725,7 +1651,6 @@ async function refresh() {
 
   $("version-label").textContent = state.version ? "v" + state.version : "";
   $("league-label").textContent = state.leagueName || "";
-  applyMode(state.mode);
 
   // El asistente lo abre el servidor (no hay liga guardada) y lo cierra el usuario al terminarlo.
   // Antes se recalculaba en cada poll contra `firstRun`, y con varios pasos eso ya no sirve: el
@@ -1778,24 +1703,6 @@ function wireButtons() {
     } finally {
       button.disabled = false;
       button.textContent = "Probar de nuevo";
-    }
-  });
-
-  $("btn-save-host").addEventListener("click", async () => {
-    const host = $("net-remote-host").value.trim();
-    const publicHost = $("net-public-host").value.trim();
-    if (!host && !publicHost) {
-      toast("Escribí al menos una de las dos, o dejá que se detecten solas", 5000);
-      return;
-    }
-    const patch = { http: { publicHost: publicHost } };
-    // Vacío en el campo del servidor = "seguí detectándolo": mandar "" lo degradaría a loopback.
-    if (host) patch.acUdp = { remoteHost: host };
-    try {
-      await post("/api/config", patch);
-      toast("Direcciones guardadas");
-    } catch (err) {
-      toast("No se pudo guardar: " + err.message, 5000);
     }
   });
 

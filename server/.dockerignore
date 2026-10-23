@@ -1,9 +1,7 @@
-# Lo que no tiene que entrar al contexto de build. Sin esto, `fly deploy` sube los node_modules
-# de Windows y el .exe empaquetado: cientos de MB por despliegue, y binarios de otra plataforma.
+# Lo que no tiene que entrar al contexto de build. Sin esto, `fly deploy` sube los node_modules de
+# Windows: cientos de MB por despliegue, y binarios compilados para otra plataforma.
 node_modules
 dist
-release
-build
 logs
 tracks
 config.json

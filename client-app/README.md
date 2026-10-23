@@ -3,7 +3,7 @@
 ## Instalación (una vez por piloto, cero configuración)
 
 1. Abrir Content Manager.
-2. Arrastrar `RaceControlClient.zip` (lo arma el admin de la liga, ver "Empaquetado" abajo) a la
+2. Arrastrar `RaceControlClient.zip` (se lo pasa el admin de la liga, o se baja del release) a la
    ventana de Content Manager, como se instala cualquier mod de auto/pista.
 3. Activar la app dentro del juego: menú de Apps (AC Apps) → "Race Control".
 
@@ -28,7 +28,7 @@ reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 - La ventana es una app normal de Content Manager: el piloto la puede mover/redimensionar como
   cualquier otra.
 
-## Empaquetado (lo hace el admin de la liga, una vez)
+## Empaquetado (lo hace quien publica Race Control, una vez por versión)
 
 1. Conseguir/grabar `apps/python/RaceControlClient/sounds/green_green_green.wav` (un audio corto
    tipo "green green green", libre de derechos) — no se genera automáticamente.
@@ -63,9 +63,7 @@ El separador es `|` y no `:` porque la dirección ya trae dos puntos cuando llev
 Es lo que muestra la app cuando el backend le contesta 401. Es literal: el piloto sale y vuelve a
 entrar, el chat le manda un token nuevo y sigue andando.
 
-Pasa si estuvo más de 24 h sin salir del servidor, o si el operador rotó la clave de la liga. **No
-pasa con el `.exe` local**: ahí el token es opcional, porque exigirlo dejaría afuera en plena
-carrera a todos los pilotos que todavía tengan la app de la 0.3.
+Pasa si estuvo más de 24 h sin salir del servidor, o si el operador rotó la clave de la liga.
 
 ## Pendiente de verificar contra la API real de AC (ver docs/spike-protocolo.md)
 

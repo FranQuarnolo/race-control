@@ -183,21 +183,18 @@
       </header>
 
       <section>
-        <div class="row"><span>Tu dirección en internet</span><span id="net-ip">--</span></div>
+        <div class="row"><span>La dirección de tu liga</span><span id="net-ip">--</span></div>
         <div class="row"><span>Señal del servidor de AC</span><span id="net-signal">--</span></div>
         <div class="row"><span>Comandos salen hacia</span><span id="net-acserver">--</span></div>
         <div class="row"><span>Pilotos con la app reportando</span><span id="net-drivers">--</span></div>
-        <div class="row" data-local-only><span>Puerto de los pilotos</span><span id="net-client-port">--</span></div>
-        <div class="row" data-local-only><span>Estrategia de red</span><span id="net-strategy">--</span></div>
-        <p class="muted warn-box" id="net-ports-moved" hidden></p>
       </section>
 
       <section>
-        <h3>Probar conexión</h3>
+        <h3>¿Algo anda mal?</h3>
         <p class="muted">
           Revisa las cuatro cosas que tienen que funcionar y te dice qué hacer con la que falle.
         </p>
-        <button class="secondary" id="btn-test-network">Probar ahora</button>
+        <button class="secondary" id="btn-test-network">Revisar ahora</button>
         <div id="net-checks"></div>
       </section>
 
@@ -218,59 +215,6 @@
           <pre class="snippet" id="net-snippet">--</pre>
           <button class="secondary" id="btn-copy-snippet">Copiar las dos líneas</button>
         </details>
-      </section>
-
-      <!-- Direcciones y puertos los administra el portal cuando Race Control corre ahí: son los
-           mismos campos que el backend rechaza en POST /api/config (ver stripManagedFields). Un
-           formulario que guarda y no cambia nada es peor que no tenerlo. -->
-      <section data-local-only>
-        <h3>Direcciones</h3>
-        <p class="muted">
-          Las dos se detectan solas. Completalas solo si algo de lo de arriba falló.
-        </p>
-        <div class="row">
-          <label for="net-remote-host">Servidor de Assetto Corsa</label>
-          <input id="net-remote-host" type="text" placeholder="se detecta solo" />
-        </div>
-        <div class="row">
-          <label for="net-public-host">Dirección propia</label>
-          <input id="net-public-host" type="text" placeholder="se detecta sola" />
-        </div>
-        <button class="secondary" id="btn-save-host">Guardar direcciones</button>
-      </section>
-
-      <section data-local-only>
-        <h3>Puertos</h3>
-        <p class="muted">
-          Los de fábrica andan bien en casi todos los casos. Cambialos solo si otro programa tuyo
-          los usa y querés dejárselos. Toman efecto la próxima vez que abras Race Control.
-        </p>
-        <div class="row">
-          <label for="h-admin-port">Este panel</label>
-          <input id="h-admin-port" type="number" min="1024" max="65535" />
-        </div>
-        <div class="row">
-          <label for="h-client-port">App de los pilotos</label>
-          <input id="h-client-port" type="number" min="1024" max="65535" />
-        </div>
-        <div class="row">
-          <label for="u-local-port">Telemetría que entra</label>
-          <input id="u-local-port" type="number" min="1024" max="65535" />
-        </div>
-        <div class="row">
-          <label for="u-remote-port">Puerto del servidor de AC</label>
-          <input id="u-remote-port" type="number" min="1024" max="65535" />
-        </div>
-        <p class="muted" id="u-remote-port-note"></p>
-        <p class="muted">
-          "Telemetría que entra" es el puerto que va después de los dos puntos en el
-          <b>Send Address</b> de tu hosting (<code>UDP_PLUGIN_ADDRESS</code> en paneles viejos):
-          ese lo elegís vos. "Puerto del servidor de AC" es el <b>Listen Address</b>
-          (<code>UDP_PLUGIN_LOCAL_PORT</code>), y ese lo pone el hosting — normalmente no hace
-          falta tocarlo, porque el servidor nos lo dice solo. El texto para copiar de arriba se
-          actualiza con lo que pongas acá.
-        </p>
-        <button id="btn-save-ports" data-form="ports">Guardar</button>
       </section>
     </div>
   </div>

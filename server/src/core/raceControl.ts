@@ -36,6 +36,7 @@ export interface RaceControl {
   /** Las que aplica el comisario a mano desde la bandeja de incidentes. */
   stewardPenaltyEngine: PenaltyEngine;
   presenceWatchdog: PresenceWatchdog;
+  telemetryStore: DriverTelemetryStore;
   incidentEngine: IncidentEngine;
   trackLearner: TrackLearner;
   trackLimits: TrackLimitsTracker;
@@ -46,7 +47,7 @@ export interface RaceControl {
   adminApp: ReturnType<typeof createAdminApi>;
   clientApp: ReturnType<typeof createClientApi>;
   /** Los puertos que de verdad quedaron libres. No siempre coinciden con los de la config. */
-  ports: { adminPort: number; clientPort: number; portsMoved: boolean };
+  ports: { adminPort: number; clientPort: number };
   /**
    * Suelta todo lo que quedó corriendo: timers, socket UDP y archivos abiertos.
    *
@@ -62,23 +63,21 @@ export interface RaceControlOptions {
   config: AppConfig;
   /** Carpeta de datos de ESTA instancia: `logs/` y `tracks/` cuelgan de acá. */
   dataDir: string;
-  /** `"local"` = el `.exe` en la PC del admin. `"portal"` = worker de una liga en el servidor. */
-  mode?: "local" | "portal";
   /**
-   * Puertos HTTP ya asignados. En local se omite y se busca el primero libre a partir del de la
-   * config; en el portal los asigna el supervisor y NO se pueden correr solos: si el worker se
-   * mudara de puerto por su cuenta, el portal quedaría haciendo proxy a la nada.
+   * Puertos HTTP de esta liga, asignados por el supervisor.
+   *
+   * No se negocian ni se corren solos: si un worker se mudara de puerto por su cuenta, el portal
+   * quedaría haciendo proxy a un puerto donde ya no hay nadie. Los tests son los únicos que lo
+   * omiten, y ahí se busca el primero libre.
    */
   ports?: { adminPort: number; clientPort: number };
   /** Interfaz a la que se bindea el socket UDP. Ver `AcUdpConfig["bindAddress"]`. */
   udpBindAddress?: string;
-  /** `false` apaga la detección de IP pública y UPnP. Ver `ConnectivityManager`. */
-  discovery?: boolean;
   /**
    * Qué dirección se le anuncia por chat a la app del piloto. Devuelve `null` mientras no se
-   * sepa. El cliente le antepone `http://` y le pega `/api/client/...`, así que puede ser un
-   * `host:puerto` (modo local) o un `host/prefijo` (portal, donde todas las ligas comparten el
-   * puerto 80 y se distinguen por la ruta `/l/<slug>`).
+   * sepa. El cliente le antepone `http://` y le pega `/api/client/...`, así que lo que va acá es
+   * un `host/prefijo`: todas las ligas comparten el puerto 80 y se distinguen por la ruta
+   * `/l/<slug>`.
    *
    * Es un dato distinto del "Send Address" que se pega en el hosting: ese apunta al puerto UDP
    * y tiene que ser una IP, porque lo consume el servidor de AC y no un navegador.
@@ -86,16 +85,15 @@ export interface RaceControlOptions {
   clientBase?: () => string | null;
 }
 
-/** Arma todo el backend (sin levantar los listeners HTTP todavía) — separado del entry para
- * poder reusarlo desde el empaquetado (.exe), desde el worker del portal y desde los tests. */
+/** Arma el motor de una liga (sin levantar los listeners HTTP todavía) — separado del worker para
+ * poder armarlo igual desde los tests, sin forkear un proceso. */
 export async function createRaceControl(options: RaceControlOptions): Promise<RaceControl> {
   const { config, dataDir } = options;
   const logDir = path.join(dataDir, "logs");
 
-  // Retención: solo en el portal, y antes de abrir el journal para no borrar el propio.
-  // Ver `pruneOldLogs`: en la PC del admin el historial es suyo y no se le toca.
-  const retencion = options.mode === "portal" ? { eventsDays: 90, rawDays: 7 } : null;
-  if (retencion) pruneOldLogs(logDir, retencion);
+  // Retención de datos personales, antes de abrir el journal para no borrar el propio.
+  const retencion = { eventsDays: 90, rawDays: 7 };
+  pruneOldLogs(logDir, retencion);
 
   const journal = new Journal(logDir);
 
@@ -130,7 +128,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   udpClient.on("remotePortUnstable", (info: Record<string, unknown>) => {
     console.warn(
       `[race-control] El servidor nos habló desde ${info.adopted} y también desde ${info.alsoSeen}: ` +
-        "no se puede deducir a qué puerto mandarle las órdenes. Hay que escribirlo a mano en Conexión → Puertos."
+        'no se puede deducir a qué puerto mandarle las órdenes. El hosting tiene que declarar un "Listen Address" fijo.'
     );
     journal.log("udp.remotePortUnstable", info);
   });
@@ -138,35 +136,16 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   const rawCapture = new RawCapture(logDir, () => performance.now());
   udpClient.on("rawPacket", (buf: Buffer) => rawCapture.record(buf));
 
-  // Los puertos se resuelven ANTES de armar nada que dependa de ellos: si el preferido está
-  // ocupado por otra aplicación, lo que antes pasaba era un EADDRINUSE impreso en una consola
-  // que en el .exe se cierra sola. Ahora nos corremos al siguiente libre y el panel lo avisa.
-  // En el portal los puertos vienen asignados y son fijos: correrse solo dejaría al supervisor
-  // haciendo proxy a un puerto donde ya no hay nadie.
+  // Los puertos vienen asignados por el supervisor y son fijos. La rama que busca uno libre existe
+  // solo para los tests, que arman un motor suelto sin portal alrededor.
   const activePorts = options.ports
     ? { ...options.ports }
     : await (async () => {
         const adminPort = await findFreePort(config.http.adminPort, "127.0.0.1");
         return { adminPort, clientPort: await findFreePort(config.http.clientPort, "0.0.0.0", [adminPort]) };
       })();
-  // "Se movieron" solo tiene sentido cuando los elegimos nosotros: en el portal el número de la
-  // config es irrelevante y avisar de un cambio que nadie pidió solo asusta.
-  const portsMoved =
-    !options.ports &&
-    (activePorts.adminPort !== config.http.adminPort || activePorts.clientPort !== config.http.clientPort);
-  if (portsMoved) {
-    console.log(
-      `[race-control] Puertos ocupados: uso ${activePorts.adminPort} (panel) y ${activePorts.clientPort} (pilotos).`
-    );
-    journal.log("net.portsMoved", { configured: config.http, active: activePorts });
-  }
 
-  const connectivity = new ConnectivityManager(
-    udpClient,
-    { udpLocalPort: config.acUdp.localPort, tcpClientPort: activePorts.clientPort },
-    () => config.http.publicHost,
-    { discovery: options.discovery }
-  );
+  const connectivity = new ConnectivityManager(udpClient, () => config.http.publicHost);
   // Si no se pudo averiguar la dirección propia, NO se anuncia loopback: un piloto que recibe
   // `127.0.0.1` intenta conectarse a su propia PC y falla en silencio, que es exactamente lo que
   // hacía antes. Sin dirección no se anuncia nada, y el panel dice por qué.
@@ -535,7 +514,6 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   const lightEventTracker = new LightEventTracker(formationStart);
 
   const adminApp = createAdminApi({
-    mode: options.mode ?? "local",
     config,
     stateTracker,
     formationStart,
@@ -559,7 +537,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     buildServerSnippet: () =>
       buildServerSnippet(connectivity.getStatus().publicIp, config.acUdp.localPort, config.acUdp.remotePort),
     buildSendAddress: () => buildSendAddress(connectivity.getStatus().publicIp, config.acUdp.localPort),
-    getActivePorts: () => ({ ...activePorts, portsMoved }),
+    getActivePorts: () => ({ ...activePorts }),
     audit: (entry) => journal.log("audit.action", entry),
   });
 
@@ -571,7 +549,6 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     onHeartbeat: (guid: string) => announcer.onHeartbeatReceived(guid),
     onSurfaceGrip: (grip: number) => sessionTracker.onSurfaceGrip(grip),
     verifyToken: (token) => pilotTokens.verify(token),
-    requireToken: options.mode === "portal",
   });
 
   return {
@@ -583,6 +560,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     pitPenaltyEngine,
     stewardPenaltyEngine,
     presenceWatchdog,
+    telemetryStore,
     incidentEngine,
     trackLearner,
     trackLimits,
@@ -592,7 +570,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     rawCapture,
     adminApp,
     clientApp,
-    ports: { ...activePorts, portsMoved },
+    ports: { ...activePorts },
     stop() {
       clearInterval(sessionPoll);
       clearInterval(trackFlushTimer);

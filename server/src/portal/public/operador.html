@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Operación — Race Control</title>
+  <link rel="icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body class="operador">
+  <div class="marca"><img src="/icon.svg" alt="" /> Race Control <span class="chapa">operación</span></div>
+
+  <section class="caja extra-ancha">
+    <div class="cabecera">
+      <h1>Ligas y suscripciones</h1>
+      <div class="acciones-cabecera">
+        <button id="btn-nueva" class="compacto">Dar de alta una liga</button>
+        <button id="btn-logout" class="compacto secundario">Salir</button>
+      </div>
+    </div>
+
+    <div class="resumen" id="resumen"></div>
+
+    <!-- Alta. Oculta hasta que se pide: la pantalla que se mira todos los días es la tabla. -->
+    <form class="sub-caja" id="form-alta" hidden>
+      <h2>Liga nueva</h2>
+      <p class="muted">
+        Se crea la liga y la cuenta de su admin en un solo paso. La contraseña se muestra una vez.
+      </p>
+
+      <div class="campos">
+        <div>
+          <label for="leagueName">Nombre de la liga</label>
+          <input id="leagueName" type="text" required placeholder="Fast Sim League" />
+        </div>
+        <div>
+          <label for="email">Email del admin</label>
+          <input id="email" type="email" required placeholder="admin@liga.com" autocomplete="off" />
+        </div>
+        <div>
+          <label for="slug">Dirección <span class="muted">(opcional)</span></label>
+          <input id="slug" type="text" placeholder="se arma sola con el nombre" autocomplete="off" />
+        </div>
+        <div>
+          <label for="paidUntil">Paga hasta <span class="muted">(opcional)</span></label>
+          <input id="paidUntil" type="date" />
+        </div>
+      </div>
+
+      <div class="botonera">
+        <button type="submit">Crear</button>
+        <button type="button" id="btn-cancelar-alta" class="secundario">Cancelar</button>
+      </div>
+      <p class="error" id="error-alta" hidden></p>
+    </form>
+
+    <!-- Credenciales recién creadas. Es lo único que no se puede volver a ver. -->
+    <div class="sub-caja credenciales" id="credenciales" hidden>
+      <h2>Pasale esto al admin</h2>
+      <dl class="entrega">
+        <dt>Dirección</dt><dd id="cred-url"></dd>
+        <dt>Usuario</dt><dd id="cred-user"></dd>
+        <dt>Contraseña</dt><dd id="cred-pass" class="clave"></dd>
+      </dl>
+      <div class="botonera">
+        <button type="button" id="btn-copiar-cred">Copiar todo</button>
+        <button type="button" id="btn-cerrar-cred" class="secundario">Listo, ya la guardé</button>
+      </div>
+      <p class="muted">
+        La contraseña no se guarda en claro en ningún lado: si se pierde, se genera otra.
+      </p>
+    </div>
+
+    <table class="tabla" id="tabla">
+      <thead>
+        <tr>
+          <th>Admin</th>
+          <th>Liga</th>
+          <th>Motor</th>
+          <th>Cuota</th>
+          <th>Último ingreso</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="filas"></tbody>
+    </table>
+    <p class="muted" id="sin-admins" hidden>Todavía no hay ninguna liga dada de alta.</p>
+  </section>
+
+  <p class="error" id="error" hidden></p>
+  <p class="pie">Race Control <span id="version"></span></p>
+
+  <script src="/portal.js"></script>
+  <script src="/operador.js"></script>
+</body>
+</html>

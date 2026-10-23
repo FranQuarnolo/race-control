@@ -15,9 +15,6 @@ function input(over: Over = {}): DiagnosticsInput {
       publicHostSource: "detected",
       strategy: "direct",
       receivingTelemetry: true,
-      clientPortMapped: true,
-      upnpAttempted: false,
-      upnpSuccess: null,
       lastCheckedAt: 0,
       ...(network || {}),
     },
@@ -79,7 +76,9 @@ describe("runDiagnostics", () => {
     }
   });
 
-  it("sin dirección propia, manda a escribirla a mano", () => {
+  // La dirección la asigna el portal al arrancar la liga, así que si falta no hay nada que el
+  // admin pueda hacer desde el panel: el único consejo honesto es que nos avise.
+  it("sin dirección asignada, no manda al admin a arreglar algo que no puede", () => {
     const check = by(
       runDiagnostics(
         input({ network: { publicIp: "", publicHostSource: "unknown" } })
@@ -87,17 +86,21 @@ describe("runDiagnostics", () => {
       "public-host"
     );
     assert.strictEqual(check.state, "fail");
-    assert.match(check.action, /a mano/i);
+    assert.match(check.action, /escribinos/i);
   });
 
-  it("distingue la dirección escrita a mano de la detectada", () => {
-    const manual = by(
+  // La dirección la fija el portal al arrancar el worker y el panel no la puede editar
+  // (`stripManagedFields` la descarta). Mostrarla y nada más es todo lo que corresponde.
+  it("con dirección asignada, la muestra tal cual y no pide hacer nada", () => {
+    const check = by(
       runDiagnostics(
-        input({ network: { publicIp: "1.2.3.4", publicHostSource: "manual" } })
+        input({ network: { publicIp: "1.2.3.4", publicHostSource: "detected" } })
       ),
       "public-host"
     );
-    assert.match(manual.detail, /escribiste vos/i);
+    assert.strictEqual(check.state, "ok");
+    assert.strictEqual(check.detail, "1.2.3.4");
+    assert.strictEqual(check.action, "");
   });
 
   it("telemetría vieja es aviso, no falla: entre sesiones el servidor calla", () => {
@@ -110,7 +113,7 @@ describe("runDiagnostics", () => {
     assert.strictEqual(check.state, "warn");
   });
 
-  it("telemetría que nunca llegó manda a pegar las dos líneas y nombra el puerto", () => {
+  it("telemetría que nunca llegó manda a pegar el Send Address", () => {
     const check = by(
       runDiagnostics(
         input({ udp: { packetsReceived: 0, lastPacketAt: 0, commandsSent: 0, commandSendErrors: 0 } })
@@ -118,8 +121,10 @@ describe("runDiagnostics", () => {
       "telemetry"
     );
     assert.strictEqual(check.state, "fail");
-    assert.match(check.action, /server_cfg\.ini/);
-    assert.match(check.action, /12000/);
+    assert.match(check.action, /Send Address/);
+    // El allowlist de IPs del plugin UDP descarta todo en silencio, así que es la segunda causa a
+    // revisar y la única que no se ve desde ningún lado.
+    assert.match(check.action, /IPs permitidas/);
   });
 
   it("mientras la estrategia se está negociando, la telemetría queda en espera y no en rojo", () => {
@@ -152,8 +157,9 @@ describe("runDiagnostics", () => {
     assert.strictEqual(check.state, "fail");
     assert.match(check.detail, /8008/);
     assert.match(check.detail, /11000/);
-    assert.match(check.action, /8008/);
+    // El arreglo es del lado del hosting: el panel ya no tiene dónde escribir el puerto.
     assert.match(check.action, /Listen Address/);
+    assert.match(check.action, /11000/);
   });
 
   // Si el servidor no usa un puerto fijo, mandarlo a copiar "el número que vimos" es mandarlo a
@@ -206,23 +212,12 @@ describe("runDiagnostics", () => {
     assert.strictEqual(check.state, "pending");
   });
 
-  it("si el puerto ya está mapeado, la culpa no es del router sino de la app que falta", () => {
+  // Ya no hay router de por medio: el puerto de los pilotos lo publica el portal. Si hay gente en
+  // pista y nadie reporta, lo único que puede fallar es la app del piloto.
+  it("con pilotos en pista y nadie reportando, apunta a la app que falta", () => {
     const check = by(runDiagnostics(input({ driversReporting: 0 })), "drivers");
     assert.strictEqual(check.state, "fail");
-    assert.match(check.action, /instalar la app/i);
-  });
-
-  it("si el puerto no está mapeado, manda a abrirlo y dice cuál", () => {
-    const check = by(
-      runDiagnostics(
-        input({
-          driversReporting: 0,
-          network: { publicIp: "1.2.3.4", publicHostSource: "detected", clientPortMapped: false },
-        })
-      ),
-      "drivers"
-    );
-    assert.match(check.action, /3001 \(TCP\)/);
+    assert.match(check.action, /app de Race Control/i);
   });
 });
 

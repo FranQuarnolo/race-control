@@ -1,9 +1,10 @@
 # Manual de operación
 
 Esto es para quien opera el servicio, no para el admin de una liga. Él no tiene que leer nada de
-acá: entra por un link, elige una contraseña y pega un renglón.
+acá: entra con un usuario y una contraseña, y pega un renglón.
 
-Si querés entender cómo está armado, eso está en [portal.md](portal.md).
+Si nunca desplegaste esto, empezá por [PUESTA-EN-MARCHA.md](../../PUESTA-EN-MARCHA.md), que va
+desde cero. Si querés entender cómo está armado, eso está en [portal.md](portal.md).
 
 ## Desplegar por primera vez
 
@@ -19,11 +20,23 @@ El `allocate-v4` imprime una IPv4. **Esa IP es el dato que ve cada admin** para 
 
 ```bash
 fly secrets set RC_PUBLIC_IP=<la ipv4 que haya salido>
+fly secrets set RC_OPERATOR_EMAIL=vos@ejemplo.com
 fly deploy
 ```
 
 Si `RC_PUBLIC_IP` queda vacío, el portal arranca igual pero avisa en el log: no va a poder
 mostrarle a nadie qué pegar.
+
+`RC_OPERATOR_EMAIL` crea tu cuenta en el primer arranque y **escribe la contraseña en el log una
+sola vez**. Hay que ir a buscarla ahí:
+
+```bash
+fly logs | grep -A3 "Cuenta de operador creada"
+```
+
+Guardala donde guardes tus contraseñas. No se vuelve a mostrar, y si se pierde hay que parar el
+portal y usar el CLI. Se puede fijar de antemano con `RC_OPERATOR_PASSWORD`, que evita el paso del
+log pero deja la contraseña guardada en los secrets de Fly.
 
 ### Comprobar que quedó bien
 
@@ -41,40 +54,70 @@ printf 'x' | nc -u -w1 <la-ipv4> 30000
 fly logs                      # el worker de esa liga tiene que registrar que entró algo
 ```
 
-## Crear una liga
+## El día a día: el panel de operador
+
+Entrá a `https://race-control.fly.dev/login` con tu cuenta de operador y vas a caer en
+**`/operador`**. Todo lo de abajo se hace desde ahí.
+
+Arriba hay cuatro números: ligas activas, cuántas tienen la cuota vencida, cuántas vencen esta
+semana y **cuántos lugares libres quedan** — ese último es el cupo de puertos UDP, y conviene
+mirarlo antes de prometerle una liga a alguien.
+
+| Qué | Cómo |
+|---|---|
+| Dar de alta una liga y su admin | "Dar de alta una liga". Pide nombre, email y, opcional, hasta cuándo pagó. Devuelve la contraseña **una sola vez**, con un botón para copiar los tres datos juntos |
+| Ver quién entró y cuándo | La columna "Último ingreso" |
+| Marcar que pagó | "Cobré": suma un mes desde donde venía, o desde hoy si estaba vencida |
+| Cortarle el acceso | "Desactivar". Para sus ligas y le cierra el paso al panel |
+| Contraseña nueva | "Clave nueva" |
+| Entrar al panel de esa liga | El nombre de la liga es un enlace a `/l/<slug>/` |
+
+La tabla viene ordenada por lo que requiere atención: primero lo vencido, después lo que vence en
+menos de 7 días, después el resto, y al final lo desactivado.
+
+**Nada vence solo.** Una cuota vencida se pinta en rojo y no hace nada más: dar de baja a alguien
+en medio de su campeonato es una decisión tuya, no de un timer.
+
+**Desactivar no borra nada.** Para el worker de cada liga de esa cuenta y deja la carpeta entera
+—configuración, sanciones, registros, trazados— donde estaba. Reactivar la vuelve a levantar con
+todo adentro. Y una liga de cuenta desactivada **no vuelve sola en un redeploy**: si volviera,
+reiniciar el servidor sería la forma de saltearse la baja.
+
+## El CLI: lo mismo, con el portal apagado
+
+`portal/cli.ts` hace exactamente lo que el panel, para cuando el panel no se puede abrir (perdiste
+la contraseña de operador, o algo no arranca):
 
 ```bash
+fly machines stop <id>        # imprescindible, ver abajo
 fly ssh console
-cd /app && node dist/portal/cli.js crear-liga --nombre "Fast Sim League" --email admin@liga.com
+cd /app
+node dist/portal/cli.js ligas                                        # lectura, siempre disponible
+node dist/portal/cli.js crear-liga --nombre "Fast Sim" --email admin@liga.com
+node dist/portal/cli.js clave --email admin@liga.com
+node dist/portal/cli.js baja  --email admin@liga.com
+node dist/portal/cli.js alta  --email admin@liga.com --pago 2026-12-31
 ```
 
-Imprime el `Send Address` que va a ver ese admin y un **link de invitación de un solo uso que vence
-en 48 h**. Eso es lo único que hay que pasarle.
+Los comandos que escriben **se niegan a correr con el portal vivo** y te dicen que lo hagas desde
+`/operador`. No es prudencia excesiva: el portal tiene todo `portal.json` en memoria y lo reescribe
+entero cada vez que algo cambia, así que su primer guardado borraría el cambio del CLI sin que
+nadie se entere. Lo detecta con el `portal.pid` del volumen.
 
-El slug sale del nombre (`Fast Sim League` → `fast-sim-league`). Para elegirlo a mano:
-`--slug fsl`.
-
-```bash
-node dist/portal/cli.js ligas                              # qué hay y en qué estado
-node dist/portal/cli.js invitar --slug fsl --email otro@liga.com   # sumar un comisario
-```
+El slug sale del nombre (`Fast Sim League` → `fast-sim-league`). Para elegirlo a mano: `--slug fsl`.
 
 ## Alguien perdió la contraseña
 
-No hay reseteo. Se le manda una invitación nueva a su misma liga y elige una contraseña propia:
+Desde `/operador` → el admin → "Generar contraseña". Sale una nueva, se la pasás, y **todas sus
+sesiones abiertas se cierran**. Es a propósito: si alguien entró a la cuenta, cambiar la clave
+tiene que echarlo.
 
-```bash
-node dist/portal/cli.js invitar --slug fsl --email admin@liga.com
-```
-
-Al aceptarla, la contraseña vieja deja de valer y **todas sus sesiones abiertas se cierran**. Es a
-propósito: si alguien entró a la cuenta, cambiar la clave tiene que echarlo.
-
-Nadie —vos tampoco— tipea nunca la contraseña de otro.
+Nadie —vos tampoco— tipea nunca la contraseña de otro. El campo para elegirla a mano existe, pero
+lo normal es dejar que la genere el portal.
 
 ## Una liga no arranca
 
-En el portal aparece "con problemas" y el último error al pasar el mouse por encima. En el log:
+En `/operador` aparece con su estado y el último error. En el log:
 
 ```bash
 fly logs | grep "liga:"
@@ -89,7 +132,7 @@ Los dos casos frecuentes:
 
 ## Ampliar el rango de puertos UDP
 
-Cada liga ocupa un puerto UDP de un rango declarado a mano. Cuando se acaba, `crear-liga` tira un
+Cada liga ocupa un puerto UDP de un rango declarado a mano. Cuando se acaba, el alta falla con un
 error explícito. Ampliarlo son **dos cambios, y hacen falta los dos**:
 
 1. En `fly.toml`, subir `RC_UDP_TO` **y** agregar un bloque `[[services]]` por cada puerto nuevo.
@@ -98,6 +141,9 @@ error explícito. Ampliarlo son **dos cambios, y hacen falta los dos**:
 
 No hay forma de publicar un rango: Fly no reescribe el puerto de los datagramas UDP, así que cada
 uno va declarado individualmente con `internal_port` igual al externo.
+
+El panel de operador muestra cuántos puertos quedan libres, justamente para que esto no te agarre
+de sorpresa un viernes a la noche.
 
 ## Logs y datos
 
@@ -114,8 +160,7 @@ piloto?". Ahí adentro también están las acciones del panel con el email de qu
 (`audit.action`).
 
 **Retención**: los `events-*.jsonl` se borran a los 90 días y las capturas crudas archivadas a los
-7. Corre al arrancar cada worker y una vez por día. En el `.exe` local no corre nunca: ahí el
-historial es del admin.
+7. Corre al arrancar cada worker y una vez por día.
 
 ## Backup y restauración
 
@@ -157,13 +202,22 @@ Para desarrollar o para probar algo sin desplegar:
 
 ```bash
 cd server && npm run build
-export RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 RC_INSECURE_COOKIES=1
-node dist/portal/cli.js crear-liga --nombre "Prueba" --email yo@ejemplo.com
+export RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 \
+       RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com
 PORT=8080 node dist/portal/index.js
 ```
 
+La contraseña de operador sale en la consola del primer arranque. Después, `/operador` en el
+navegador y todo lo demás es igual que en producción.
+
 `RC_INSECURE_COOKIES=1` desactiva el prefijo `__Host-`, la marca `Secure` y la redirección a
 HTTPS, que sin certificado harían imposible entrar. **Nunca en producción.**
+
+Para ver el panel con una carrera adentro sin tener un servidor de Assetto Corsa:
+
+```bash
+node dist/sim/demo.js      # http://127.0.0.1:3900 — es de donde salen las capturas de la landing
+```
 
 ## Variables de entorno
 
@@ -173,8 +227,10 @@ HTTPS, que sin certificado harían imposible entrar. **Nunca en producción.**
 | `RC_DATA_ROOT` | `/data` | Raíz de datos |
 | `RC_PUBLIC_HOST` | `localhost:8080` | Host público, sin esquema ni barra final |
 | `RC_PUBLIC_IP` | *(vacío)* | La IPv4 dedicada. Es lo que el admin pega en su hosting |
+| `RC_OPERATOR_EMAIL` | *(sin definir)* | Crea tu cuenta de operador en el arranque si no existe |
+| `RC_OPERATOR_PASSWORD` | *(sin definir)* | Fija esa contraseña en vez de generarla y loguearla |
 | `RC_UDP_BIND` | *(ninguno)* | `fly-global-services` en Fly. Ver abajo |
-| `RC_UDP_FROM` / `RC_UDP_TO` | 30000 / 30019 | Rango de puertos UDP |
+| `RC_UDP_FROM` / `RC_UDP_TO` | 30000 / 30019 | Rango de puertos UDP. En `fly.toml` va hasta 30009 |
 | `RC_LOOPBACK_FROM` | 41000 | Desde dónde se asignan los puertos internos |
 | `RC_INSECURE_COOKIES` | *(sin definir)* | `1` para desarrollo sin HTTPS |
 

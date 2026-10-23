@@ -8,13 +8,12 @@ import {
   SESSION_COOKIE,
   SessionStore,
   delay,
-  hashInviteToken,
+  generatePassword,
   hashPassword,
-  newInviteToken,
   verifyWithDecoy,
 } from "./auth";
 import { askWorker, proxyToWorker } from "./proxy";
-import { League, PortalStore, normalizeEmail } from "./store";
+import { League, PortalStore, User, normalizeEmail, toSlug } from "./store";
 import { Supervisor, assignPorts } from "./supervisor";
 
 /**
@@ -22,7 +21,10 @@ import { Supervisor, assignPorts } from "./supervisor";
  *
  * Todo lo que entra pasa por acá. Las rutas `/l/<slug>/...` se reenvían al worker de esa liga
  * después de verificar quién pide y si tiene permiso; lo demás son las pantallas del portal
- * (landing, login, aceptar una invitación, elegir liga).
+ * (la landing pública, el login, la lista de ligas y el panel del operador).
+ *
+ * No hay registro: las cuentas las crea el operador y entrega usuario y contraseña. Es un servicio
+ * con suscripción, no un sitio al que cualquiera se da de alta.
  */
 
 export interface PortalConfig {
@@ -74,15 +76,28 @@ function readCookie(req: Request, name: string): string | undefined {
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,39}$/;
 
+/** Lo que hay que entregarle a un admin nuevo. La contraseña se ve una vez y nunca más. */
+export interface Credenciales {
+  league: League;
+  user: User;
+  password: string;
+  loginUrl: string;
+}
+
 export interface Portal {
   app: express.Express;
   store: PortalStore;
   supervisor: Supervisor;
   sessions: SessionStore;
-  /** Crea una liga y su invitación. Lo usa el CLI y también los tests. */
-  createLeague(input: { slug: string; name: string; email: string }): { league: League; inviteUrl: string };
-  /** Invitación nueva a una liga que ya existe: sumar un comisario, o recuperar un acceso. */
-  invite(league: League, email: string): string;
+  /** Crea la liga y la cuenta de su admin, y devuelve lo que hay que pasarle. */
+  createLeague(
+    input: { slug: string; name: string; email: string; password?: string },
+    options?: { start?: boolean }
+  ): Promise<Credenciales>;
+  /** Contraseña nueva para una cuenta que ya existe: la pidió, o se la olvidó. */
+  resetPassword(user: User, password?: string): Promise<string>;
+  /** Siembra la cuenta del operador si todavía no hay ninguna. Devuelve la clave si la creó. */
+  ensureOperator(email: string, password?: string): Promise<string | null>;
 }
 
 export function createPortal(config: PortalConfig): Portal {
@@ -92,7 +107,7 @@ export function createPortal(config: PortalConfig): Portal {
   const throttle = new LoginThrottle();
   const supervisor = new Supervisor(store, {
     dataRoot: config.dataRoot,
-    // En el `.exe` esto no existe: el worker solo vive compilado, al lado del portal.
+    // Siempre el compilado: el worker vive al lado del portal dentro de `dist/`.
     workerPath: path.join(__dirname, "..", "worker", "leagueWorker.js"),
     publicIp: config.publicIp,
     publicHost: config.publicHost,
@@ -215,7 +230,16 @@ export function createPortal(config: PortalConfig): Portal {
         lastError: l.lastError,
         sendAddress: supervisor.sendAddressOf(l),
       }));
-    res.json({ authenticated: true, email: user?.email, leagues, version: APP_VERSION });
+    res.json({
+      authenticated: true,
+      email: user?.email,
+      role: user?.role ?? "admin",
+      // Días que faltan para el vencimiento, o negativo si ya pasó. El cálculo va acá y no en el
+      // navegador: el reloj del cliente lo pone el cliente, y con esto se decide qué avisar.
+      subscription: subscriptionOf(user),
+      leagues,
+      version: APP_VERSION,
+    });
   });
 
   /**
@@ -262,9 +286,28 @@ export function createPortal(config: PortalConfig): Portal {
       res.status(401).json({ ok: false, error: "Email o contraseña incorrectos." });
       return;
     }
+    // La cuenta desactivada se rechaza DESPUÉS de verificar la contraseña: contestar antes
+    // convertiría el login en un detector de qué cuentas existen y cuáles están al día.
+    if (!user.active) {
+      res.status(403).json({
+        ok: false,
+        error: "Tu cuenta está desactivada. Escribinos para reactivarla — tus datos siguen guardados.",
+      });
+      return;
+    }
     throttle.success(ip, email);
+    store.updateUser(user.id, { lastLoginAt: new Date().toISOString() });
+    // `user` es la referencia del store y `updateUser` no toca `sessionsVersion` acá, así que
+    // sigue siendo la correcta para la sesión que se crea.
     setSessionCookie(res, sessions.create(user.id, user.sessionsVersion));
-    res.json({ ok: true });
+    const leagues = store.membershipsOf(user.id);
+    const única = leagues.length === 1 ? store.findLeague(leagues[0].leagueId) : undefined;
+    res.json({
+      ok: true,
+      // A dónde mandarlo: el operador a su panel, y el admin de una sola liga directo adentro.
+      // Una lista de un solo elemento es una pantalla que solo existe para hacer un click más.
+      destino: user.role === "operador" ? "/operador" : única ? `/l/${única.slug}/` : "/mis-ligas",
+    });
   });
 
   portalApi.post("/logout", (req: SessionRequest, res) => {
@@ -273,52 +316,141 @@ export function createPortal(config: PortalConfig): Portal {
     res.json({ ok: true });
   });
 
-  /** Paso 1 del alta: el link de invitación dice a qué liga pertenece, sin exponer nada más. */
-  portalApi.get("/invitacion/:token", (req, res) => {
-    const invite = store.findInvite(hashInviteToken(req.params.token));
-    if (!invite || invite.usedAt || invite.expiresAt < Date.now()) {
-      res.status(404).json({ ok: false, error: "Esta invitación no existe o ya venció." });
-      return;
-    }
-    const league = store.findLeague(invite.leagueId);
-    res.json({ ok: true, email: invite.email, league: league ? { name: league.name, slug: league.slug } : null });
-  });
-
-  /** Paso 2: elige contraseña y queda adentro, sin un segundo login. */
-  portalApi.post("/invitacion/:token", async (req, res) => {
-    const hash = hashInviteToken(req.params.token);
-    const invite = store.findInvite(hash);
-    if (!invite || invite.usedAt || invite.expiresAt < Date.now()) {
-      res.status(404).json({ ok: false, error: "Esta invitación no existe o ya venció." });
-      return;
-    }
-    const password = String((req.body ?? {}).password ?? "");
-    if (password.length < 10) {
-      res.status(400).json({ ok: false, error: "La contraseña tiene que tener al menos 10 caracteres." });
-      return;
-    }
-    const league = store.findLeague(invite.leagueId);
-    if (!league) {
-      res.status(410).json({ ok: false, error: "La liga de esta invitación ya no existe." });
-      return;
-    }
-
-    let user = store.findUserByEmail(invite.email);
-    if (user) store.setPassword(user.id, await hashPassword(password));
-    else user = store.createUser(invite.email, await hashPassword(password));
-    store.addMembership({ userId: user.id, leagueId: league.id, role: "owner" });
-    store.setOwner(league.id, user.id);
-    store.useInvite(hash);
-    // La liga se crea parada y arranca recién cuando su dueño entra: no tiene sentido tener un
-    // proceso ocupando un puerto UDP por una invitación que quizás nadie abra.
-    supervisor.start(league.id);
-
-    const fresh = store.findUser(user.id)!;
-    setSessionCookie(res, sessions.create(fresh.id, fresh.sessionsVersion));
-    res.json({ ok: true, slug: league.slug });
-  });
-
   app.use("/api/portal", portalApi);
+
+  // --- API del operador ---------------------------------------------------------------------------
+
+  /**
+   * Todo lo de acá es para quien vende el servicio, y está detrás de su propio rol.
+   *
+   * La separación no es cosmética: un admin con la sesión robada puede hacer destrozos en su liga,
+   * pero no tiene que poder listar las cuentas de las demás ni darse de alta la suscripción solo.
+   */
+  const operadorApi = express.Router();
+  operadorApi.use(express.json({ limit: "10kb" }));
+  operadorApi.use(checkCsrf);
+  operadorApi.use((req: SessionRequest, res, next) => {
+    const user = req.userId ? store.findUser(req.userId) : undefined;
+    if (!user || user.role !== "operador" || !user.active) {
+      // 404 y no 403: para quien no es operador, esta sección no existe.
+      res.status(404).json({ ok: false, error: "No encontrado." });
+      return;
+    }
+    next();
+  });
+
+  /** Una fila de la tabla del operador: la cuenta, su liga y en qué estado está cada cosa. */
+  function filaDeAdmin(user: User) {
+    const leagues = store.leaguesOwnedBy(user.id).map((l) => ({
+      slug: l.slug,
+      name: l.name,
+      status: l.status,
+      lastError: l.lastError,
+      sendAddress: supervisor.sendAddressOf(l),
+      udpPort: l.udpPort,
+    }));
+    return {
+      id: user.id,
+      email: user.email,
+      active: user.active,
+      paidUntil: user.paidUntil ?? "",
+      lastLoginAt: user.lastLoginAt ?? "",
+      createdAt: user.createdAt,
+      note: user.note ?? "",
+      subscription: subscriptionOf(user),
+      leagues,
+    };
+  }
+
+  operadorApi.get("/admins", (_req, res) => {
+    const admins = store
+      .users()
+      .filter((u) => u.role === "admin")
+      .map(filaDeAdmin)
+      // Primero lo que requiere acción: vencidos, después por vencer, después el resto.
+      .sort((a, b) => ordenDeAtencion(a) - ordenDeAtencion(b) || a.email.localeCompare(b.email));
+    res.json({ ok: true, admins, udpLibres: puertosUdpLibres() });
+  });
+
+  operadorApi.get("/admins/:id", (req, res) => {
+    const user = store.findUser(req.params.id);
+    if (!user || user.role !== "admin") {
+      res.status(404).json({ ok: false, error: "No existe esa cuenta." });
+      return;
+    }
+    res.json({ ok: true, admin: filaDeAdmin(user) });
+  });
+
+  /** Alta: una liga y su cuenta, en un solo paso. Devuelve la contraseña una única vez. */
+  operadorApi.post("/admins", async (req, res) => {
+    const body = req.body ?? {};
+    const nombre = String(body.leagueName ?? "").trim();
+    const email = normalizeEmail(body.email);
+    if (!nombre || !email.includes("@")) {
+      res.status(400).json({ ok: false, error: "Hacen falta el nombre de la liga y un email válido." });
+      return;
+    }
+    const password = body.password ? String(body.password) : undefined;
+    if (password !== undefined && password.length < 8) {
+      res.status(400).json({ ok: false, error: "La contraseña tiene que tener al menos 8 caracteres." });
+      return;
+    }
+    try {
+      const creds = await createLeague({
+        slug: String(body.slug ?? "").trim() || toSlugSeguro(nombre),
+        name: nombre,
+        email,
+        password,
+      });
+      if (body.paidUntil) store.updateUser(creds.user.id, { paidUntil: String(body.paidUntil) });
+      res.json({
+        ok: true,
+        password: creds.password,
+        loginUrl: creds.loginUrl,
+        admin: filaDeAdmin(store.findUser(creds.user.id)!),
+      });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  operadorApi.post("/admins/:id", (req, res) => {
+    const user = store.findUser(req.params.id);
+    if (!user || user.role !== "admin") {
+      res.status(404).json({ ok: false, error: "No existe esa cuenta." });
+      return;
+    }
+    const body = req.body ?? {};
+    const patch: Parameters<typeof store.updateUser>[1] = {};
+    if (typeof body.active === "boolean") patch.active = body.active;
+    if (typeof body.paidUntil === "string") patch.paidUntil = body.paidUntil.trim();
+    if (typeof body.note === "string") patch.note = body.note.slice(0, 500);
+    store.updateUser(user.id, patch);
+
+    // Desactivar apaga la liga; reactivar la vuelve a levantar. Los datos no se tocan nunca: el
+    // worker se detiene, y la carpeta con su configuración, sus sanciones y sus registros queda.
+    if (patch.active === false) for (const l of store.leaguesOwnedBy(user.id)) supervisor.stop(l.id);
+    if (patch.active === true) for (const l of store.leaguesOwnedBy(user.id)) supervisor.start(l.id);
+
+    res.json({ ok: true, admin: filaDeAdmin(store.findUser(user.id)!) });
+  });
+
+  /** Contraseña nueva, porque se la olvidó o porque hay que echarlo de una sesión que no reconoce. */
+  operadorApi.post("/admins/:id/clave", async (req, res) => {
+    const user = store.findUser(req.params.id);
+    if (!user || user.role !== "admin") {
+      res.status(404).json({ ok: false, error: "No existe esa cuenta." });
+      return;
+    }
+    const pedida = req.body?.password ? String(req.body.password) : undefined;
+    if (pedida !== undefined && pedida.length < 8) {
+      res.status(400).json({ ok: false, error: "La contraseña tiene que tener al menos 8 caracteres." });
+      return;
+    }
+    res.json({ ok: true, password: await resetPassword(user, pedida) });
+  });
+
+  app.use("/api/operador", operadorApi);
 
   // --- Rutas de una liga -------------------------------------------------------------------------
 
@@ -367,6 +499,13 @@ export function createPortal(config: PortalConfig): Portal {
       res.status(403).send("No tenés acceso a esta liga.");
       return;
     }
+    // La suscripción es del dueño, no de cada comisario: si el dueño está desactivado, la liga
+    // entera queda cerrada aunque un comisario suyo siga teniendo su cuenta en pie.
+    const dueño = league.ownerId ? store.findUser(league.ownerId) : undefined;
+    if (dueño && !dueño.active) {
+      res.status(403).send("Esta liga está desactivada. Hablá con quien te dio el acceso.");
+      return;
+    }
     if (league.status !== "running") {
       // Pedirla es la señal más clara de que alguien la quiere usar: si está parada, se levanta.
       if (league.status === "stopped") supervisor.start(league.id);
@@ -391,54 +530,137 @@ export function createPortal(config: PortalConfig): Portal {
     res.sendFile(path.join(__dirname, "public", nombre));
 
   app.get("/login", pagina("login.html"));
-  app.get("/invitacion/:token", pagina("invitacion.html"));
+  app.get("/mis-ligas", pagina("mis-ligas.html"));
+  app.get("/operador", pagina("operador.html"));
   app.get("/conectar/:slug", pagina("conectar.html"));
   app.get("/", pagina("index.html"));
 
   app.use((_req, res) => res.status(404).send("No encontrado."));
 
-  // --- Alta de ligas (CLI) -----------------------------------------------------------------------
+  // --- Altas y bajas ------------------------------------------------------------------------------
 
-  function createLeague(input: { slug: string; name: string; email: string }): { league: League; inviteUrl: string } {
+  function baseUrl(): string {
+    return `${config.secureCookies ? "https" : "http"}://${config.publicHost}`;
+  }
+
+  /**
+   * Crea la liga y la cuenta de su admin de una sola vez.
+   *
+   * Van juntas a propósito: una liga sin dueño es un puerto UDP reservado que nadie usa, y una
+   * cuenta sin liga es alguien que entra y no tiene nada que mirar.
+   */
+  async function createLeague(
+    input: { slug: string; name: string; email: string; password?: string },
+    options: { start?: boolean } = {}
+  ): Promise<Credenciales> {
     if (!SLUG_RE.test(input.slug)) {
       throw new Error(`"${input.slug}" no sirve como dirección: usá minúsculas, números y guiones (2 a 40 caracteres).`);
     }
     if (store.findLeagueBySlug(input.slug)) throw new Error(`Ya existe una liga en /l/${input.slug}.`);
+    if (store.findUserByEmail(input.email)) {
+      throw new Error(`Ya hay una cuenta con el email ${normalizeEmail(input.email)}.`);
+    }
 
+    // Los puertos primero: si no quedan, es mejor fallar antes de haber creado media cosa.
     const ports = assignPorts(store.usedPorts(), {
       udpFrom: config.udpPortFrom,
       udpTo: config.udpPortTo,
       loopbackFrom: config.loopbackPortFrom,
     });
+
+    const password = input.password || generatePassword();
+    const user = store.createUser(input.email, await hashPassword(password), "admin");
     const league = store.createLeague({
       slug: input.slug,
       name: input.name,
-      ownerId: "",
+      ownerId: user.id,
       udpPort: ports.udpPort,
       adminPort: ports.adminPort,
       clientPort: ports.clientPort,
     });
+    store.addMembership({ userId: user.id, leagueId: league.id, role: "owner" });
+    // El CLI pasa `start: false`: ahí no hay portal corriendo, y un worker forkeado por un proceso
+    // que termina en dos segundos se muere con él dejando la liga marcada como "en marcha".
+    if (options.start !== false) supervisor.start(league.id);
 
-    return { league, inviteUrl: invite(league, input.email) };
+    return { league, user, password, loginUrl: `${baseUrl()}/login` };
   }
 
-  function invite(league: League, email: string): string {
-    const { token, hash } = newInviteToken();
-    store.addInvite({
-      tokenHash: hash,
-      leagueId: league.id,
-      email: normalizeEmail(email),
-      // 48 h: suficiente para que el admin lo abra sin apuro, corto para que un link que quedó
-      // en un chat no sirva para siempre.
-      expiresAt: Date.now() + 48 * 60 * 60 * 1000,
-    });
-    const esquema = config.secureCookies ? "https" : "http";
-    return `${esquema}://${config.publicHost}/invitacion/${token}`;
+  async function resetPassword(user: User, password?: string): Promise<string> {
+    const nueva = password || generatePassword();
+    // `setPassword` sube `sessionsVersion`, así que quien estuviera usando la cuenta con la clave
+    // vieja se cae en el próximo pedido. Es el punto de la operación.
+    store.setPassword(user.id, await hashPassword(nueva));
+    return nueva;
+  }
+
+  /**
+   * La primera cuenta de operador, sembrada desde el entorno en el primer arranque.
+   *
+   * Sin esto habría un huevo y la gallina: el panel del operador crea cuentas, pero a ese panel
+   * solo entra un operador. Devuelve la contraseña si tuvo que crear la cuenta, y `null` si ya
+   * había una — así un redeploy no la pisa ni la reimprime.
+   */
+  async function ensureOperator(email: string, password?: string): Promise<string | null> {
+    if (store.hasOperator()) return null;
+    const limpio = normalizeEmail(email);
+    if (!limpio.includes("@")) throw new Error(`"${email}" no parece un email.`);
+    if (store.findUserByEmail(limpio)) throw new Error(`Ya existe una cuenta con el email ${limpio}.`);
+    const nueva = password || generatePassword();
+    store.createUser(limpio, await hashPassword(nueva), "operador");
+    return nueva;
+  }
+
+  // --- Auxiliares de presentación ------------------------------------------------------------------
+
+  function puertosUdpLibres(): number {
+    const usados = store.usedPorts();
+    let libres = 0;
+    for (let p = config.udpPortFrom; p <= config.udpPortTo; p++) if (!usados.has(p)) libres += 1;
+    return libres;
+  }
+
+  function toSlugSeguro(nombre: string): string {
+    const base = toSlug(nombre);
+    if (!base || !SLUG_RE.test(base)) {
+      throw new Error(`No pude armar una dirección con "${nombre}". Poné una a mano.`);
+    }
+    return base;
   }
 
   // Calienta el hash señuelo al arrancar: si se calculara en el primer login fallido, ese primer
   // intento tardaría distinto que los demás y delataría justo lo que el señuelo esconde.
   void DECOY_HASH;
 
-  return { app, store, supervisor, sessions, createLeague, invite };
+  return { app, store, supervisor, sessions, createLeague, resetPassword, ensureOperator };
+}
+
+/** Estado de la cuota, calculado en el servidor: el reloj del navegador no decide esto. */
+export interface Subscription {
+  paidUntil: string;
+  /** Días que faltan (negativo si ya venció), o `null` si la cuenta no tiene cuota cargada. */
+  daysLeft: number | null;
+  state: "sin-cuota" | "al-dia" | "por-vencer" | "vencida";
+}
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+/** Una semana de aviso: alcanza para que el admin reaccione sin volverse un cartel permanente. */
+const AVISO_DIAS = 7;
+
+export function subscriptionOf(user: User | undefined): Subscription {
+  const paidUntil = user?.paidUntil?.trim() || "";
+  if (!paidUntil) return { paidUntil: "", daysLeft: null, state: "sin-cuota" };
+  const vence = Date.parse(`${paidUntil}T23:59:59`);
+  if (!Number.isFinite(vence)) return { paidUntil, daysLeft: null, state: "sin-cuota" };
+  const daysLeft = Math.ceil((vence - Date.now()) / DIA_MS);
+  const state = daysLeft < 0 ? "vencida" : daysLeft <= AVISO_DIAS ? "por-vencer" : "al-dia";
+  return { paidUntil, daysLeft, state };
+}
+
+/** Orden de la tabla del operador: primero lo que hay que mirar hoy. */
+function ordenDeAtencion(fila: { active: boolean; subscription: Subscription }): number {
+  if (!fila.active) return 3;
+  if (fila.subscription.state === "vencida") return 0;
+  if (fila.subscription.state === "por-vencer") return 1;
+  return 2;
 }

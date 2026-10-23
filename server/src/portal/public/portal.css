@@ -1,13 +1,17 @@
 /*
-  Pantallas del portal: landing, login y alta por invitación.
+  Pantallas de sesión del portal: login, lista de ligas, puesta en marcha y panel del operador.
 
   Hoja aparte de la del panel a propósito. El panel tiene una regla dura —todo en una pantalla,
   sin scroll— que existe porque durante una carrera no se puede scrollear para encontrar la torre
-  de tiempos. Acá no se corre ninguna carrera: son tres pantallas cortas que se leen una vez, y
+  de tiempos. Acá no se corre ninguna carrera: son pantallas cortas que se leen una vez, y
   mezclarlas con esa hoja significaría arrastrar un layout de dashboard para mostrar un formulario
   de dos campos.
 
-  Los colores sí son los mismos, para que entrar al panel no se sienta otra aplicación.
+  La landing pública tiene su propia hoja (`landing.css`) por el motivo inverso: necesita secciones
+  a todo el ancho y acá el body centra una columna angosta.
+
+  Los colores sí son los mismos en las tres, para que moverse entre ellas no se sienta otra
+  aplicación.
 */
 
 :root {
@@ -62,6 +66,8 @@ body {
 }
 
 .caja.ancha { max-width: 720px; }
+/* El panel del operador es una tabla de seis columnas: con 720 px las acciones se amontonan. */
+.caja.extra-ancha { max-width: 1180px; }
 
 h1 { font-size: 21px; margin: 0 0 6px; }
 h2 { font-size: 16px; margin: 24px 0 8px; }
@@ -106,6 +112,31 @@ button {
 }
 
 button:disabled { opacity: 0.55; cursor: progress; }
+
+/* Los botones de una tabla no pueden ocupar el ancho completo ni empujar la fila. */
+button.compacto {
+  margin-top: 0;
+  width: auto;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+button.secundario {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+}
+
+button.secundario:hover { border-color: var(--accent); }
+
+button.peligro {
+  background: transparent;
+  border: 1px solid rgba(224, 85, 85, 0.5);
+  color: #ffb4b4;
+}
+
+button.peligro:hover { border-color: var(--red); background: rgba(224, 85, 85, 0.1); }
 
 .error {
   margin-top: 16px;
@@ -171,3 +202,152 @@ button:disabled { opacity: 0.55; cursor: progress; }
 }
 
 .pie a { color: var(--accent); }
+
+/* ------------------------------------------------------------------------ avisos de cuota */
+
+.aviso {
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 18px;
+}
+
+.aviso[hidden] { display: none; }
+.aviso.leve { border: 1px solid rgba(224, 184, 75, 0.4); background: rgba(224, 184, 75, 0.1); color: #f3dfa6; }
+.aviso.grave { border: 1px solid rgba(224, 85, 85, 0.5); background: rgba(224, 85, 85, 0.1); color: #ffc9c9; }
+
+/* ------------------------------------------------------------------------ panel del operador */
+
+body.operador { padding-top: 4vh; }
+
+.chapa {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid rgba(63, 169, 245, 0.4);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.cabecera h1 { margin-right: auto; }
+.acciones-cabecera { display: flex; gap: 8px; }
+
+.resumen {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.dato {
+  background: #0e1016;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.dato .valor { font-size: 24px; font-weight: 700; line-height: 1.1; }
+.dato .etiqueta { font-size: 12px; color: var(--muted); }
+.dato.malo { border-color: rgba(224, 85, 85, 0.5); }
+.dato.malo .valor { color: #ffb4b4; }
+.dato.aviso { border-color: rgba(224, 184, 75, 0.45); }
+.dato.aviso .valor { color: var(--yellow); }
+
+.sub-caja {
+  background: #0e1016;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 22px;
+}
+
+.sub-caja[hidden] { display: none; }
+.sub-caja h2 { margin-top: 0; }
+
+.campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 16px;
+}
+
+input[type="date"] {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: #0e1016;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.botonera { display: flex; gap: 10px; margin-top: 18px; }
+.botonera button { margin-top: 0; width: auto; }
+
+.credenciales { border-color: var(--accent); }
+
+.entrega { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 14px 0 0; }
+.entrega dt { color: var(--muted); font-size: 13px; }
+.entrega dd { margin: 0; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; user-select: all; }
+.entrega dd.clave { font-size: 19px; color: var(--accent); letter-spacing: 0.02em; }
+
+/* ----------------------------------------------------------------------------- la tabla */
+
+.tabla { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabla[hidden] { display: none; }
+
+.tabla th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.tabla td { padding: 12px; border-bottom: 1px solid var(--panel-border); vertical-align: top; }
+.tabla tr:last-child td { border-bottom: 0; }
+
+/* La fila desactivada se apaga pero sigue legible: es la que hay que encontrar para reactivar. */
+.tabla tr.inactiva { opacity: 0.5; }
+
+.tabla .principal { font-weight: 600; color: var(--text); text-decoration: none; display: block; }
+.tabla a.principal:hover { color: var(--accent); }
+.tabla .muted { font-size: 12px; }
+.tabla .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
+.tabla .nota { font-size: 12px; color: var(--muted); font-style: italic; margin-top: 4px; }
+.tabla td.acciones { white-space: nowrap; }
+.tabla td.acciones button { margin-right: 6px; }
+
+.pastilla {
+  display: inline-block;
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.cuota-al-dia { color: var(--green); border-color: rgba(53, 199, 110, 0.45); }
+.cuota-por-vencer { color: var(--yellow); border-color: rgba(224, 184, 75, 0.5); }
+.cuota-vencida { color: #ffb4b4; border-color: var(--red); background: rgba(224, 85, 85, 0.1); }
+
+@media (max-width: 900px) {
+  /* Seis columnas no entran en un teléfono. La tabla scrollea sola en vez de romper el ancho
+     de la página, que es la regla del panel y vale también acá. */
+  .caja.extra-ancha { overflow-x: auto; }
+  .tabla { min-width: 820px; }
+}

@@ -89,11 +89,10 @@ function pedir(
   });
 }
 
-/** Acepta la invitación eligiendo contraseña y devuelve la cookie de sesión que quedó abierta. */
-async function aceptar(inviteUrl: string, password: string): Promise<string> {
-  const token = inviteUrl.split("/").pop()!;
-  const res = await pedir("POST", `/api/portal/invitacion/${token}`, {
-    body: { password },
+/** Entra con usuario y contraseña y devuelve la cookie de sesión que quedó abierta. */
+async function entrar(email: string, password: string): Promise<string> {
+  const res = await pedir("POST", "/api/portal/login", {
+    body: { email, password },
     headers: { "x-rc-request": "1" },
   });
   assert.equal(res.status, 200, res.body);
@@ -101,8 +100,13 @@ async function aceptar(inviteUrl: string, password: string): Promise<string> {
   return setCookie.split(";")[0];
 }
 
+const CLAVE_A = "contrasena-larga-1";
+const CLAVE_B = "contrasena-larga-2";
+const CLAVE_OP = "contrasena-del-operador";
+
 let cookieA = "";
 let cookieB = "";
+let cookieOp = "";
 let espejoAdmin: { port: number; ultimo: () => Espejo | null };
 let espejoPilotos: { port: number; ultimo: () => Espejo | null };
 
@@ -129,8 +133,9 @@ before(async () => {
   base = `http://127.0.0.1:${port}`;
   cerrar.push(() => server.close());
 
-  const a = portal.createLeague({ slug: "liga-a", name: "Liga A", email: "ana@example.com" });
-  const b = portal.createLeague({ slug: "liga-b", name: "Liga B", email: "beto@example.com" });
+  await portal.createLeague({ slug: "liga-a", name: "Liga A", email: "ana@example.com", password: CLAVE_A });
+  await portal.createLeague({ slug: "liga-b", name: "Liga B", email: "beto@example.com", password: CLAVE_B });
+  await portal.ensureOperator("jefe@example.com", CLAVE_OP);
 
   espejoAdmin = await servidorEspejo();
   espejoPilotos = await servidorEspejo();
@@ -140,8 +145,9 @@ before(async () => {
   ligaA.adminPort = espejoAdmin.port;
   ligaA.clientPort = espejoPilotos.port;
 
-  cookieA = await aceptar(a.inviteUrl, "contrasena-larga-1");
-  cookieB = await aceptar(b.inviteUrl, "contrasena-larga-2");
+  cookieA = await entrar("ana@example.com", CLAVE_A);
+  cookieB = await entrar("beto@example.com", CLAVE_B);
+  cookieOp = await entrar("jefe@example.com", CLAVE_OP);
 });
 
 after(() => {
@@ -268,34 +274,14 @@ test("con sesión, el portal lista solo las ligas propias", async () => {
   assert.equal(data.leagues[0].sendAddress, "203.0.113.5:39000");
 });
 
-test("la invitación es de un solo uso", async () => {
-  const { inviteUrl } = portal.createLeague({ slug: "liga-c", name: "Liga C", email: "caro@example.com" });
-  const token = inviteUrl.split("/").pop()!;
-  await aceptar(inviteUrl, "contrasena-larga-3");
-
-  const segunda = await pedir("POST", `/api/portal/invitacion/${token}`, {
-    body: { password: "otra-contrasena-larga" },
-    headers: { "x-rc-request": "1" },
-  });
-  assert.equal(segunda.status, 404);
-});
-
-test("una contraseña corta no se acepta", async () => {
-  const { inviteUrl } = portal.createLeague({ slug: "liga-d", name: "Liga D", email: "dani@example.com" });
-  const token = inviteUrl.split("/").pop()!;
-  const res = await pedir("POST", `/api/portal/invitacion/${token}`, {
-    body: { password: "corta" },
-    headers: { "x-rc-request": "1" },
-  });
-  assert.equal(res.status, 400);
-});
-
 test("el login deja entrar y el logout cierra de verdad", async () => {
   const login = await pedir("POST", "/api/portal/login", {
-    body: { email: "ANA@example.com", password: "contrasena-larga-1" },
+    body: { email: "ANA@example.com", password: CLAVE_A },
     headers: { "x-rc-request": "1" },
   });
   assert.equal(login.status, 200);
+  // Con una sola liga, el destino es la liga: la lista intermedia solo agregaría un click.
+  assert.equal(login.json().destino, "/l/liga-a/");
   const cookie = (login.headers["set-cookie"]?.[0] || "").split(";")[0];
 
   assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
@@ -309,6 +295,115 @@ test("una contraseña equivocada no entra", async () => {
     headers: { "x-rc-request": "1" },
   });
   assert.equal(res.status, 401);
+});
+
+test("dos ligas con el mismo email no se pueden crear", async () => {
+  await assert.rejects(
+    () => portal.createLeague({ slug: "otra", name: "Otra", email: "ana@example.com" }),
+    /Ya hay una cuenta/
+  );
+});
+
+// --- Operador ------------------------------------------------------------------------------------
+
+test("el panel del operador no existe para quien no lo es", async () => {
+  // 404 y no 403: un admin curioso no tiene por qué enterarse de que esta sección está acá.
+  assert.equal((await pedir("GET", "/api/operador/admins", { cookie: cookieA })).status, 404);
+  assert.equal((await pedir("GET", "/api/operador/admins")).status, 404);
+});
+
+test("el operador ve a todos los admins, pero no a sí mismo", async () => {
+  const res = await pedir("GET", "/api/operador/admins", { cookie: cookieOp });
+  assert.equal(res.status, 200);
+  const emails = res.json().admins.map((a: { email: string }) => a.email);
+  assert.ok(emails.includes("ana@example.com"));
+  assert.ok(emails.includes("beto@example.com"));
+  assert.ok(!emails.includes("jefe@example.com"));
+});
+
+test("el alta devuelve la contraseña una vez y con ella se entra", async () => {
+  const res = await pedir("POST", "/api/operador/admins", {
+    cookie: cookieOp,
+    body: { leagueName: "Liga Nueva", email: "nueva@example.com" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(res.status, 200, res.body);
+  const { password, admin } = res.json();
+  assert.ok(password.length >= 8);
+  assert.equal(admin.leagues[0].slug, "liga-nueva");
+
+  const cookie = await entrar("nueva@example.com", password);
+  assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
+});
+
+test("desactivar echa al admin y cierra la liga; reactivar la devuelve", async () => {
+  const alta = await pedir("POST", "/api/operador/admins", {
+    cookie: cookieOp,
+    body: { leagueName: "Liga Morosa", email: "morosa@example.com" },
+    headers: { "x-rc-request": "1" },
+  });
+  const { password, admin } = alta.json();
+  const cookie = await entrar("morosa@example.com", password);
+  assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
+
+  await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { active: false },
+    headers: { "x-rc-request": "1" },
+  });
+
+  // La sesión que ya tenía abierta se cae sola: desactivar sube `sessionsVersion`.
+  assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, false);
+  // Y tampoco puede volver a entrar con su contraseña, que sigue siendo la correcta.
+  const reintento = await pedir("POST", "/api/portal/login", {
+    body: { email: "morosa@example.com", password },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(reintento.status, 403);
+
+  await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { active: true },
+    headers: { "x-rc-request": "1" },
+  });
+  const vuelta = await entrar("morosa@example.com", password);
+  assert.equal((await pedir("GET", "/api/portal/me", { cookie: vuelta })).json().authenticated, true);
+});
+
+test("una clave nueva invalida la anterior", async () => {
+  const admin = portal.store.findUserByEmail("beto@example.com")!;
+  const res = await pedir("POST", `/api/operador/admins/${admin.id}/clave`, {
+    cookie: cookieOp,
+    body: {},
+    headers: { "x-rc-request": "1" },
+  });
+  const nueva = res.json().password;
+  assert.notEqual(nueva, CLAVE_B);
+
+  const vieja = await pedir("POST", "/api/portal/login", {
+    body: { email: "beto@example.com", password: CLAVE_B },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(vieja.status, 401);
+  cookieB = await entrar("beto@example.com", nueva);
+});
+
+test("el estado de la cuota lo calcula el servidor", async () => {
+  const admin = portal.store.findUserByEmail("ana@example.com")!;
+  const ayer = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { paidUntil: ayer },
+    headers: { "x-rc-request": "1" },
+  });
+  const fila = (await pedir("GET", "/api/operador/admins", { cookie: cookieOp }))
+    .json()
+    .admins.find((a: { email: string }) => a.email === "ana@example.com");
+  assert.equal(fila.subscription.state, "vencida");
+  // La cuota vencida avisa, pero NO echa a nadie: cortar en mitad de una carrera por una fecha
+  // es peor que cualquier impago. El corte es `active`, y lo decide una persona.
+  assert.equal(fila.active, true);
+  assert.equal((await pedir("GET", "/l/liga-a/api/state", { cookie: cookieA })).status, 200);
 });
 
 test("las pantallas del portal salen con sus cabeceras de seguridad", async () => {

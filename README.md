@@ -14,10 +14,11 @@ una sola pantalla.
 
 ## 🚦 Cómo se usa
 
-**El admin no descarga nada.** Entra a una dirección web, pega **un renglón** en el panel de su
-hosting y ya está dirigiendo. Lo único que se descarga es la app de los pilotos.
+**El admin no instala nada.** Entra a una dirección web con el usuario y la contraseña que le
+pasaron, pega **un renglón** en el panel de su hosting y ya está dirigiendo. Lo único que se
+descarga es la app de los pilotos.
 
-1. 📨 Pedís tu liga y te llega un **link de invitación**. Lo abrís, elegís una contraseña y entrás.
+1. 🔑 Te pasan la **dirección, un usuario y una contraseña**. Entrás por **"Ingresar"**.
 2. 📋 La pantalla te muestra un renglón tipo `203.0.113.5:30000`. Lo pegás en el campo
    **"Send Address"** del panel de tu hosting y reiniciás el servidor de Assetto Corsa.
 3. ✅ La pantalla **se pone verde sola** cuando empieza a llegar la telemetría. No hay nada más
@@ -25,21 +26,22 @@ hosting y ya está dirigiendo. Lo único que se descarga es la app de los piloto
 4. 🎮 Le pasás `RaceControlClient.zip` a cada piloto, una sola vez para toda la temporada.
 5. 🏁 El día de carrera entrás al panel y apretás los botones de largada.
 
-### 🙋 Cómo pido mi liga
+### 🙋 Cómo consigo mi usuario
 
-El alta es **por invitación**, no por registro abierto. No es para hacerse el difícil: cada liga
-ocupa un puerto UDP de un rango chico y declarado a mano en el servidor, así que un formulario
-público agotaría el rango el primer día.
+No hay registro abierto: las cuentas las crea a mano quien opera el servicio. No es por hacerse el
+difícil — cada liga ocupa un puerto UDP de un rango chico declarado a mano en el servidor, así que
+un formulario público lo agotaría el primer día. Y el acceso va atado a la cuota mensual.
 
 Abrí un [issue](https://github.com/FranQuarnolo/race-control/issues) o escribime con el nombre de
-tu liga y un email, y te mando el link. Vence a las 48 h y sirve una sola vez.
+tu liga y un email, y te mando las credenciales.
 
 ## 📥 Descargas
 
 | Para | Qué bajar |
 |---|---|
 | 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) |
-| 🖥️ El admin, **solo si quiere correrlo en su PC** | [**RaceControlServer.exe**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlServer.exe) |
+
+El admin no baja nada: el panel es una página web.
 
 ## 🏎️ Para el piloto
 
@@ -71,23 +73,21 @@ y una credencial por el chat del juego apenas entrás. 🎮
 - **Modo sombra**: 🛡️ **recomendado para las primeras carreras**. El sistema registra todo pero no
   sanciona a nadie en serio, así podés chequear que funcione antes de confiar en él del todo.
 
-## 💻 Correrlo en tu propia PC
+## 🛠️ Para quien opera el servicio
 
-El `.exe` sigue existiendo y hace exactamente lo mismo, para quien prefiera no depender de un
-servicio ajeno o no tenga internet estable. La diferencia es que ahí la puesta en marcha sí es
-cosa tuya: averiguar tu IP pública, abrir un puerto en el router y dejar una ventana abierta
-mientras dura la carrera.
+Entrando con la cuenta de operador aparece **`/operador`**: la lista de admins, cuándo entró cada
+uno, hasta cuándo pagó, y los botones para dar de alta una liga nueva, generar una contraseña o
+desactivar una cuenta. Desactivar **para el worker de esa liga y deja todos sus datos donde
+estaban**; reactivar lo vuelve a levantar.
 
-1. Abrí `RaceControlServer.exe`. Windows puede mostrarte un aviso de seguridad la primera vez (es
-   normal, la app es nueva) — "Más información" → "Ejecutar de todas formas". ⚠️
-2. La primera vez te guía un asistente de 4 pasos y después el panel se abre solo en tu navegador.
-3. En **"Conexión"** tenés la dirección ya armada para pegar en tu hosting y el botón
-   "Probar ahora".
+La puesta en marcha completa —desde el `fly launch` hasta la primera liga andando— está en
+**[PUESTA-EN-MARCHA.md](PUESTA-EN-MARCHA.md)**.
 
 ## 📚 Documentación
 
 | Documento | De qué trata |
 |---|---|
+| [PUESTA-EN-MARCHA.md](PUESTA-EN-MARCHA.md) | Cómo poner a punto cada cosa y cómo funciona, de punta a punta |
 | [docs/portal.md](server/docs/portal.md) | Arquitectura del portal: supervisor, workers, puertos, autenticación |
 | [docs/operacion.md](server/docs/operacion.md) | Manual de operación: crear ligas, desplegar, leer logs, restaurar |
 | [docs/seguridad.md](server/docs/seguridad.md) | Modelo de amenazas y qué queda explícitamente aceptado |
@@ -98,9 +98,8 @@ mientras dura la carrera.
 ```bash
 cd server
 npm install
-npm run dev      # backend local con recarga
+npm run dev      # portal con recarga
 npm test         # compila y corre los tests
-npm run package  # genera release/RaceControlServer.exe
 ```
 
 El portal en la máquina propia, con sus cookies sin HTTPS:
@@ -108,7 +107,14 @@ El portal en la máquina propia, con sus cookies sin HTTPS:
 ```bash
 npm run build
 RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 \
-  RC_INSECURE_COOKIES=1 node dist/portal/cli.js crear-liga --nombre "Mi Liga" --email yo@ejemplo.com
-RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 \
-  RC_INSECURE_COOKIES=1 PORT=8080 node dist/portal/index.js
+  RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com PORT=8080 node dist/portal/index.js
+```
+
+La contraseña del operador sale en el log del primer arranque, una sola vez.
+
+Dos ayudas más, que no necesitan un servidor de Assetto Corsa:
+
+```bash
+node dist/sim/replay.js   # reproduce una captura cruda contra el motor
+node dist/sim/demo.js     # levanta el panel con una carrera inventada, para sacar capturas
 ```

@@ -11,9 +11,9 @@ WORKDIR /app
 # Las dependencias primero y el código después: mientras el package-lock no cambie, Docker
 # reutiliza la capa de `npm ci`, que es la que tarda.
 COPY package.json package-lock.json ./
-# `--ignore-scripts`: las dependencias son JavaScript puro y ninguna necesita compilar nada. Las
-# devDependencies que sí traen binarios (el empaquetador del .exe, rcedit) son de Windows y acá no
-# se usan; sin esta bandera el build se iría a bajarlas para nada.
+# `--ignore-scripts`: las dependencias son JavaScript puro y ninguna necesita compilar nada, así
+# que no hay ningún `postinstall` legítimo que correr — y sí mucho que ganar en no ejecutar los de
+# un árbol de dependencias ajeno dentro del build.
 RUN npm ci --ignore-scripts
 
 COPY tsconfig.json ./

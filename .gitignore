@@ -3,11 +3,6 @@
 
 # build output
 /server/dist
-/server/release
-
-# binario base de Node con el ícono y el nombre de Race Control, paso intermedio del empaquetado
-# (lo regenera `npm run package`, y pesa lo mismo que un node.exe)
-/server/build
 /server/logs
 /client-app/release
 

@@ -3,6 +3,97 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.5] — 2026-10-23
+
+Race Control deja de ser un programa que se baja y pasa a ser un servicio al que se entra. No hay
+más `.exe`, no hay más invitaciones por link, y hay una landing que explica el producto antes de
+pedirle nada a nadie.
+
+### El `.exe` se fue entero
+
+No se dejó de recomendar: se borró. `src/index.ts`, `scripts/package.js`, el `.ico`, la carpeta
+`release/`, el script `npm run package` y la fila de descarga del README.
+
+Con él se fueron las dos piezas que existían **solo** para que funcionara en la PC de una persona:
+el mapeo de puertos por **UPnP** y la **detección de IP pública** contra servicios externos. Eso
+elimina la última dependencia npm que no era `express` (`@runonflux/nat-upnp`) y deja
+`net/connectivity.ts` en lo único que sigue siendo cierto en un servidor: mandar un keepalive y
+contar si entran datagramas.
+
+El motor también perdió el parámetro `mode`. Mientras hubo dos destinos había dos comportamientos
+—el token del piloto obligatorio acá y opcional allá, la retención sí acá y no allá, formularios
+que aparecían en un lado y no en el otro— y cada uno era un camino de código que alguien tenía que
+acordarse de probar. Ahora hay uno.
+
+Lo que esto arregla sin pedir permiso: la guía de conexión dejó de tener una sección sobre abrir
+puertos en el router, y los cuatro textos del diagnóstico dejaron de mandar a revisar cosas que en
+un servidor no existen.
+
+### Las cuentas las crea el operador, una por una
+
+El alta por link de invitación se cambió entera. El motivo es el modelo de negocio: no se invita a
+nadie, se le vende. Quien paga la cuota recibe un usuario y una contraseña; quien deja de pagar se
+queda sin acceso.
+
+Hay un **panel de operador** en `/operador`, detrás de su propio rol:
+
+- La lista de admins ordenada por lo que requiere atención: primero las cuotas vencidas, después
+  las que vencen esta semana, después el resto, y al final lo desactivado.
+- Alta de liga y cuenta en un paso, con la contraseña generada por el portal y mostrada **una sola
+  vez** —en disco solo queda el hash—, con un botón para copiar los tres datos que hay que pasarle
+  al admin.
+- "Cobré" suma un mes desde donde venía la cuota, o desde hoy si ya estaba vencida.
+- Desactivar **para el worker de esa liga y no toca un solo archivo**. La alternativa —borrar
+  datos— convertiría un atraso en el pago en la pérdida del historial de un campeonato.
+- Cuántos lugares libres quedan. Cada liga ocupa un puerto UDP de un rango declarado a mano en
+  `fly.toml`, así que el cupo es real y conviene verlo venir.
+
+**Nada vence solo**: una cuota vencida se pinta en rojo y espera. Dar de baja a alguien en medio de
+su campeonato es una decisión, no un `setInterval`.
+
+Tres detalles que no se ven pero deciden el diseño:
+
+- `/api/operador/*` contesta **404 y no 403** a quien no tiene el rol. Para un admin común esa
+  sección no existe.
+- Una liga de cuenta desactivada **no vuelve sola en un redeploy**. Si volviera, reiniciar el
+  servidor sería la forma de saltearse la baja.
+- El CLI sigue existiendo con los mismos comandos, pero **se niega a correr con el portal vivo**:
+  el portal tiene todo `portal.json` en memoria y lo reescribe entero, así que su primer guardado
+  borraría el cambio del CLI sin que nadie se entere. Se detecta con un `portal.pid` en el volumen.
+
+La cuenta de operador no se crea a mano: el portal la genera en el arranque si `RC_OPERATOR_EMAIL`
+está puesto, y escribe la contraseña en el log una sola vez. Hacerlo por CLI no servía —el CLI y el
+portal escriben el mismo archivo— y dejarlo para después significaba un panel de operador al que no
+se podía entrar.
+
+### Una landing que muestra el producto
+
+Antes, la raíz era un formulario de login. Ahora es una página que explica sección por sección qué
+hace Race Control, con el botón de "Ingresar" donde corresponde.
+
+**Las capturas son el panel de verdad.** Para eso existe `src/sim/demo.ts`: levanta el panel
+completo con una carrera inventada —diez pilotos GT3, un trazado sintético, seis incidentes en la
+bandeja, tres sanciones en curso— y de ahí salen las cuatro imágenes. No es un script descartable:
+está versionado para que, cuando el panel cambie, las capturas se puedan rehacer en un comando.
+
+Dos cosas que hubo que resolver para que la foto no mintiera:
+
+- Un pinger UDP real bindeado al puerto que la config declara como el del servidor de AC, para que
+  el indicador de señal diga "recibiendo" porque **entran paquetes**, y no porque se trucó una
+  variable. Bindeado y no efímero: si cada datagrama saliera de un puerto distinto, el motor
+  concluiría —con razón— que el servidor no tiene puerto fijo y el diagnóstico se pondría en rojo.
+- Las posiciones de los autos están congeladas. Moviéndolos, la torre se reordenaba entre capturas
+  y en cuanto el líder cruzaba la meta pasaba a figurar último.
+
+De paso, los cajones de Conexión y Reglas aceptan ahora un ancla (`#conexion`, `#reglas`) y se
+abren solos. Nació para poder fotografiarlos, pero sirve para que un aviso enlace directo a donde
+se arregla el problema.
+
+### Versión y limpieza
+
+`0.5` en el panel y en `/api/state`, `0.5.0` en `package.json`. La única dependencia de producción
+que queda es `express`.
+
 ## [0.4] — 2026-10-23
 
 El admin ya no descarga nada. Race Control pasa de ser un `.exe` que corre en la PC de una persona

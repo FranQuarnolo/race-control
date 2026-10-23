@@ -66,23 +66,23 @@ export function summarize(checks: Check[]): { state: CheckState; message: string
 }
 
 function checkPublicHost(input: DiagnosticsInput): Check {
-  const { publicIp, publicHostSource } = input.network;
+  const { publicIp } = input.network;
   if (!publicIp) {
     return {
       id: "public-host",
-      title: "Tu dirección en internet",
+      title: "La dirección de tu liga",
       state: "fail",
-      detail: "No pudimos averiguarla.",
+      detail: "Todavía no tiene una asignada.",
       action:
-        "Suele pasar sin internet o con una VPN o antivirus que bloquea la consulta. Escribila a " +
-        'mano en "Dirección propia", acá abajo: podés verla entrando a cualquier buscador y poniendo "cuál es mi ip".',
+        "Es algo de nuestro lado, no tuyo: escribinos y lo resolvemos. Sin esta dirección no hay " +
+        "nada que puedas pegar en el panel de tu hosting.",
     };
   }
   return {
     id: "public-host",
-    title: "Tu dirección en internet",
+    title: "La dirección de tu liga",
     state: "ok",
-    detail: publicHostSource === "manual" ? `${publicIp} (la escribiste vos)` : `${publicIp} (detectada sola)`,
+    detail: publicIp,
     action: "",
   };
 }
@@ -125,9 +125,9 @@ function checkIncomingTelemetry(input: DiagnosticsInput): Check {
     state: "fail",
     detail: "Nunca llegó nada desde el servidor de Assetto Corsa.",
     action:
-      `Pegá en el server_cfg.ini de tu hosting las dos líneas que te damos acá al lado y reiniciá ` +
-      `el servidor de Assetto Corsa para que las tome. Si ya lo hiciste, falta abrir el puerto ` +
-      `${input.udpLocalPort} (UDP) en tu router hacia esta PC.`,
+      'Entrá al panel de tu hosting, pegá en "Send Address" la dirección que te damos acá al lado ' +
+      "y reiniciá el servidor de Assetto Corsa para que la tome. Si ya lo hiciste y sigue en rojo, " +
+      "fijate que el plugin UDP no tenga una lista de IPs permitidas que nos deje afuera.",
   };
 }
 
@@ -157,9 +157,10 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
       state: "fail",
       detail: "Tu servidor nos habla desde un puerto distinto cada vez, así que no podemos deducir a cuál contestarle.",
       action:
-        'Entrá al panel de tu hosting, buscá "Listen Address" (en paneles viejos, ' +
-        "UDP_PLUGIN_LOCAL_PORT) y copiá ese número en \"Puerto del servidor de AC\", acá abajo en " +
-        "Puertos. Hasta entonces el servidor te manda todo y no recibe nada: ni sanciones, ni avisos, ni kicks.",
+        'Entrá al panel de tu hosting y fijate que "Listen Address" (en paneles viejos, ' +
+        "UDP_PLUGIN_LOCAL_PORT) tenga un puerto fijo. Si ya lo tiene, escribinos con ese número y " +
+        "lo dejamos puesto. Hasta entonces el servidor te manda todo y no recibe nada: ni sanciones, " +
+        "ni avisos, ni kicks.",
     };
   }
   const source = input.udp.lastSourcePort;
@@ -170,9 +171,8 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
       state: "fail",
       detail: `Tu servidor nos habla desde el puerto ${source}, pero le estamos mandando las órdenes al ${input.udpRemotePort}.`,
       action:
-        `Son dos números que tienen que ser el mismo, y el que vale es el del servidor. Poné ${source} ` +
-        `en "Puerto del servidor de AC", acá abajo en Puertos — o cambiá el "Listen Address" de tu ` +
-        `hosting (UDP_PLUGIN_LOCAL_PORT en paneles viejos) a ${input.udpRemotePort}. ` +
+        `Son dos números que tienen que ser el mismo. Cambiá el "Listen Address" de tu hosting ` +
+        `(UDP_PLUGIN_LOCAL_PORT en paneles viejos) a ${input.udpRemotePort} y reiniciá el servidor. ` +
         "Hasta que coincidan, el servidor te manda todo y no recibe nada: ni sanciones, ni avisos, ni kicks.",
     };
   }
@@ -231,10 +231,8 @@ function checkDriverPort(input: DiagnosticsInput): Check {
     state: "fail",
     detail: `Hay ${input.driversConnected} en pista y ninguno llega hasta acá.`,
     action:
-      input.network.clientPortMapped === true
-        ? `Tu router dejó abierto el puerto ${input.clientPort}, así que lo más probable es que a ` +
-          "los pilotos les falte instalar la app de Race Control."
-        : `Abrí el puerto ${input.clientPort} (TCP) en tu router hacia esta PC, o pedile a los ` +
-          "pilotos que confirmen que tienen la app instalada y activada en Content Manager.",
+      "Pedile a los pilotos que confirmen que tienen la app de Race Control instalada y activada " +
+      "en Content Manager. Si la tienen, que salgan y vuelvan a entrar al servidor: la app recibe " +
+      "sus credenciales al conectarse.",
   };
 }

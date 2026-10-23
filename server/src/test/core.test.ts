@@ -32,10 +32,7 @@ async function levantar(sufijo: string, puertoUdp: number, puertoAdmin: number) 
   const rc = await createRaceControl({
     config: configDePrueba(puertoUdp, puertoAdmin),
     dataDir,
-    mode: "portal",
     ports: { adminPort: puertoAdmin, clientPort: puertoAdmin + 1 },
-    // Sin esto el test sale a internet a preguntar la IP pública y a buscar un router por UPnP.
-    discovery: false,
   });
   return { rc, dataDir };
 }
@@ -59,7 +56,6 @@ test("dos instancias conviven en un proceso sin pisarse los datos ni los puertos
     // Los puertos asignados se respetan tal cual: el portal hace proxy a estos números y no
     // tiene forma de enterarse si el worker se corre solo.
     assert.equal(a.rc.ports.adminPort, 13610);
-    assert.equal(a.rc.ports.portsMoved, false);
     assert.equal(b.rc.ports.adminPort, 13620);
 
     // Y el estado es de cada una: el mismo carId en las dos es un auto distinto.
@@ -87,9 +83,7 @@ test("stop() libera el puerto UDP, así que la misma liga puede reiniciarse en c
   const segunda = await createRaceControl({
     config: configDePrueba(12630, 13630),
     dataDir: primera.dataDir,
-    mode: "portal",
     ports: { adminPort: 13630, clientPort: 13631 },
-    discovery: false,
   });
   segunda.stop();
   fs.rmSync(primera.dataDir, { recursive: true, force: true });

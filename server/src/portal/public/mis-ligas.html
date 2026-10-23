@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tus ligas — Race Control</title>
+  <link rel="icon" href="/icon.svg" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body>
+  <div class="marca"><img src="/icon.svg" alt="" /> Race Control</div>
+
+  <section class="caja ancha">
+    <h1>Tus ligas</h1>
+
+    <!-- Aviso de cuota. Lo escribe el servidor, que es quien sabe la fecha de verdad. -->
+    <p class="aviso" id="aviso-cuota" hidden></p>
+
+    <div id="lista"></div>
+    <p class="muted" id="sin-ligas" hidden>
+      Tu cuenta todavía no tiene ninguna liga asociada. Escribinos y la damos de alta.
+    </p>
+    <button id="btn-logout" class="secundario">Cerrar sesión</button>
+  </section>
+
+  <p class="error" id="error" hidden></p>
+  <p class="pie">Race Control <span id="version"></span></p>
+
+  <script src="/portal.js"></script>
+  <script src="/mis-ligas.js"></script>
+</body>
+</html>

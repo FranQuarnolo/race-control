@@ -47,7 +47,7 @@ leer código — ningún agente de IA puede resolverlo):
 | Telemetría inconsistente | No debería aparecer nunca con la app funcionando bien | Si aparece sola, la tolerancia (3 cortes acumulados) quedó corta para el desfasaje del heartbeat |
 | Sanción del comisario | Sancioná un incidente desde la bandeja con "+10s" | El piloto tiene que recibir el chat, y la sanción tiene que aparecer en la tabla y en el informe |
 | Informe de carrera | Descargalo al terminar y abrilo con Excel | Si los acentos salen rotos o todo cae en una columna, revisar el BOM y el separador en `raceReport.ts` |
-| Reinicio a mitad de carrera | Cerrá el `.exe` con una sanción emitida y volvé a abrirlo | Las sanciones e incidentes tienen que seguir ahí. Si no, revisar la lectura del journal en el arranque |
+| Reinicio a mitad de carrera | Con una sanción emitida, reiniciá el worker de esa liga (desactivar y reactivar la cuenta desde `/operador` alcanza) | Las sanciones e incidentes tienen que seguir ahí. Si no, revisar la lectura del journal en el arranque |
 | Logos de marca | Mirá la columna "Auto" con una parrilla variada | Lo esperable es logo en las marcas conocidas y escudo con monograma en el resto. Un hueco vacío sí es un bug |
 | **Puerto de origen del servidor** | Sin tocar ningún puerto a mano, "Órdenes hacia el servidor" tiene que dar **verde**, y en Conexión → Puertos el "Puerto del servidor de AC" tiene que mostrar el mismo número que el **Listen Address** del panel del hosting, con la leyenda "nos lo dijo tu servidor solo" | **Es el supuesto más importante de toda la puesta en marcha, y no está verificado.** Se asume que el acServer usa un solo socket para el plugin y entonces manda desde el mismo puerto en el que escucha. Si en realidad manda desde un puerto efímero, el panel va a mostrar un número raro (típicamente >32768) y va a aparecer el aviso de "nos habla desde un puerto distinto cada vez". En ese caso hay que sacar la adopción (`adoptRemotePortIfNeeded` en `udp/client.ts`) y volver a pedir el dato a mano |
 | **Varios plugins a la vez** | Con Race Control agregado como listener adicional, lo que ya tenías (Real Penalty, sTracker, un bot) tiene que seguir funcionando | Confirmado en el changelog de Assetto Corsa Server Manager 2.4.8, no en pista. Si al agregar Race Control se cae el otro plugin, es que tu panel es anterior a esa versión y el campo es uno solo |
@@ -78,8 +78,6 @@ No reemplaza la prueba en pista: confirma que el camino existe, no que el protoc
   de la liga.
 - El canal de pilotos a través del proxy: sin token da 401, con token da 200, y con el guid de otro
   en el cuerpo da 403.
-- El `.exe` abriendo una carpeta de datos de la 0.3 sin perder nada y sin exigirle token a la app
-  vieja.
 
 ## Si algo no cierra: ahí sí, Wireshark
 
