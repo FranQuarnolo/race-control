@@ -34,6 +34,19 @@ export interface PortalConfig {
   publicHost: string;
   /** IP pública del servidor: la que va en el "Send Address" del hosting del admin. */
   publicIp: string;
+  /**
+   * A dónde escribe quien se quedó afuera.
+   *
+   * El producto decía "escribinos" en seis lugares distintos —la pantalla de ingreso, la de ligas,
+   * el cierre de la landing, dos diagnósticos de red y el error de cuenta desactivada— y no había
+   * una sola dirección en ningún lado. El único camino de recuperación que ofrecíamos terminaba en
+   * una pared, y justo en la pantalla donde está la persona que no puede entrar.
+   *
+   * Es un `mailto:` o una URL (un Discord, un formulario): lo que entre acá se usa tal cual. Vacío
+   * deja el texto en "pedíselo a quien te dio el acceso", que es impreciso pero al menos no manda
+   * a ningún lado inexistente.
+   */
+  contact: string;
   udpBindAddress?: string;
   udpPortFrom: number;
   udpPortTo: number;
@@ -54,6 +67,7 @@ export function portalConfigFromEnv(): PortalConfig {
     dataRoot: process.env.RC_DATA_ROOT || "/data",
     publicHost: process.env.RC_PUBLIC_HOST || "localhost:8080",
     publicIp: process.env.RC_PUBLIC_IP || "",
+    contact: (process.env.RC_CONTACT || "").trim(),
     udpBindAddress: process.env.RC_UDP_BIND || undefined,
     udpPortFrom: num("RC_UDP_FROM", 30000),
     udpPortTo: num("RC_UDP_TO", 30019),
@@ -215,7 +229,9 @@ export function createPortal(config: PortalConfig): Portal {
 
   portalApi.get("/me", (req: SessionRequest, res) => {
     if (!req.userId) {
-      res.json({ authenticated: false, version: APP_VERSION });
+      // `contact` va también sin sesión, y es el caso que más lo necesita: la pantalla de ingreso
+      // es justo donde está parado quien no puede entrar.
+      res.json({ authenticated: false, version: APP_VERSION, contact: config.contact });
       return;
     }
     const user = store.findUser(req.userId);
@@ -239,6 +255,7 @@ export function createPortal(config: PortalConfig): Portal {
       subscription: subscriptionOf(user),
       leagues,
       version: APP_VERSION,
+      contact: config.contact,
     });
   });
 
@@ -265,6 +282,7 @@ export function createPortal(config: PortalConfig): Portal {
       sendAddress: supervisor.sendAddressOf(league),
       /** `null` mientras el worker todavía no contesta: no es lo mismo que "no está llegando". */
       receiving: state ? Boolean(state.network?.receivingTelemetry) : null,
+      contact: config.contact,
     });
   });
 
@@ -291,7 +309,11 @@ export function createPortal(config: PortalConfig): Portal {
     if (!user.active) {
       res.status(403).json({
         ok: false,
-        error: "Tu cuenta está desactivada. Escribinos para reactivarla — tus datos siguen guardados.",
+        error:
+          "Tu cuenta está desactivada. Tus datos siguen guardados: " +
+          (config.contact
+            ? "escribinos a " + config.contact.replace(/^mailto:/, "") + " para reactivarla."
+            : "pedile a quien te dio el acceso que la reactive."),
       });
       return;
     }

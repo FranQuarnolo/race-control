@@ -86,17 +86,26 @@ conviene descartar.
 El comando imprime una IPv4. Esa IP **es el dato que después ve cada admin** para pegar en su
 hosting.
 
-### 3.3 Los dos secretos
+### 3.3 Los tres secretos
 
 ```bash
 fly secrets set RC_PUBLIC_IP=<la ipv4 que haya salido>
 fly secrets set RC_OPERATOR_EMAIL=vos@ejemplo.com
+fly secrets set RC_CONTACT=mailto:vos@ejemplo.com
 fly deploy
 ```
 
 - `RC_PUBLIC_IP` es lo que el portal le muestra al admin. Si queda vacío, el portal arranca igual
   pero avisa en el log que no tiene qué mostrarle a nadie.
 - `RC_OPERATOR_EMAIL` crea tu cuenta en el primer arranque.
+- `RC_CONTACT` es **a dónde te escribe un admin cuando se queda afuera**. Es la dirección que
+  aparece en la recuperación de contraseña, en la pantalla de una cuenta desactivada, en el botón
+  principal de la landing y en dos chequeos del diagnóstico. Vale un `mailto:` o un link de Discord
+  o Telegram (`https://`); cualquier otro esquema se ignora a propósito.
+
+  Sin esto el portal arranca igual y ninguna pantalla queda rota —todas caen a "pedísela a quien te
+  dio el acceso", que sigue siendo verdad— pero quien perdió la contraseña no tiene a dónde ir y el
+  cierre de la landing se queda sin su botón. Vale los treinta segundos que cuesta ponerlo.
 
 ### 3.4 Tu contraseña sale en el log, una sola vez
 
@@ -338,7 +347,8 @@ npm test         # compila y corre los tests
 
 ```bash
 export RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 \
-       RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com
+       RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com \
+       RC_CONTACT=mailto:yo@ejemplo.com
 PORT=8080 node dist/portal/index.js
 ```
 
@@ -374,6 +384,7 @@ node dist/sim/replay.js      # relee un raw.bin contra el motor
 | Lo que falta confirmar contra un servidor real | [docs/spike-protocolo.md](server/docs/spike-protocolo.md) |
 | El porqué de cada decisión | [CHANGELOG.md](CHANGELOG.md) |
 | Cómo funciona la app de los pilotos | [client-app/README.md](client-app/README.md) |
+| Lo que todavía falta hacer o decidir | [13. Pendientes conocidos](#13-pendientes-conocidos) |
 
 ---
 
@@ -387,3 +398,39 @@ si fallan, en [docs/spike-protocolo.md](server/docs/spike-protocolo.md).
 
 El más importante de todos: que los datagramas del hosting efectivamente lleguen al puerto UDP de
 Fly. Todo lo demás depende de eso.
+
+---
+
+## 13. Pendientes conocidos
+
+Salieron de la auditoría completa del producto que se hizo en la 0.6. Lo que esa auditoría encontró
+y se arregló está en el [CHANGELOG](CHANGELOG.md#06--2026-10-26); acá queda lo que **no** se arregló,
+porque depende de una decisión o de algo que no está en el código.
+
+### Lo que falta hacer una vez
+
+| Qué | Dónde se hace | Qué pasa si no se hace |
+|---|---|---|
+| Poner `RC_CONTACT` | [3.3 Los tres secretos](#33-los-tres-secretos) | Quien pierde la contraseña no tiene a dónde escribir. **Es el más urgente de esta lista.** |
+| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla" |
+| El video del README | comentario al pie de [README.md](README.md) | Nada se rompe; el `<img>` está comentado a propósito para que no quede una imagen rota |
+
+Las capturas conviene sacarlas ahora y no antes: el panel de la 0.6 ya tiene la columna de intervalo,
+la zona de pit en ámbar y el botón de anular, así que lo que se fotografíe hoy va a seguir siendo
+cierto por un buen rato. El atajo para sacarlas sin Assetto Corsa está en la sección que linkea la
+tabla.
+
+### Dos decisiones abiertas
+
+**Qué hace el panel en un teléfono.** `html, body { overflow: hidden }` es deliberado y está bien
+razonado para un monitor: todo entra en una pantalla y nada scrollea. En un teléfono significa que la
+mitad del panel es inalcanzable y no hay forma de llegar a ella. No hace falta un panel móvil
+completo, pero sí elegir una de dos: una vista reducida para mirar la carrera desde el celular, o un
+cartel honesto que diga que esto se usa en una computadora. **Hoy no es ninguna de las dos**, que es
+la única opción que está mal.
+
+**Teclado y foco en los cajones.** Reglas y Conexión se declaran `aria-modal="true"` pero no atrapan
+el foco, no lo devuelven al cerrar y no inertizan el fondo: con Tab se sale del diálogo hacia la
+página de atrás. Las filas de la torre tampoco son alcanzables por teclado, así que seleccionar un
+auto exige mouse. Está acotado a `app.js` y conviene hacerlo en el mismo viaje que la decisión de
+arriba, porque las dos tocan el mismo archivo.

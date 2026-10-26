@@ -60,6 +60,15 @@
     <button class="status-button" id="btn-logout" hidden title="Cerrar la sesión y volver a la pantalla de ingreso.">Salir</button>
   </header>
 
+  <!-- Contacto perdido con el motor. Va acá, debajo de la barra y encima de todo lo demás, porque
+       lo que anuncia es que TODO lo de abajo quedó viejo. `role="alert"` para que un lector de
+       pantalla lo lea apenas aparece: es el único aviso del panel que no puede esperar. -->
+  <div id="link-down" role="alert" hidden>
+    <span class="dot" aria-hidden="true"></span>
+    <span id="link-down-text"></span>
+    <span class="detail" id="link-down-detail"></span>
+  </div>
+
   <!-- =============================================================== vista: control de carrera -->
   <main id="view-live">
     <section class="card" id="card-start">
@@ -96,6 +105,13 @@
                    flotando solo en el medio de la fila, lejos de a quién pertenece. -->
               <th>Auto</th>
               <th class="c-driver">Piloto</th>
+              <!-- Va pegada al piloto y antes que la velocidad porque es la columna que más se
+                   mira: la pregunta de toda carrera es a cuánto está del de adelante, no a qué
+                   velocidad va. Click en el encabezado alterna entre el intervalo con el de
+                   adelante y el acumulado contra el líder. -->
+              <th class="num c-gap" id="th-gap" title="Intervalo con el auto de adelante. Clickeá para ver la diferencia con el líder.">
+                <button type="button" id="btn-gap-mode">Int.</button>
+              </th>
               <th class="num">Vel.</th>
               <th class="num" title="Vueltas completadas">Vts.</th>
               <th title="Tiempos por sector de la última vuelta. Requiere la app del piloto.">Sectores</th>
@@ -142,6 +158,15 @@
           <span class="muted">El trazado se dibuja solo a medida que los autos dan vueltas. Se aprende una vez y queda guardado.</span>
         </div>
       </div>
+      <!-- Lectura del punto de la vuelta, para calibrar la zona de pit. Reglas manda a "mirar el
+           mapa mientras alguien maneja por boxes" y hasta ahora el mapa no mostraba el número que
+           hay que escribir ahí: era mirar un punto moverse y adivinar. Aparece solo con un auto
+           seleccionado, porque sin selección no hay de quién leer el valor. -->
+      <div id="map-readout" hidden>
+        <span class="label">Punto de la vuelta</span>
+        <span class="value" id="map-spline">--</span>
+        <span class="muted" id="map-zone-hint"></span>
+      </div>
       <div id="session-clock">
         <span class="label" id="ses-clock-label">Restan</span>
         <span class="value" id="ses-clock-value">--:--</span>
@@ -170,7 +195,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Origen</th><th>Piloto</th><th>Motivo</th><th>Estado</th><th class="num">Gracia</th></tr>
+            <tr><th>Origen</th><th>Piloto</th><th>Motivo</th><th>Estado</th><th class="num">Gracia</th><th></th></tr>
           </thead>
           <tbody id="penalties-body"></tbody>
         </table>
@@ -303,8 +328,10 @@
         <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
         <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
         <p class="muted">
-          Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. Para
-          calibrarlos, mirá el mapa mientras alguien maneja por boxes.
+          Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. El tramo
+          configurado se dibuja en ámbar sobre el mapa. Para calibrarlo, pedile a alguien que
+          maneje por boxes, hacé click en su auto en el mapa y copiá el "punto de la vuelta" que
+          aparece debajo: el de cuando entra va en el inicio y el de cuando sale, en el fin.
         </p>
         <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
         <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>

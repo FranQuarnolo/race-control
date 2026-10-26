@@ -7,7 +7,15 @@ import { EventEmitter } from "events";
  */
 export type PenaltyType = "DT" | "SG" | "BALLAST" | "TIME";
 export type EscalationType = "DQ" | "TIME_PENALTY";
-export type PenaltyStatus = "servingWindow" | "served" | "escalated";
+/**
+ * `revoked` es un estado terminal aparte y no un borrado.
+ *
+ * Una sanción anulada tiene que seguir en la tabla y en el informe: lo que hace un comisario al
+ * anular es corregirse en público, y si la fila desaparece el piloto sancionado por error no tiene
+ * cómo comprobar que la corrección existió. Es, además, lo que distingue "me equivoqué" de "nunca
+ * pasó nada".
+ */
+export type PenaltyStatus = "servingWindow" | "served" | "escalated" | "revoked";
 
 export interface PenaltyRules {
   speedThresholdKmh: number;
@@ -36,6 +44,11 @@ export interface Penalty {
   servedAt?: number;
   escalatedAt?: number;
   escalatedTo?: EscalationType;
+  /** Cuándo la anuló el comisario, y desde qué estado venía. El estado previo se guarda porque
+   * anular una escalada a DQ no deshace el kick que ya se ejecutó: el informe tiene que poder
+   * decir qué llegó a pasar antes de la corrección. */
+  revokedAt?: number;
+  revokedFrom?: PenaltyStatus;
   /** Solo en las de tipo `TIME`: los segundos que se le suman al resultado final. */
   timePenaltySeconds?: number;
   /** Solo en las que aplica el comisario a mano: de qué incidente de la bandeja salieron. */
@@ -111,6 +124,33 @@ export class PenaltyEngine extends EventEmitter {
     penalty.status = "served";
     penalty.servedAt = Date.now();
     this.emit("penalty-served", penalty);
+  }
+
+  /**
+   * Anula una sanción.
+   *
+   * Es la única operación del motor que existe porque un humano se equivocó, y por eso acepta
+   * cualquier estado menos `revoked`: la sanción que más se aplica mal es la de tiempo, que nace
+   * `served` en el mismo instante en que se emite. Si solo se pudieran anular las que están
+   * pendientes de cumplirse, justo la que hace falta corregir sería la única que no se puede.
+   *
+   * Lo que anular **no** hace es deshacer lo que ya ocurrió en pista. Un DQ ya ejecutado es un
+   * piloto que ya está afuera del servidor; el lastre sí se saca, porque el que lo saca es el
+   * mismo comando que lo puso (ver `handlePenaltyRevoked` en `raceControl`). Devuelve `null` si el
+   * id no existe o si ya estaba anulada, para que la API pueda distinguir el 404 del doble click.
+   */
+  revoke(penaltyId: string): Penalty | null {
+    const penalty = this.penalties.get(penaltyId);
+    if (!penalty || penalty.status === "revoked") return null;
+    penalty.revokedFrom = penalty.status;
+    penalty.status = "revoked";
+    penalty.revokedAt = Date.now();
+    // Sin esto, una sanción anulada con vueltas de gracia a medio descontar reaparecería como
+    // "escalada" si alguna vez se la volviera a poner en `servingWindow`. Es barato y cierra la
+    // puerta.
+    penalty.graceLapsRemaining = 0;
+    this.emit("penalty-revoked", penalty);
+    return penalty;
   }
 
   /** Se llama en cada ACSP_LAP_COMPLETED del auto correspondiente; descuenta las vueltas de gracia pendientes. */

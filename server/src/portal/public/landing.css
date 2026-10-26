@@ -271,6 +271,17 @@ a { color: var(--accent); }
 .cierre h2 { margin-bottom: 14px; }
 .cierre p { color: var(--muted); max-width: 54ch; margin: 0 auto 28px; }
 
+/* Dos caminos desde el cierre: dar de alta una liga nueva (el principal — quien llega acá por
+   primera vez no tiene cuenta) y entrar a una que ya existe. `wrap` con `center` para que en un
+   teléfono queden apilados y centrados en vez de desbordar. */
+.cierre-botones {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.cierre-botones [hidden] { display: none; }
+
 .pie {
   border-top: 1px solid var(--panel-border);
   padding: 14px 0;

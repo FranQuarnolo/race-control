@@ -21,11 +21,21 @@ El `allocate-v4` imprime una IPv4. **Esa IP es el dato que ve cada admin** para 
 ```bash
 fly secrets set RC_PUBLIC_IP=<la ipv4 que haya salido>
 fly secrets set RC_OPERATOR_EMAIL=vos@ejemplo.com
+fly secrets set RC_CONTACT=mailto:vos@ejemplo.com
 fly deploy
 ```
 
 Si `RC_PUBLIC_IP` queda vacío, el portal arranca igual pero avisa en el log: no va a poder
 mostrarle a nadie qué pegar.
+
+`RC_CONTACT` es **a dónde te escriben cuando algo no se puede resolver desde el panel**. Aparece en
+seis pantallas: la recuperación de contraseña, el alta de liga, la cuenta desactivada, el cierre de
+la landing y dos chequeos del diagnóstico. Acepta `mailto:`, `https:` y `http:` —un link de Discord
+o de Telegram sirve igual que un mail— y rechaza cualquier otro esquema.
+
+Sin configurar no es fatal: cada pantalla cae a "pedísela a quien te dio el acceso", que sigue
+siendo verdad. Pero el botón principal de la landing no aparece y la pantalla de ingreso deja de
+ofrecer recuperación de contraseña, así que el portal lo avisa en el log del arranque.
 
 `RC_OPERATOR_EMAIL` crea tu cuenta en el primer arranque y **escribe la contraseña en el log una
 sola vez**. Hay que ir a buscarla ahí:
@@ -228,7 +238,8 @@ Para desarrollar o para probar algo sin desplegar:
 ```bash
 cd server && npm run build
 export RC_DATA_ROOT=./datos RC_PUBLIC_HOST=localhost:8080 RC_PUBLIC_IP=127.0.0.1 \
-       RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com
+       RC_INSECURE_COOKIES=1 RC_OPERATOR_EMAIL=yo@ejemplo.com \
+       RC_CONTACT=mailto:yo@ejemplo.com
 PORT=8080 node dist/portal/index.js
 ```
 
@@ -254,6 +265,7 @@ node dist/sim/demo.js      # http://127.0.0.1:3900 — es de donde salen las cap
 | `RC_PUBLIC_IP` | *(vacío)* | La IPv4 dedicada. Es lo que el admin pega en su hosting |
 | `RC_OPERATOR_EMAIL` | *(sin definir)* | Crea tu cuenta de operador en el arranque si no existe |
 | `RC_OPERATOR_PASSWORD` | *(sin definir)* | Fija esa contraseña en vez de generarla y loguearla |
+| `RC_CONTACT` | *(vacío)* | A dónde te escriben. `mailto:`, `https:` o `http:`; otro esquema se ignora |
 | `RC_UDP_BIND` | *(ninguno)* | `fly-global-services` en Fly. Ver abajo |
 | `RC_UDP_FROM` / `RC_UDP_TO` | 30000 / 30019 | Rango de puertos UDP. En `fly.toml` va hasta 30009 |
 | `RC_LOOPBACK_FROM` | 41000 | Desde dónde se asignan los puertos internos |

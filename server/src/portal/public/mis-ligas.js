@@ -23,6 +23,7 @@ function textoDeCuota(sub) {
 async function iniciar() {
   const me = await api("/api/portal/me");
   $("version").textContent = me.version || "";
+  pintarContacto(me.contact);
 
   if (!me.authenticated) {
     window.location.href = "/login?volver=%2Fmis-ligas";

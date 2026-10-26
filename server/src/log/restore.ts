@@ -144,7 +144,10 @@ function isPenalty(value: unknown): value is Penalty {
     typeof p.id === "string" &&
     typeof p.carId === "number" &&
     typeof p.driverGuid === "string" &&
-    (p.status === "servingWindow" || p.status === "served" || p.status === "escalated")
+    // `revoked` tiene que estar en esta lista o pasa lo peor que podría pasar: la sanción anulada
+    // se descarta al restaurar y la última línea válida que queda es la de antes de anularla, así
+    // que un reinicio del worker resucita una sanción que el comisario ya había dado de baja.
+    (p.status === "servingWindow" || p.status === "served" || p.status === "escalated" || p.status === "revoked")
   );
 }
 

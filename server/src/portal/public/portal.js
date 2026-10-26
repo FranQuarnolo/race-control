@@ -32,6 +32,42 @@ async function api(path, body) {
   return data;
 }
 
+/**
+ * Convierte en link los "escribinos" de la página.
+ *
+ * El producto mandaba a escribir en seis pantallas distintas sin que existiera una dirección en
+ * ningún lado. Tres marcas, y cada página elige las que necesita:
+ *
+ * - `data-contacto` — la palabra que se vuelve link ("Escribinos").
+ * - `data-si-contacto` — se muestra solo si hay dirección configurada.
+ * - `data-sin-contacto` — se muestra solo si NO la hay, para que la pantalla diga algo verdadero
+ *   en vez de mandar a escribir a ningún lado.
+ *
+ * El href se usa tal cual viene de la configuración —un `mailto:`, un Discord, un formulario— y se
+ * rechaza cualquier cosa que no sea uno de esos tres esquemas: el valor lo pone quien despliega,
+ * pero un `javascript:` ahí adentro ejecutaría en la pantalla de ingreso de todos.
+ */
+const CONTACT_SCHEMES = ["mailto:", "https://", "http://"];
+
+function pintarContacto(contacto) {
+  const valido = typeof contacto === "string" && CONTACT_SCHEMES.some((p) => contacto.startsWith(p));
+
+  for (const si of document.querySelectorAll("[data-si-contacto]")) si.hidden = !valido;
+  for (const no of document.querySelectorAll("[data-sin-contacto]")) no.hidden = valido;
+
+  if (!valido) return;
+  for (const marca of document.querySelectorAll("[data-contacto]")) {
+    const link = document.createElement("a");
+    link.href = contacto;
+    link.textContent = marca.textContent;
+    if (contacto.startsWith("http")) {
+      link.target = "_blank";
+      link.rel = "noopener";
+    }
+    marca.replaceWith(link);
+  }
+}
+
 function mostrarError(mensaje) {
   const el = $("error");
   el.textContent = mensaje;

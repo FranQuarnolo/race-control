@@ -5,11 +5,14 @@ servidor dedicado —el que sea: EmperorServers o cualquier otro hosting— y di
 una sola pantalla.
 
 - 🟢 **Largada en movimiento**, controlada automáticamente.
-- ⏱️ **Torre de tiempos en vivo** con posiciones, sectores, neumáticos, combustible y ping.
-- 🗺️ **Mapa del circuito en tiempo real**, que se dibuja solo a medida que se corre.
+- ⏱️ **Torre de tiempos en vivo** con posiciones, el intervalo con el de adelante —o con el líder, a
+  un click—, sectores, neumáticos, combustible y ping.
+- 🗺️ **Mapa del circuito en tiempo real**, que se dibuja solo a medida que se corre, con la zona de
+  boxes marcada encima.
 - 💥 **Bandeja de incidentes**: toques entre autos, choques contra el muro, salidas de pista y
   contramano, con el contexto de cada uno. **Reporta, no sanciona**: eso lo decidís vos.
-- 🚩 **Sanciones** de pit lane y largada automáticas, y las del comisario a un click.
+- 🚩 **Sanciones** de pit lane y largada automáticas, y las del comisario a un click. Todas se
+  pueden **anular**: al piloto le llega el aviso y dejan de contar en el informe.
 - 📊 **Informe de carrera** descargable al terminar, para pegar en la planilla del campeonato.
 
 ## 🚦 Cómo se usa
@@ -66,7 +69,9 @@ y una credencial por el chat del juego apenas entrás. 🎮
 
 ## 🖥️ Para el admin: qué hay adentro del panel
 
-- **Control de carrera**: los botones de largada, la torre de tiempos y el mapa en vivo.
+- **Control de carrera**: los botones de largada, la torre de tiempos y el mapa en vivo. Si se corta
+  el contacto con el motor, aparece una banda roja arriba de todo: un panel congelado no se puede
+  confundir con uno sano.
 - **Sanciones**: lo aplicado automáticamente, lo que aplicaste vos, y el botón
   **"Descargar informe de carrera"** — una planilla con la clasificación, los segundos de
   penalización de cada piloto y los incidentes revisados. 📊

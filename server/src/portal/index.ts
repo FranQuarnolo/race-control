@@ -50,6 +50,21 @@ async function main(): Promise<void> {
     );
   }
 
+  /**
+   * Sin dirección de contacto, varias pantallas se quedan sin su único camino de salida.
+   *
+   * No es fatal —todas caen a "pedíselo a quien te dio el acceso", que es verdad— pero sí es una
+   * pérdida silenciosa: la pantalla de ingreso deja de ofrecer recuperación de contraseña y el
+   * cierre de la landing se queda sin su botón principal. Vale un renglón en el log.
+   */
+  if (!config.contact) {
+    console.warn(
+      "[portal] RC_CONTACT no está puesto. La recuperación de contraseña, el alta de ligas y los " +
+        "diagnósticos que dependen de nosotros quedan sin a dónde mandar a la gente. Ponelo con " +
+        "`fly secrets set RC_CONTACT=mailto:tu@mail.com` (también vale un link de Discord)."
+    );
+  }
+
   // Marca de "el portal está corriendo", para que el CLI no escriba el mismo archivo a la vez.
   const pidFile = path.join(config.dataRoot, "portal.pid");
   fs.writeFileSync(pidFile, String(process.pid), "utf-8");

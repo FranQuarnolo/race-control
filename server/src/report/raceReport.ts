@@ -84,6 +84,9 @@ const PENALTY_STATUS_LABELS: Record<string, string> = {
   servingWindow: "Sin cumplir",
   served: "Cumplida",
   escalated: "Escalada",
+  // Sigue en la lista del informe a propósito: una anulación es una corrección del comisario y
+  // tiene que quedar escrita. Lo que no hace es sumar al resultado — ver `cuenta`.
+  revoked: "Anulada",
 };
 
 const INCIDENT_LABELS: Record<string, string> = {
@@ -133,9 +136,13 @@ export function buildReport(input: ReportInput): RaceReport {
     byGuid.set(entry.p.driverGuid, list);
   }
 
+  /** Una sanción anulada no pesa en la clasificación. Es la mitad que importa de poder anular: si
+   * los segundos se siguieran sumando al resultado, el botón solo cambiaría una etiqueta. */
+  const cuenta = (e: { p: Penalty }) => e.p.status !== "revoked";
+
   const classification: ReportRow[] = cars
     .map((car) => {
-      const mine = byGuid.get(car.driverGuid) || [];
+      const mine = (byGuid.get(car.driverGuid) || []).filter(cuenta);
       return {
         position: standings.get(car.carId) ?? null,
         driverName: car.driverName,

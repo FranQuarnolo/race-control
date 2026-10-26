@@ -46,6 +46,62 @@ body {
   flex-direction: column;
 }
 
+/* ---------------------------------------------------------------- contacto perdido
+
+   Una banda fija, no un toast.
+
+   El toast dura 2,5 segundos y aparece abajo a la derecha: sirve para confirmar algo que acabás
+   de hacer, no para avisar un estado que sigue pasando. Mientras el panel no recibe datos, lo que
+   hay en pantalla es del pasado y eso tiene que estar dicho TODO el tiempo que dure, no dos
+   segundos y medio.
+
+   Es el modo de falla más peligroso del producto: sin esto, el panel se congela mostrando el
+   último dato bueno y se ve exactamente igual que un panel que anda. El admin sigue dirigiendo
+   una carrera contra una foto vieja.
+*/
+#link-down {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 2.5%;
+  background: color-mix(in srgb, var(--red) 16%, var(--panel));
+  border-bottom: 1px solid var(--red);
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffdede;
+}
+#link-down[hidden] { display: none; }
+#link-down .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  flex: 0 0 auto;
+  animation: link-pulse 1.4s ease-in-out infinite;
+}
+#link-down .detail { font-weight: 400; color: #ffc9c9; }
+
+@keyframes link-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* Sin contacto, los datos de la torre y del mapa son viejos. Atenuarlos es la mitad del aviso:
+   la banda dice qué pasa y esto dice a qué alcanza. */
+body.link-down #card-timing,
+body.link-down #card-map {
+  opacity: 0.55;
+  filter: saturate(0.5);
+  transition: opacity 0.3s, filter 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #link-down .dot { animation: none; }
+  body.link-down #card-timing,
+  body.link-down #card-map { transition: none; }
+}
+
 /* ---------------------------------------------------------------- barra superior */
 
 .topbar {
@@ -432,8 +488,9 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
   font-weight: 600;
 }
 .btn-mini:hover { background: #343a47; color: var(--text); }
-/* Segundo paso del kick: el botón cambia de texto y de color, y se desarma solo a los 4 s. El
-   admin tiene que apretar dos veces a propósito, no puede expulsar a alguien de un click fallido. */
+/* Segundo paso de todo lo que no se deshace: el botón cambia de texto y de color, y se desarma
+   solo a los 4 s. Lo usan el kick, aplicar una sanción y anularla — las tres cosas que le llegan
+   al piloto en el acto y no pueden salir de un click fallido en una tabla que se mueve sola. */
 .btn-mini.arming { background: var(--red); color: #1a0505; }
 
 /* ---------------------------------------------------------------- torre de tiempos */
@@ -499,6 +556,37 @@ td.c-car { width: 1%; }
 .sectors span { min-width: 5.2ch; text-align: right; color: var(--muted); font-size: 11.5px; }
 td.c-sectors { width: 1%; }
 
+/* Columna de intervalo. El ancho fijo es lo que la hace legible: con celdas que se encogen según
+   el contenido, "+0.412" y "+12.8" no arrancan en la misma columna y la pregunta que se contesta
+   de un vistazo —quién está cerca— vuelve a ser trabajo de leer número por número. 6.5ch entra
+   `+12.345` y deja respirar a `+1:02.4`. */
+td.c-gap {
+  width: 1%;
+  min-width: 6.5ch;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* El líder y el doblado no son números y no tienen por qué pesar como uno: lo que el ojo busca en
+   esta columna son los intervalos chicos. */
+td.c-gap.lider,
+td.c-gap.doblado { color: var(--muted); font-weight: 400; }
+
+/* El encabezado es un botón que alterna entre intervalo e diferencia con el líder. Se pinta como
+   el texto de cualquier `th` —no como un botón— porque un botón con borde en una fila de
+   encabezados se lee como un control de la tabla entera y no como el título de su columna. El
+   subrayado punteado es la única pista de que se puede clickear, que es la dosis justa. */
+#btn-gap-mode {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+#btn-gap-mode:hover { color: var(--text); }
+
 .lap-time { font-variant-numeric: tabular-nums; }
 /* Mejor vuelta absoluta de la sesión. Es el dato que se busca primero en cualquier torre de
    tiempos, y encontrarlo entre 24 números iguales sin un color es trabajo manual. */
@@ -509,6 +597,22 @@ td.c-sectors { width: 1%; }
    quién está parado sin leer número por número. */
 tbody tr.in-pit { background: rgba(240, 180, 41, 0.07); }
 tbody tr.in-pit.selected { background: rgba(239, 142, 60, 0.14); }
+
+/* Auto cuya telemetría se congeló: el backend lo marca con `telemetryStale` cuando pasaron más de
+   dos segundos sin un CAR_UPDATE suyo. Pasa cuando el piloto crashea el juego, pierde la red o se
+   está desconectando.
+
+   El backend venía mandando este campo desde siempre y el panel no lo leía, así que un auto
+   muerto se veía idéntico a uno corriendo: su última velocidad, su última posición, su punto en el
+   mapa, todo quieto pero con el mismo aspecto que el resto. La fila entera se apaga —no solo una
+   celda— porque lo que quedó viejo no es un dato sino todos. */
+tbody tr.stale td { color: #5a6273; }
+tbody tr.stale .c-driver { color: var(--muted); }
+tbody tr.stale .car-badge,
+tbody tr.stale .brand-shield { opacity: 0.4; }
+tbody tr.stale .lap-time.session-best,
+tbody tr.stale .lap-time.personal-best { color: #5a6273; font-weight: 400; }
+tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
 
 /* Columnas que solo existen con la app del piloto instalada. El guion es deliberado: el UDP de
    Assetto Corsa no transporta estos datos, no hay forma de completarlos desde el servidor. */
@@ -541,6 +645,31 @@ tbody tr.in-pit.selected { background: rgba(239, 142, 60, 0.14); }
 
 /* El reloj de carrera: lo que el director mira de reojo. Tipografía tabular para que el número no
    bailotee de ancho a cada segundo, que es lo que vuelve ilegible un cronómetro. */
+/* Lectura del punto de la vuelta del auto seleccionado. Es una herramienta de calibración, no un
+   dato de carrera: por eso es chica, gris y solo aparece con algo seleccionado. El `[hidden]`
+   explícito está porque este contenedor es flex, y `display: flex` le gana al atributo. */
+#map-readout {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+#map-readout[hidden] { display: none; }
+#map-readout .label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+#map-readout .value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--yellow);
+}
+#map-readout .muted { color: var(--muted); }
+
 #session-clock {
   flex: 0 0 auto;
   display: flex;
@@ -564,8 +693,13 @@ tbody tr.in-pit.selected { background: rgba(239, 142, 60, 0.14); }
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
-/* Último minuto: el aviso que importa cuando hay que decidir si entra una vuelta más. */
-#session-clock.ending .value { color: var(--warn); }
+/* Último minuto: el aviso que importa cuando hay que decidir si entra una vuelta más.
+   Acá decía `var(--warn)`, que no está definida en ningún lado. Una variable inexistente hace
+   inválida la propiedad entera y el navegador la descarta en silencio: la clase `.ending` se
+   aplicaba bien y el reloj seguía del mismo color de siempre. Mismo modo de falla que el `--` del
+   ícono — todo correcto salvo que no pasa nada. Los colores de este archivo son --green/--yellow/
+   --red; el aviso es naranja y no rojo porque es una decisión a tomar, no una falla. */
+#session-clock.ending .value { color: var(--yellow); }
 
 #map-host {
   flex: 1 1 auto;

@@ -52,16 +52,21 @@
         <h2>Toda la carrera en una pantalla</h2>
         <p>
           El circuito dibujado con los autos moviéndose encima, y al lado la torre de tiempos en
-          vivo: posición, vuelta, diferencia con el de adelante y el estado de cada piloto.
+          vivo: posición, vuelta, el intervalo con el de adelante —o la diferencia con el líder, a
+          un click— y el estado de cada piloto.
         </p>
         <p>
           La largada en movimiento se da desde acá. Race Control forma la grilla, avisa por el chat
           del juego y marca a quien se adelantó antes del verde.
         </p>
+        <!-- Esta lista dice lo que el panel muestra de verdad. Decía "viento y hora del juego" y
+             "banderas de pista en vivo": las tres cosas son campos de ACC que el protocolo de
+             Assetto Corsa no manda por ningún canal, y la bandera solo existe donde la lee el
+             juego, o sea adentro de la app del piloto. -->
         <ul class="lista">
           <li>Semáforo de largada con aviso sonoro para los pilotos</li>
-          <li>Tiempo de carrera restante, clima, viento y hora del juego</li>
-          <li>Banderas de pista en vivo</li>
+          <li>Tiempo de carrera restante, clima, temperatura de aire y pista, y el agarre</li>
+          <li>Aviso cuando a un piloto se le congela el juego o pierde la señal</li>
           <li>Expulsar a un piloto en dos clicks, cuando hace falta</li>
         </ul>
       </div>
@@ -94,6 +99,7 @@
           <li>Cortes de pista medidos contra el trazado real del circuito</li>
           <li>Exceso de velocidad en boxes</li>
           <li>Adelantamientos antes del verde en la largada</li>
+          <li>Cualquier sanción se puede anular: al piloto le llega el aviso y deja de contar</li>
           <li>Modo sombra: el motor mira y registra, pero no sanciona</li>
         </ul>
       </div>
@@ -144,13 +150,15 @@
           falta por el chat interno del juego.
         </p>
         <p>
-          Dentro del juego ve el semáforo de largada, la bandera de pista y los avisos de sanción
-          que le mandás desde el panel.
+          Dentro del juego ve el semáforo de largada, la bandera que esté ondeando y los avisos de
+          sanción que le mandás desde el panel.
         </p>
+        <!-- La bandera la lee la app de la memoria del juego, que es el único lugar donde existe:
+             por eso está en esta lista y no en la del panel. -->
         <ul class="lista">
           <li>Semáforo y audio de largada</li>
           <li>Aviso en pantalla cuando le aplicás una sanción</li>
-          <li>Bandera de pista actual</li>
+          <li>La bandera que muestra el juego: amarilla, azul, a cuadros</li>
           <li>Aporta los tiempos por sector y el compuesto a la torre de tiempos</li>
         </ul>
       </div>
@@ -202,9 +210,14 @@
   <section class="cierre">
     <div class="contenedor">
       <h2>¿Querés tu liga en Race Control?</h2>
-      <!-- Si alguna vez hay un lugar a dónde mandar a quien todavía no es cliente (mail, Discord,
-           Instagram), el botón principal va acá, arriba del de ingresar. -->
-      <a class="boton grande" href="/login">Ya tengo cuenta, quiero entrar</a>
+      <!-- El botón principal de esta página es éste y no el de ingresar: quien llega acá por
+           primera vez no tiene cuenta todavía. Arranca oculto y lo muestra `landing.js` cuando el
+           despliegue tiene una dirección configurada (`RC_CONTACT`) — sin dirección, un botón que
+           dice "escribinos" no lleva a ningún lado y es peor que no estar. -->
+      <div class="cierre-botones">
+        <a class="boton grande" id="cta-contacto" href="#" hidden>Escribinos y te damos de alta</a>
+        <a class="boton grande fantasma" href="/login">Ya tengo cuenta, quiero entrar</a>
+      </div>
     </div>
   </section>
 

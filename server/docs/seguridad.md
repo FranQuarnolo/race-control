@@ -123,6 +123,11 @@ por requests los echaría a todos.
 - **XSS**: todo texto ajeno se inserta con `textContent`, nunca con `innerHTML`. Más una CSP con
   `script-src 'self'` y `frame-ancestors 'none'`.
 - **Path traversal en el slug**: `/^[a-z0-9][a-z0-9-]{1,39}$/`, y lo que no matchea es 404.
+- **Esquema de `RC_CONTACT`**: la dirección de contacto se convierte en el `href` de un enlace en
+  varias pantallas, incluida la de ingreso. Solo se aceptan `mailto:`, `https:` y `http:`; con
+  cualquier otro esquema el enlace no se arma y queda el texto genérico. Es una variable que ponemos
+  nosotros y no un dato de usuario, pero un `javascript:` ahí adentro ejecutaría en la pantalla de
+  ingreso de todos, y el costo de validarlo son tres líneas.
 
 ## Lo que NO está cubierto, y se acepta
 

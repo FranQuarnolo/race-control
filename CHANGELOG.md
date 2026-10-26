@@ -3,6 +3,166 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.6] — 2026-10-26
+
+Una auditoría completa del producto y los arreglos que salieron de ella. No hay funcionalidad nueva
+grande: hay tres defectos que hacían que el panel mintiera en silencio, un camino de recuperación
+que terminaba en una pared, y dos cosas que el producto prometía y no cumplía.
+
+El hilo que une todo es un modo de falla, el peor que puede tener este producto: **todo anda y algo
+simplemente no pasa**. Sin excepción, sin error en consola, sin un test en rojo. Es el mismo
+patrón del `--` adentro del comentario del SVG que rompió el ícono en la 0.5.
+
+### Tres cosas que el panel no decía
+
+**Cuando se corta el contacto con el motor, ahora se ve.** El poll era
+`setInterval(() => refresh().catch(() => {}), POLL_MS)`: con el backend caído, el panel se quedaba
+congelado mostrando el último estado bueno. Lo grave no era perder la conexión —eso pasa— sino que
+un panel congelado y uno sano se vieran **idénticos** durante una carrera. Ahora, a los tres polls
+sin respuesta, aparece una banda roja arriba de todo con hace cuántos segundos que no llega nada, y
+la torre y el mapa se apagan. Tres segundos y no uno porque un fallo suelto no tiene por qué pintar
+la pantalla de rojo; tres seguidos ya no son un hipo.
+
+**La telemetría congelada de un piloto se distingue de un auto en pista.** El backend marcaba
+`telemetryStale` en cada auto que llevaba más de dos segundos sin mandar un `CAR_UPDATE`, y el
+panel no leía el campo: el punto de alguien que crasheó el juego quedaba clavado en el mapa, del
+mismo dorado que el resto, y su última velocidad seguía en la tabla como si todavía estuviera
+girando a esa velocidad. Ahora la fila se apaga, la celda de velocidad dice "sin señal" y el punto
+del mapa pasa a ser un anillo gris hueco.
+
+**El reloj de sesión avisa de verdad en el último minuto.** La regla decía `color: var(--warn)`, una
+variable que no está definida en ningún lado. Una variable inexistente invalida la propiedad entera
+y el navegador la descarta sin decir nada: la clase se aplicaba bien y el reloj seguía del mismo
+color de siempre.
+
+**Y el reintento del mapa estaba muerto.** `refreshTrack` marcaba la cobertura como bajada *antes*
+del `await`, así que un solo error transitorio al arrancar —el worker todavía levantándose— dejaba
+la tarjeta del mapa en "esperando telemetría" hasta que alguien recargara la página. El caso que lo
+disparaba era el normal: una liga que ya aprendió su circuito arranca con cobertura 1.0 y no crece
+más en toda la carrera.
+
+Los cuatro quedan cubiertos por `panel.test.ts`, que valida sobre `dist/` —lo que se le sirve al
+navegador— que toda variable CSS usada exista, que todo id que `app.js` busca esté en el HTML, y
+que ningún campo que el backend calcula para el panel quede sin leer.
+
+### El producto ya tiene dónde escribirle
+
+Seis pantallas decían "escribinos" y no existía una dirección en ninguna parte: la recuperación de
+contraseña, el alta de liga, la cuenta desactivada, el cierre de la landing y dos diagnósticos. El
+único camino de salida de quien no podía entrar terminaba en una pared.
+
+La dirección es ahora una variable de despliegue, **`RC_CONTACT`** (`mailto:` o un link de Discord o
+Telegram), y llega a las seis pantallas: a las del portal por `/api/portal/me` y
+`/api/portal/liga/:slug`, y al worker por `process.env`, que ya hereda del portal. Tres decisiones
+que importan:
+
+- **Sin configurar, cada pantalla degrada a una frase que sigue siendo verdad** ("pedísela a quien
+  te dio el acceso"), en vez de a una frase vacía. En la de ingreso, esa es además la que se ve por
+  defecto: si el pedido de la dirección no vuelve, lo que queda en pantalla no miente.
+- **Solo se aceptan `mailto:`, `https:` y `http:`.** Un `javascript:` ahí adentro ejecutaría en la
+  pantalla de ingreso de todos.
+- El portal **avisa en el log del arranque** si falta.
+
+De paso, la contraseña de ingreso tiene un botón para verla. Es el campo que más se escribe mal en
+todo el producto y el único que no dejaba comprobar qué se tecleó.
+
+### La columna que faltaba en la torre de tiempos
+
+La torre tenía trece columnas y ninguna contestaba la pregunta de toda carrera: *¿a cuánto está del
+de adelante?* La landing llegó a prometerlo antes de que existiera. Ahora está, y el encabezado es
+un botón que alterna entre el intervalo con el de adelante y el acumulado contra el líder.
+
+**En carrera es una estimación y conviene saber de qué tipo.** El UDP de Assetto Corsa no manda
+tiempos de cruce por punto de pista: manda posición en el trazado y vueltas completadas. De ahí
+sale la distancia en fracción de vuelta, y para pasarla a tiempo se usa el tiempo de vuelta del auto
+**de atrás** —es quien tiene que recorrer esa distancia—. El error es el de suponer ritmo constante:
+en una frenada fuerte o saliendo de boxes, el número se mueve más que los autos. En práctica y
+clasificación no hay nada que estimar: es la resta de las mejores vueltas.
+
+El `sort` de la torre se extrajo a `rankCars` para que las posiciones y los intervalos salgan del
+mismo criterio. Con dos copias, tarde o temprano una muestra un gap contra un auto que en la tabla
+aparece más atrás, y eso es peor que no mostrar nada: el número se lee igual de creíble.
+
+### Las sanciones se pueden anular
+
+El panel tenía un botón de kick con doble confirmación y uno de "Sancionar" sin ninguna, al lado de
+un desplegable que viene con un piloto ya elegido. Es el orden inverso al de la gravedad: de un kick
+el piloto vuelve a entrar.
+
+Ahora **"Aplicar" también pide dos clicks**, y entre uno y otro el botón dice en palabras a quién y
+qué se está por aplicar —justo el dato que el formulario esconde en dos `select`—. Cambiar
+cualquiera de los dos campos desarma la confirmación.
+
+Y hay un estado `revoked`, que es terminal y **no es un borrado**: la sanción sigue en la tabla y en
+el informe, porque anular es un comisario corrigiéndose en público y si la fila desapareciera el
+piloto sancionado por error no tendría cómo comprobar que la corrección existió. Lo que sí cambia:
+
+- Deja de sumar al resultado en el informe, y un DQ anulado deja de descalificar. Sin eso, el botón
+  solo cambiaría una etiqueta en la pantalla.
+- Se puede anular desde cualquier estado, incluido `served`. La sanción de tiempo —la que más se
+  aplica mal— nace cumplida en el mismo instante en que se emite.
+- **Al piloto le llega el aviso por chat**, que es el canal por el que le llegó la sanción. Si no,
+  entra a boxes a cumplir un Drive-Through que ya no debe.
+- El lastre **se saca de verdad** (`/ballast <car> 0`). Es el único caso con algo físico que
+  deshacer, y sin eso "anulada" sería mentira justo en la sanción que más se nota al manejar.
+- `isPenalty`, en la restauración, acepta el estado nuevo. Sin eso pasaba lo peor: la línea de la
+  anulación se descartaba al reiniciar y la sanción resucitaba.
+
+### La zona de pit se ve en el mapa
+
+Es la única regla del producto que se configura con dos números abstractos —0.97 y 0.995— y no había
+ninguna forma de ver a qué pedazo de pista correspondían. El texto de Reglas mandaba a "mirar el
+mapa mientras alguien maneja por boxes", y el mapa no mostraba ni la zona ni el punto de la vuelta
+de nadie: era pedirle a alguien que calibre a ciegas.
+
+Ahora el tramo configurado se pinta en ámbar sobre el trazado, y con un auto seleccionado aparece
+debajo del mapa su punto de la vuelta con tres decimales —la misma precisión que aceptan los campos
+del formulario— y si está dentro o fuera de la zona. El dibujo usa **exactamente** el mismo criterio
+que `isInPitZone`, sin envolver al cruzar la meta: un dibujo más piadoso que el motor pintaría en
+ámbar un tramo donde no se sanciona a nadie, que es la peor forma posible de equivocarse acá. Un
+inicio mayor que el fin ahora se dice en pantalla en vez de simplemente no marcar a nadie.
+
+### La landing dejó de prometer lo que no hay
+
+- **"Clima, viento y hora del juego"**: el viento y la hora son campos de ACC. El protocolo de
+  Assetto Corsa no los manda por ningún canal. Quedó lo que el panel muestra de verdad: clima,
+  temperatura de aire y pista, y el agarre.
+- **"Banderas de pista en vivo"** estaba en la lista del panel, y la bandera solo existe donde la lee
+  el juego: adentro de la app del piloto, de su Shared Memory. Se movió a la sección que
+  corresponde, con los colores que muestra.
+- **"Diferencia con el de adelante"** ahora es cierto, así que se quedó.
+
+### El ícono vuelve a ser una bandera a cuadros
+
+Se revierte la decisión de la 0.5 (["El ícono es un semáforo de largada"](#el-ícono-es-un-semáforo-de-largada)).
+El argumento de entonces sigue siendo técnicamente cierto —la bandera a cuadros dice "automovilismo"
+y el semáforo decía lo que hace este producto— pero perdió contra el único criterio que manda en una
+marca: **no gustaba.** Un ícono que al dueño del producto no le cierra no se defiende con un
+razonamiento, por bueno que sea el razonamiento.
+
+Lo que sí se conserva es todo lo que la 0.5 aprendió sobre el tamaño chico, que no era una cuestión
+de gusto sino de física:
+
+- **Damero de 3x3 y no de 4x4.** A 16 px, un damero de 4x4 deja celdas de 4 px y la alternancia se
+  convierte en un gris parejo. Con 3x3 cada celda mide 5 px y todavía se lee como cuadros. Es el
+  damero más fino que aguanta la pestaña del navegador, y es el mismo motivo por el que el semáforo
+  tenía cuatro lámparas y no diez.
+- **Fondo claro.** La barra del panel es oscura. Un ícono de fondo oscuro ahí adentro se funde con la
+  barra y parece una imagen rota — que fue literalmente el bug reportado en la 0.5.
+- **A sangre, sin margen.** Un ícono con aire adentro desperdicia la mitad de los pixeles que tiene
+  a 16 px.
+- **Un filo ámbar abajo**, el mismo acento del panel. Son veinte pixeles que a tamaño de pestaña
+  sobreviven como una línea de uno, y es lo único que distingue esto de la bandera a cuadros genérica
+  de cualquier app de automovilismo.
+
+El archivo es el mismo, `icon.svg`, y lo sirven las siete pantallas sin tocar una sola referencia.
+El test de `assets.test.ts` que nació del bug del `--` adentro del comentario sigue cubriéndolo.
+
+### Versión
+
+`0.6` en el panel y en `/api/state`, `0.6.0` en `package.json`. La única dependencia de producción
+sigue siendo `express`. 214 tests.
+
 ## [0.5] — 2026-10-23
 
 Race Control deja de ser un programa que se baja y pasa a ser un servicio al que se entra. No hay

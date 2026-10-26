@@ -14,7 +14,7 @@ import { SessionTracker } from "../session/sessionInfo";
 import { TrackLearner } from "../track/trackLearner";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { brandOf, brandSlug } from "../cars/carBadges";
-import { computeStandings } from "../state/standings";
+import { computeGaps, computeStandings } from "../state/standings";
 import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
 export interface AdminApiDeps {
@@ -45,6 +45,9 @@ export interface AdminApiDeps {
   /** Puertos realmente en uso. Los asigna el portal al arrancar la liga; el panel los muestra
    * pero no los puede cambiar. */
   getActivePorts: () => { adminPort: number; clientPort: number };
+  /** A dónde escribe el admin cuando el problema es de nuestro lado. Lo configura el despliegue en
+   * `RC_CONTACT` y lo hereda el worker; vacío deja los textos en "avisale a quien te dio el acceso". */
+  contact?: string;
   /** Registro de quién hizo qué. Ver el middleware de auditoría más abajo. */
   audit?: (entry: { user: string; method: string; path: string }) => void;
 }
@@ -55,7 +58,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
  * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
  * esto no había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.5";
+export const APP_VERSION = "0.6";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
@@ -87,7 +90,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     deps.connectivity.refreshTelemetryFlag();
     const now = Date.now();
     const connected = deps.stateTracker.getConnected();
-    const standings = computeStandings(connected, deps.getSessionType());
+    const sessionType = deps.getSessionType();
+    const standings = computeStandings(connected, sessionType);
+    const gaps = computeGaps(connected, sessionType);
     res.json({
       version: APP_VERSION,
       firstRun: isFirstRun(deps.config),
@@ -104,6 +109,12 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         brand: brandOf(car.carModel),
         brandLogo: brandSlug(brandOf(car.carModel)),
         telemetryStale: car.lastUpdate === 0 || now - car.lastUpdate > TELEMETRY_STALE_MS,
+        /** Intervalo con el de adelante y con el líder, en ms. `null` donde no hay nada que medir
+         * —el líder, o nadie con una vuelta cerrada todavía— y `lapsDown > 0` cuando está doblado,
+         * que es cuando los milisegundos dejan de significar algo. Ver `computeGaps`. */
+        gapAheadMs: gaps.get(car.carId)?.aheadMs ?? null,
+        gapLeaderMs: gaps.get(car.carId)?.leaderMs ?? null,
+        lapsDown: gaps.get(car.carId)?.lapsDown ?? 0,
         /** Round-trip de la app del piloto contra el backend. `null` = no tiene la app reportando. */
         pingMs: deps.presenceWatchdog.getPing(car.driverGuid),
         /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
@@ -120,6 +131,13 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       /** Solo el progreso, no el trazado: son ~600 puntos y esto se pide una vez por segundo. El
        * dibujo se baja aparte de /api/track, que el panel vuelve a pedir cuando esto cambia. */
       track: { coverage: deps.trackLearner.getCoverage() },
+      /** La zona de pit configurada, para pintarla sobre el mapa.
+       *
+       * Viaja en `/api/state` y no se lee del formulario de Reglas porque el mapa tiene que
+       * mostrarla aunque el cajón nunca se haya abierto —que es el caso normal— y porque un
+       * cambio recién guardado tiene que verse en el dibujo en el poll siguiente. Son dos números:
+       * no pesa nada al lado de los autos. */
+      pitZone: { splineStart: deps.config.pit.zone.splineStart, splineEnd: deps.config.pit.zone.splineEnd },
       /** Condiciones de la sesión en curso: circuito, clima, temperaturas, grip y cuánto falta.
        * `null` hasta que llegue el primer SESSION_INFO del servidor. */
       session: deps.sessionTracker.get(),
@@ -170,6 +188,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       clientPort: ports.clientPort,
       driversConnected: presence.connected,
       driversReporting: presence.reporting,
+      contact: deps.contact,
     });
     res.json({ checks, summary: summarize(checks) });
   });
@@ -326,6 +345,33 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       });
     }
     res.json({ ok: true, incident, penalty });
+  });
+
+  /**
+   * Anular una sanción.
+   *
+   * Hasta la 0.5 no había ninguna forma de deshacer esto: un click en "Sancionar" con el piloto
+   * equivocado seleccionado —y el desplegable viene con uno preseleccionado— quedaba firme para
+   * siempre, le llegaba al piloto por chat y salía impreso en el informe de la carrera. El panel
+   * tenía un botón de kick con doble confirmación y uno de sanción sin ninguna, que es el orden
+   * inverso al de la gravedad: de un kick el piloto vuelve a entrar.
+   *
+   * La ruta no recibe el motor: los ids son únicos entre los tres (el contador es de módulo) y
+   * pedirle al panel que sepa de qué motor salió cada sanción es pedirle que repita una
+   * clasificación que ya hizo el servidor.
+   */
+  app.post("/api/penalties/:id/revoke", (req, res) => {
+    const id = String(req.params.id);
+    for (const engine of [deps.formationPenaltyEngine, deps.pitPenaltyEngine, deps.stewardPenaltyEngine]) {
+      const revoked = engine.revoke(id);
+      if (revoked) {
+        res.json({ ok: true, penalty: revoked });
+        return;
+      }
+    }
+    // Un 404 acá es casi siempre un doble click sobre el mismo botón, así que el mensaje tiene que
+    // contemplar las dos causas y no mandar a investigar un id que existe y ya está anulado.
+    res.status(404).json({ ok: false, error: "Esa sanción no existe o ya estaba anulada" });
   });
 
   /**

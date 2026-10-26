@@ -100,6 +100,32 @@ test("de cada objeto queda la última versión escrita, no la primera", () => {
   assert.equal(list[0].status, "served");
 });
 
+/**
+ * Una anulación tiene que sobrevivir a un reinicio.
+ *
+ * Es el modo de falla más desagradable de los que podía tener esta función: si `isPenalty` no
+ * aceptara `revoked`, la línea de la anulación se descartaría y la última válida sería la de antes
+ * de anularla. El worker reinicia, la sanción resucita, y al piloto le vuelven a descontar vueltas
+ * de gracia por algo que el comisario ya le había sacado — sin ningún error en ningún lado.
+ */
+test("una sanción anulada se restaura anulada y no resucita", () => {
+  const dir = tempLogDir();
+  writeJournal(dir, "events-2026-10-22T17-00-00.jsonl", [
+    penaltyLine("p1", "steward", { graceLapsRemaining: 2 }),
+    penaltyLine("p1", "steward", { status: "revoked", revokedFrom: "servingWindow", graceLapsRemaining: 0 }),
+  ]);
+
+  const list = restoreState(dir, { now: Date.parse("2026-10-22T18:05:00.000Z") })?.penalties.get("steward") || [];
+  assert.equal(list.length, 1);
+  assert.equal(list[0].status, "revoked");
+
+  // Y una vez en el motor, sigue sin contar como pendiente.
+  const engine = new PenaltyEngine(defaultPenaltyRules());
+  engine.restore(list);
+  assert.equal(engine.getPending(3).length, 0);
+  assert.equal(engine.getAll().length, 1, "sigue visible para el informe");
+});
+
 test("un cambio de sesión borra todo lo anterior", () => {
   const dir = tempLogDir();
   writeJournal(dir, "events-2026-10-22T17-00-00.jsonl", [

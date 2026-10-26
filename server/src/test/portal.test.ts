@@ -125,6 +125,7 @@ before(async () => {
     // Sin HTTPS no hay `__Host-` ni redirección a https: es el mismo modo que se usa para
     // desarrollar contra el portal en la máquina propia.
     secureCookies: false,
+    contact: "mailto:hola@race.test",
   });
   // Nada de forkear workers de verdad.
   portal.supervisor.start = () => {};
@@ -289,6 +290,7 @@ test("sin IP pública no se inventa media dirección", async () => {
     udpPortTo: 39209,
     loopbackPortFrom: 39300,
     secureCookies: false,
+    contact: "",
   });
   otro.supervisor.start = () => {};
   const { league } = await otro.createLeague({

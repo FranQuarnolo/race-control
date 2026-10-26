@@ -435,6 +435,37 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   pitPenaltyEngine.on("penalty-issued", handlePenaltyIssued("pit"));
   stewardPenaltyEngine.on("penalty-issued", handlePenaltyIssued("steward"));
 
+  /**
+   * Sanción anulada por el comisario.
+   *
+   * Avisarle al piloto no es un detalle de cortesía: la sanción le llegó por chat y es por chat
+   * como se entera de todo lo que pasa en una carrera. Si la anulación no viaja por el mismo
+   * canal, el piloto entra a boxes a cumplir un Drive-Through que ya no debe.
+   *
+   * El lastre es el único caso en que hay algo físico que deshacer, y se deshace con el mismo
+   * comando que lo puso. Si no se mandara el `/ballast ... 0`, "anulada" sería mentira justo en la
+   * sanción que más se nota al manejar.
+   */
+  const handlePenaltyRevoked = (engineLabel: string) => (p: Penalty) => {
+    const carId = resolveCurrentCarId(p);
+    const data = { engine: engineLabel, carId, driverGuid: p.driverGuid, reason: p.reason, from: p.revokedFrom };
+    if (p.type === "BALLAST") {
+      dispatchOrSuppress(() => {
+        udpClient.sendAdminCommand(`/ballast ${carId} 0`);
+        udpClient.sendChatToCar(carId, `SANCIÓN ANULADA por el comisario: te sacamos el lastre. ${p.reason}`);
+      }, "penalty.revoked", data);
+      return;
+    }
+    dispatchOrSuppress(
+      () => udpClient.sendChatToCar(carId, `SANCIÓN ANULADA por el comisario: ${p.reason}`),
+      "penalty.revoked",
+      data
+    );
+  };
+  formationPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("formation"));
+  pitPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("pit"));
+  stewardPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("steward"));
+
   const handleEscalation = (engineLabel: string) => (p: Penalty) => {
     const carId = resolveCurrentCarId(p);
     if (p.escalatedTo === "DQ") {
@@ -464,6 +495,9 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     engine.on("penalty-issued", persist);
     engine.on("penalty-served", persist);
     engine.on("penalty-escalated", persist);
+    // Sin esta línea, una anulación sobrevive hasta el primer reinicio y después la sanción vuelve
+    // a estar viva: `restoreState` lee la última `penalty.state` de cada id.
+    engine.on("penalty-revoked", persist);
   }
 
   // Lo que quedó de una carrera interrumpida. Se hace DESPUÉS de enganchar los listeners de
@@ -536,6 +570,10 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     },
     buildSendAddress: () => buildSendAddress(connectivity.getStatus().publicIp, config.acUdp.localPort),
     getActivePorts: () => ({ ...activePorts }),
+    // Del entorno y no del mensaje de arranque: el worker hereda `process.env` del portal (ver
+    // Supervisor.start), así que la misma variable sirve para los dos sin tener que propagarla a
+    // mano por el IPC. En modo local no está definida y los textos se caen al genérico.
+    contact: (process.env.RC_CONTACT || "").trim(),
     audit: (entry) => journal.log("audit.action", entry),
   });
 

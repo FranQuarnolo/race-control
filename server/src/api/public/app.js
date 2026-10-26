@@ -86,6 +86,26 @@ let lastState = null;
 let trackOutline = null;
 let lastTrackCoverage = -1;
 
+/** La zona de pit configurada, tal como la usa el motor. Llega en cada `/api/state` para que el
+ * mapa la pueda pintar sin depender de que alguien haya abierto el cajón de Reglas. */
+let pitZone = null;
+
+/** Qué muestra la columna de intervalo: `"ahead"` el hueco con el auto de adelante, `"leader"` el
+ * acumulado contra el líder. Son las dos preguntas distintas que se hacen mirando una torre —"¿lo
+ * alcanzo?" y "¿en qué carrera estoy?"— y no entran en una sola columna sin que una de las dos
+ * quede mal. En memoria y nada más: es una preferencia de un rato, no de una cuenta. */
+let gapMode = "ahead";
+
+/** Cuándo llegó el último `/api/state` bueno, y qué dijo el error del último fallido. Los mira la
+ * banda de contacto perdido: ver `renderLinkState`. */
+let lastGoodPollAt = Date.now();
+let lastPollError = "";
+
+/** Cuánto se tolera sin datos antes de avisar. Tres segundos son tres polls: un fallo suelto
+ * —el worker reiniciando, un hipo de red— no tiene por qué pintar la pantalla de rojo, pero tres
+ * seguidos ya no son un hipo. */
+const LINK_DOWN_AFTER_MS = 3000;
+
 /** Si el backend no encontró Assetto Corsa, no tiene sentido pedir un logo por auto para cobrar
  * 24 respuestas 404: se va directo a la marca en texto. */
 
@@ -613,6 +633,7 @@ function createCarRow(carId) {
     pos: cell("c-pos"),
     car: cell("c-car"),
     name: cell("c-driver"),
+    gap: cell("num c-gap"),
     speed: cell("num"),
     laps: cell("num"),
     sectors: cell("c-sectors"),
@@ -655,7 +676,21 @@ function updateCarRow(row, car, sessionBest) {
 
   renderCarBadge(row.car, car);
 
-  row.speed.textContent = Math.round(car.speedKmh) + " km/h";
+  renderGap(row.gap, car);
+
+  // Velocidad, o el aviso de que no hay dato nuevo. Un auto congelado seguía mostrando su última
+  // velocidad como si todavía estuviera girando a esa velocidad — que es lo contrario de lo que
+  // pasa: está quieto, desconectándose o con el juego cerrado.
+  if (car.telemetryStale) {
+    clearChildren(row.speed);
+    const aviso = document.createElement("span");
+    aviso.className = "sin-senal";
+    aviso.textContent = "sin señal";
+    aviso.title = "Hace más de dos segundos que no llega telemetría de este auto. Los datos de esta fila son los últimos que recibimos.";
+    row.speed.appendChild(aviso);
+  } else {
+    row.speed.textContent = Math.round(car.speedKmh) + " km/h";
+  }
   row.laps.textContent = String(car.lapCount);
 
   renderSectors(row.sectors, telemetry);
@@ -676,6 +711,7 @@ function updateCarRow(row, car, sessionBest) {
   row.ping.appendChild(pingBadge(car));
 
   row.tr.classList.toggle("in-pit", Boolean(telemetry && telemetry.inPitLane));
+  row.tr.classList.toggle("stale", Boolean(car.telemetryStale));
   row.tr.classList.toggle("selected", selectedCarId === car.carId);
   const armed = armedKick !== null && armedKick.carId === car.carId;
   row.kick.classList.toggle("arming", armed);
@@ -696,6 +732,72 @@ function setText(td, value, missingTitle) {
     return;
   }
   if (td.textContent !== value) td.textContent = value;
+}
+
+/**
+ * La celda de intervalo.
+ *
+ * Tiene cuatro estados y los cuatro significan cosas distintas, así que ninguno puede quedar como
+ * una celda vacía: "líder" (no hay nadie adelante), "+N vta" (doblado, y ahí las décimas no
+ * significan nada), un número, o `--` cuando todavía no hay con qué calcularlo —la primera curva
+ * de la largada, antes de que alguien cierre una vuelta—.
+ */
+function renderGap(td, car) {
+  const lapsDown = car.lapsDown || 0;
+  const ms = gapMode === "leader" ? car.gapLeaderMs : car.gapAheadMs;
+
+  clearChildren(td);
+  td.classList.toggle("lider", car.position === 1);
+  td.classList.toggle("doblado", lapsDown >= 1);
+
+  if (car.position === 1) {
+    td.textContent = "líder";
+    td.title = "Va primero: no hay nadie adelante.";
+    return;
+  }
+  if (lapsDown >= 1) {
+    td.textContent = "+" + lapsDown + (lapsDown === 1 ? " vta" : " vtas");
+    td.title = "Está a " + lapsDown + (lapsDown === 1 ? " vuelta" : " vueltas") + " del líder.";
+    return;
+  }
+  if (ms === null || ms === undefined) {
+    const span = document.createElement("span");
+    span.className = "nodata";
+    span.textContent = "--";
+    span.title = "Todavía no hay una vuelta de referencia con la que estimar el intervalo.";
+    td.appendChild(span);
+    return;
+  }
+  td.textContent = formatGap(ms);
+  td.title =
+    gapMode === "leader"
+      ? "Diferencia estimada con el líder."
+      : "Diferencia estimada con el auto de adelante.";
+}
+
+/** El encabezado dice cuál de las dos cuentas está mostrando. Sin esto la columna es ambigua: los
+ * dos modos se ven igual —un número con un `+` adelante— y un intervalo mal leído manda a un
+ * director de carrera a tomar una decisión equivocada. */
+function renderGapHeader() {
+  const th = $("th-gap");
+  const btn = $("btn-gap-mode");
+  if (gapMode === "leader") {
+    btn.textContent = "Líder";
+    th.title = "Diferencia con el líder. Clickeá para ver el intervalo con el auto de adelante.";
+  } else {
+    btn.textContent = "Int.";
+    th.title = "Intervalo con el auto de adelante. Clickeá para ver la diferencia con el líder.";
+  }
+  btn.setAttribute("aria-label", th.title);
+}
+
+/** ms → `+1.423`, y `+1:02.4` cuando pasa del minuto. El signo va siempre: un intervalo es una
+ * distancia hacia atrás, nunca un tiempo absoluto, y sin el `+` se confunde con una vuelta. */
+function formatGap(ms) {
+  if (ms < 60000) return "+" + (ms / 1000).toFixed(3);
+  const minutes = Math.floor(ms / 60000);
+  const seconds = (ms % 60000) / 1000;
+  return "+" + minutes + ":" + (seconds < 10 ? "0" : "") + seconds.toFixed(1);
 }
 
 /** ms → `m:ss.mmm`, la notación de cualquier torre de tiempos. */
@@ -1036,6 +1138,9 @@ function drawMap() {
   ctx.lineWidth = 9;
   ctx.stroke();
 
+  // La zona de pit, encima del asfalto y debajo de los autos.
+  drawPitZone(project);
+
   // Autos.
   const now = performance.now();
   let closest = null;
@@ -1050,14 +1155,25 @@ function drawMap() {
       if (d < 16 && (!closest || d < closest.d)) closest = { d, carId, p, car: anim.car };
     }
 
+    // Un auto sin telemetría fresca se dibuja hueco: el punto queda como un anillo gris en el
+    // último lugar donde se lo vio, en vez de como un auto más girando. Sin esto, el punto de
+    // alguien que crasheó el juego se quedaba clavado en el mapa, del mismo dorado que el resto,
+    // indistinguible de un auto detenido en pista — que es una situación muy distinta.
+    const stale = Boolean(anim.car && anim.car.telemetryStale);
     ctx.beginPath();
     ctx.arc(p.x, p.y, selected || hovered ? 8 : 6, 0, Math.PI * 2);
-    // Con el acento en dorado, el auto seleccionado ya no puede ser amarillo: sobre el resto de
-    // la parrilla —que ahora es dorada— se perdería. El blanco es el único color que queda con
-    // contraste propio en el mapa, y es además el más fuerte, que es lo que corresponde a lo
-    // seleccionado. El hover queda en un dorado claro: un escalón, no otro color.
-    ctx.fillStyle = selected ? "#ffffff" : hovered ? "#ffd877" : "#f0b429";
-    ctx.fill();
+    if (stale) {
+      ctx.strokeStyle = "#5a6273";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      // Con el acento en dorado, el auto seleccionado ya no puede ser amarillo: sobre el resto de
+      // la parrilla —que ahora es dorada— se perdería. El blanco es el único color que queda con
+      // contraste propio en el mapa, y es además el más fuerte, que es lo que corresponde a lo
+      // seleccionado. El hover queda en un dorado claro: un escalón, no otro color.
+      ctx.fillStyle = selected ? "#ffffff" : hovered ? "#ffd877" : "#f0b429";
+      ctx.fill();
+    }
     if (selected) {
       ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
       ctx.lineWidth = 6;
@@ -1069,6 +1185,72 @@ function drawMap() {
 
   hoveredCarId = closest ? closest.carId : null;
   updateTooltip(closest);
+  renderMapReadout();
+}
+
+/**
+ * El tramo de vuelta que el motor considera pit lane.
+ *
+ * Es la única regla del producto que se configura con dos números abstractos —0.97 y 0.995— y
+ * hasta la 0.5 no había ninguna forma de ver a qué pedazo de pista correspondían. El texto de
+ * Reglas mandaba a "mirar el mapa mientras alguien maneja por boxes", y el mapa no mostraba ni la
+ * zona ni el punto de la vuelta de nadie: era pedirle a alguien que calibre a ciegas.
+ *
+ * Se dibuja con exactamente el mismo criterio que `isInPitZone` (`s >= inicio && s <= fin`,
+ * sin dar la vuelta al cruzar la meta). Si el dibujo fuera más piadoso que el motor —por ejemplo,
+ * envolviendo cuando el inicio es mayor que el fin— el mapa mostraría una zona que no sanciona a
+ * nadie, que es la peor forma posible de equivocarse acá.
+ */
+function drawPitZone(project) {
+  if (!pitZone || !trackOutline) return;
+  const { splineStart, splineEnd } = pitZone;
+  if (!(splineEnd > splineStart)) return; // zona vacía: el motor tampoco marcaría a nadie
+
+  const tramo = trackOutline.points.filter((p) => p.s >= splineStart && p.s <= splineEnd);
+  if (tramo.length < 2) return; // el trazado todavía no tiene puntos aprendidos ahí
+
+  ctx.beginPath();
+  for (let i = 0; i < tramo.length; i++) {
+    const p = project(tramo[i].x, tramo[i].z);
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+  // El mismo ámbar del tinte de "está en boxes" en la torre de tiempos: es la misma cosa dicha en
+  // dos lugares, y usar dos colores distintos obligaría a aprender dos códigos.
+  ctx.strokeStyle = "rgba(240, 180, 41, 0.75)";
+  ctx.lineWidth = 7;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+}
+
+/**
+ * El punto de la vuelta del auto seleccionado, que es el número que hay que escribir en Reglas.
+ *
+ * Con tres decimales porque esa es la precisión de los campos del formulario: mostrar más dígitos
+ * sería sugerir una exactitud que el campo no acepta.
+ */
+function renderMapReadout() {
+  const box = $("map-readout");
+  const car = lastState && selectedCarId !== null ? lastState.cars.find((c) => c.carId === selectedCarId) : null;
+  if (!car) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const s = car.normalizedSplinePosition;
+  $("map-spline").textContent = typeof s === "number" ? s.toFixed(3) : "--";
+
+  const hint = $("map-zone-hint");
+  if (!pitZone || !(pitZone.splineEnd > pitZone.splineStart)) {
+    // Un inicio mayor que el fin no sanciona a nadie, y el panel no lo decía en ningún lado.
+    hint.textContent = pitZone ? "La zona de pit está mal definida: el inicio tiene que ser menor que el fin." : "";
+    return;
+  }
+  const dentro = s >= pitZone.splineStart && s <= pitZone.splineEnd;
+  hint.textContent = dentro
+    ? "dentro de la zona de pit (" + pitZone.splineStart + " – " + pitZone.splineEnd + ")"
+    : "fuera de la zona de pit (" + pitZone.splineStart + " – " + pitZone.splineEnd + ")";
 }
 
 function updateTooltip(closest) {
@@ -1118,16 +1300,36 @@ function wireMap() {
   requestAnimationFrame(animate);
 }
 
+/**
+ * Baja el trazado del circuito cuando creció la cobertura.
+ *
+ * Son ~600 puntos y el poll corre una vez por segundo, así que no se vuelve a pedir mientras el
+ * circuito ya aprendido no cambie. Lo delicado es CUÁNDO se da por bajada una cobertura.
+ *
+ * Acá `lastTrackCoverage` se marcaba antes del `await`, y eso dejaba el reintento muerto: bastaba
+ * un fallo —o un 204, el backend todavía sin trazado suficiente— para que el próximo poll trajera
+ * la misma cobertura, entrara por el `return` de la primera línea y no volviera a pedir nunca más.
+ * El comentario que había prometía justo lo contrario de lo que hacía el código.
+ *
+ * Y el caso que lo disparaba era el normal, no uno raro: una liga que ya aprendió su circuito
+ * arranca con cobertura 1.0 y no crece más en toda la carrera. Un solo error transitorio al
+ * arrancar —el worker todavía levantándose— y la tarjeta del mapa se quedaba en "esperando
+ * telemetría" hasta que alguien recargara la página.
+ *
+ * Ahora la cobertura se marca recién con el trazado en la mano, que es lo único que de verdad
+ * significa "esta cobertura ya la tengo".
+ */
 async function refreshTrack(coverage) {
-  // Solo se vuelve a bajar el trazado cuando creció: son ~600 puntos y no tiene sentido pedirlos
-  // una vez por segundo cuando el circuito ya está aprendido y no cambia más.
   if (coverage <= lastTrackCoverage) return;
-  lastTrackCoverage = coverage;
   try {
     const outline = await api("/api/track");
+    // 204: hay telemetría pero todavía no alcanza para dibujar. No es un error, pero tampoco es un
+    // trazado — darlo por bajado congelaría el pedido para siempre.
+    if (!outline) return;
     trackOutline = outline;
+    lastTrackCoverage = coverage;
   } catch (_) {
-    // el backend puede estar reiniciando; el próximo poll reintenta
+    // `lastTrackCoverage` quedó como estaba, así que el próximo poll vuelve a intentar de verdad.
   }
 }
 
@@ -1233,6 +1435,8 @@ const PENALTY_STATUS = {
   servingWindow: ["warn", "pendiente"],
   served: ["ok", "cumplida"],
   escalated: ["bad", "escalada"],
+  // Gris y no verde: una anulada no es una sanción que salió bien, es una que no debió existir.
+  revoked: ["neutral", "anulada"],
 };
 
 const ENGINE_LABELS = { formation: "Largada", pit: "Pit lane", steward: "Comisario" };
@@ -1271,8 +1475,65 @@ function renderPenalties(formationPenalties, pitPenalties, stewardPenalties) {
     tr.appendChild(status);
 
     appendCell(tr, p.status === "servingWindow" ? String(p.graceLapsRemaining) : "--", "num");
+
+    const actions = document.createElement("td");
+    actions.className = "actions";
+    if (p.status !== "revoked") actions.appendChild(revokeButton(p));
+    tr.appendChild(actions);
+
     body.appendChild(tr);
   }
+}
+
+/** Sanción a medio anular: `{ id, timer }`. Vive afuera de la tabla porque la tabla se redibuja
+ * entera en cada poll y se llevaría puesto el estado armado. */
+let armedRevoke = null;
+
+/**
+ * Anular con doble click, igual que el kick.
+ *
+ * El primer click arma y el segundo ejecuta; a los 4 segundos se desarma solo. Es el mismo patrón
+ * que el kick y por el mismo motivo: esta tabla se repinta sola cada segundo, así que un click
+ * puede caer en una fila que se acaba de mover. Pero acá hay una diferencia que vale decir — una
+ * anulación se puede rehacer sancionando de nuevo, un kick no. Lleva doble confirmación igual
+ * porque el aviso le llega al piloto por chat en el acto y no hay forma de desmentirlo.
+ */
+function revokeButton(penalty) {
+  const btn = document.createElement("button");
+  btn.className = "btn-mini secondary";
+  const armed = armedRevoke !== null && armedRevoke.id === penalty.id;
+  btn.textContent = armed ? "¿Seguro?" : "Anular";
+  btn.title = "Anular esta sanción. Al piloto le llega el aviso por chat y deja de contar en el informe.";
+  if (armed) btn.classList.add("arming");
+
+  btn.addEventListener("click", async () => {
+    if (armedRevoke && armedRevoke.id === penalty.id) {
+      clearTimeout(armedRevoke.timer);
+      armedRevoke = null;
+      btn.disabled = true;
+      try {
+        await post("/api/penalties/" + penalty.id + "/revoke");
+        toast("Sanción anulada: " + driverLabel(penalty.driverGuid, penalty.carId) + " ya no la debe");
+        refresh().catch(() => {});
+      } catch (err) {
+        btn.disabled = false;
+        toast("No se pudo anular: " + err.message, 5000);
+      }
+      return;
+    }
+    if (armedRevoke) clearTimeout(armedRevoke.timer);
+    armedRevoke = { id: penalty.id, timer: setTimeout(desarmarAnulacion, KICK_ARM_MS) };
+    btn.textContent = "¿Seguro?";
+    btn.classList.add("arming");
+  });
+  return btn;
+}
+
+/** Al vencer los 4 segundos alcanza con repintar: el botón se reconstruye desarmado porque
+ * `armedRevoke` ya es null cuando `renderPenalties` lo vuelve a crear. */
+function desarmarAnulacion() {
+  armedRevoke = null;
+  if (lastState) renderPenalties(lastState.formationPenalties, lastState.pitPenalties, lastState.stewardPenalties);
 }
 
 function appendCell(tr, text, className) {
@@ -1459,7 +1720,37 @@ function penaltyForm(incident, card) {
     renderIncidents(lastState ? lastState.incidents || [] : []);
   });
 
+  /**
+   * Aplicar tampoco sale de un solo click.
+   *
+   * Los dos desplegables vienen con una opción ya elegida —el primer piloto del toque y
+   * "Penalización de tiempo"— así que un click directo sanciona a alguien que nadie eligió. El
+   * segundo click no es un trámite: entre uno y otro el botón dice en palabras a quién y qué se
+   * está por aplicar, que es exactamente el dato que el formulario esconde en dos `select`.
+   */
+  let armada = null;
+  const desarmar = () => {
+    if (armada) clearTimeout(armada);
+    armada = null;
+    confirm.textContent = "Aplicar";
+    confirm.classList.remove("arming");
+  };
+  // Cambiar de piloto o de sanción desarma: lo que se confirmó ya no es lo que se va a aplicar.
+  who.addEventListener("change", desarmar);
+  what.addEventListener("change", desarmar);
+  seconds.addEventListener("input", desarmar);
+
   confirm.addEventListener("click", async () => {
+    if (!armada) {
+      const etiqueta = MANUAL_PENALTIES.find(([value]) => value === what.value);
+      const queEs = what.value === "TIME" ? "+" + seconds.value + "s" : (etiqueta ? etiqueta[1] : what.value);
+      armada = setTimeout(desarmar, KICK_ARM_MS);
+      confirm.textContent = "¿" + queEs + " a " + who.options[who.selectedIndex].textContent + "?";
+      confirm.classList.add("arming");
+      return;
+    }
+    clearTimeout(armada);
+    armada = null;
     confirm.disabled = true;
     try {
       const res = await post("/api/incidents/" + incident.id + "/resolve", {
@@ -1648,10 +1939,49 @@ function renderStart(lightState) {
   $("start-hint").textContent = hints[lightState] || "";
 }
 
+// ===================================================================== contacto con el motor
+
+/**
+ * La banda de "perdí contacto", y la única pregunta que contesta: **¿qué tan viejo es lo que estoy
+ * mirando?**
+ *
+ * Se dibuja desde un reloj propio y no desde el resultado del poll, porque el caso que importa es
+ * justamente aquel en el que el poll no vuelve: si dependiera de la respuesta, el contador se
+ * quedaría clavado en el mismo segundo en que se cortó la conexión.
+ *
+ * El umbral y el texto hablan de tiempo y no de intentos fallidos. "3 requests fallaron" es un
+ * dato de implementación; "esto tiene 12 segundos" es lo que el admin necesita para decidir si
+ * puede seguir dirigiendo la carrera con lo que ve.
+ */
+function renderLinkState() {
+  const bar = $("link-down");
+  const stale = Date.now() - lastGoodPollAt;
+
+  if (stale < LINK_DOWN_AFTER_MS) {
+    bar.hidden = true;
+    document.body.classList.remove("link-down");
+    return;
+  }
+
+  const seconds = Math.round(stale / 1000);
+  $("link-down-text").textContent =
+    "Sin contacto con Race Control hace " + seconds + (seconds === 1 ? " segundo" : " segundos") + ".";
+  // El detalle es el motivo técnico y va en gris, detrás: sirve para reportar el problema, no para
+  // entenderlo. Lo que hay que entender ya está dicho en la primera frase.
+  $("link-down-detail").textContent = "Lo que ves en pantalla es de antes." + (lastPollError ? " (" + lastPollError + ")" : "");
+  bar.hidden = false;
+  document.body.classList.add("link-down");
+}
+
 // ===================================================================== ciclo principal
 
 async function refresh() {
   const state = await api("/api/state");
+  // Llegó: el reloj de la banda arranca de cero. Va antes de renderizar nada, porque lo que marca
+  // es la edad del dato y no cuánto tardó el panel en dibujarlo.
+  lastGoodPollAt = Date.now();
+  lastPollError = "";
+  renderLinkState();
   lastState = state;
 
   $("version-label").textContent = state.version ? "v" + state.version : "";
@@ -1682,6 +2012,7 @@ async function refresh() {
   badge.hidden = !state.pendingIncidents;
 
   updateCarTargets(state.cars);
+  pitZone = state.pitZone || null;
   await refreshTrack(state.track ? state.track.coverage : 0);
   renderMapStatus(state);
   renderSession(state.session);
@@ -1696,6 +2027,16 @@ function wireButtons() {
   $("btn-begin").addEventListener("click", action("/api/formation/begin"));
   $("btn-green").addEventListener("click", action("/api/formation/green"));
   $("btn-reset").addEventListener("click", action("/api/formation/reset"));
+
+  // El encabezado de la columna de intervalo es un botón. Repinta la tabla en el acto en vez de
+  // esperar al próximo poll: un click que tarda un segundo en hacer algo se siente roto y se
+  // vuelve a clickear.
+  $("btn-gap-mode").addEventListener("click", () => {
+    gapMode = gapMode === "ahead" ? "leader" : "ahead";
+    renderGapHeader();
+    if (lastState) renderTiming(lastState.cars);
+  });
+  renderGapHeader();
 
   $("btn-test-network").addEventListener("click", async (e) => {
     const button = e.currentTarget;
@@ -1881,5 +2222,31 @@ renderRoute();
 
 loadConfigForm().catch((err) => toast("No se pudo cargar la configuración: " + err.message, 5000));
 refresh().catch((err) => toast("No se pudo conectar con el backend: " + err.message, 5000));
-setInterval(() => refresh().catch(() => {}), POLL_MS);
+
+/**
+ * El poll, con el error guardado en vez de tirado a la basura.
+ *
+ * Acá había un `.catch(() => {})` pelado. Se tragaba todos los errores del polling: si el worker
+ * se caía a mitad de carrera, el panel se quedaba congelado mostrando el último estado bueno y no
+ * había absolutamente nada en pantalla que lo dijera. `api()` sabe decir "se cortó la conexión",
+ * pero ese mensaje solo llegaba al toast del primer `refresh()`, el del arranque.
+ *
+ * El error no se muestra en un toast: eso sería un cartel por segundo. Se guarda, y la banda
+ * decide cuándo vale la pena mostrarlo.
+ */
+setInterval(() => {
+  refresh().catch((err) => {
+    lastPollError = err.message;
+    renderLinkState();
+  });
+}, POLL_MS);
+
+/**
+ * Reloj propio de la banda, aparte del poll.
+ *
+ * Con el backend caído no vuelve ningún `refresh()`, así que nada volvería a dibujar la banda y el
+ * contador quedaría clavado en el segundo en que se cortó. Este intervalo es el que lo hace
+ * avanzar. No pide nada a la red: solo mira el reloj.
+ */
+setInterval(renderLinkState, 1000);
 

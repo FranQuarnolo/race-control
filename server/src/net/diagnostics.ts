@@ -40,9 +40,29 @@ export interface DiagnosticsInput {
   clientPort: number;
   driversConnected: number;
   driversReporting: number;
+  /** A dónde escribe el admin cuando el problema es nuestro. Ver `comoAvisarnos`. */
+  contact?: string;
 }
 
 const TELEMETRY_FRESH_MS = 5000;
+
+/**
+ * Cómo se le dice al admin que nos avise.
+ *
+ * Dos de estos chequeos fallan por algo que el admin no puede arreglar —no tiene dirección pública
+ * asignada, o su servidor habla desde un puerto distinto cada vez— y los dos le decían
+ * "escribinos" cuando no existía una dirección en ninguna parte del producto.
+ *
+ * El `action` se inserta con `textContent`, así que no puede llevar un link: la dirección tiene que
+ * ir escrita adentro de la frase. Sin dirección configurada se cae a algo que siempre es verdad, en
+ * vez de mandar a escribir a la nada.
+ */
+function comoAvisarnos(contact?: string): string {
+  const limpio = (contact || "").trim();
+  if (!limpio) return "avisale a quien te dio el acceso";
+  // El `mailto:` sirve para un href, no para leerlo en una frase.
+  return "escribinos a " + limpio.replace(/^mailto:/, "");
+}
 
 export function runDiagnostics(input: DiagnosticsInput): Check[] {
   return [
@@ -74,8 +94,8 @@ function checkPublicHost(input: DiagnosticsInput): Check {
       state: "fail",
       detail: "Todavía no tiene una asignada.",
       action:
-        "Es algo de nuestro lado, no tuyo: escribinos y lo resolvemos. Sin esta dirección no hay " +
-        "nada que puedas pegar en el panel de tu hosting.",
+        "Es algo de nuestro lado, no tuyo: " + comoAvisarnos(input.contact) + " y lo resolvemos. " +
+        "Sin esta dirección no hay nada que puedas pegar en el panel de tu hosting.",
     };
   }
   return {
@@ -158,9 +178,9 @@ function checkOutgoingCommands(input: DiagnosticsInput): Check {
       detail: "Tu servidor nos habla desde un puerto distinto cada vez, así que no podemos deducir a cuál contestarle.",
       action:
         'Entrá al panel de tu hosting y fijate que "Listen Address" (en paneles viejos, ' +
-        "UDP_PLUGIN_LOCAL_PORT) tenga un puerto fijo. Si ya lo tiene, escribinos con ese número y " +
-        "lo dejamos puesto. Hasta entonces el servidor te manda todo y no recibe nada: ni sanciones, " +
-        "ni avisos, ni kicks.",
+        "UDP_PLUGIN_LOCAL_PORT) tenga un puerto fijo. Si ya lo tiene, " + comoAvisarnos(input.contact) +
+        " con ese número y lo dejamos puesto. Hasta entonces el servidor te manda todo y no recibe " +
+        "nada: ni sanciones, ni avisos, ni kicks.",
     };
   }
   const source = input.udp.lastSourcePort;

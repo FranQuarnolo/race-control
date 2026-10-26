@@ -35,6 +35,21 @@
       var version = document.getElementById("version");
       if (version && me && me.version) version.textContent = me.version;
 
+      // 1b. El botón de contacto del cierre. Solo se muestra con una dirección configurada, y solo
+      //     se aceptan los tres esquemas esperables: el valor lo pone quien despliega, pero un
+      //     `javascript:` acá se ejecutaría en la página pública de todos.
+      var cta = document.getElementById("cta-contacto");
+      var contacto = me && typeof me.contact === "string" ? me.contact : "";
+      var valido = /^(mailto:|https:\/\/|http:\/\/)/.test(contacto);
+      if (cta && valido) {
+        cta.href = contacto;
+        if (contacto.indexOf("http") === 0) {
+          cta.target = "_blank";
+          cta.rel = "noopener";
+        }
+        cta.hidden = false;
+      }
+
       // 2. Quien ya tiene la sesión abierta no quiere ver un botón que dice "Ingresar": lo manda
       //    a donde iba. El destino lo decide el mismo criterio que usa el login.
       if (!me || !me.authenticated) return;

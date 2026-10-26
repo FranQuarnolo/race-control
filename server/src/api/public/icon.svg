@@ -1,52 +1,60 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Race Control">
   <!--
-    Marca de Race Control: el semáforo de largada.
+    Marca de Race Control: la bandera a cuadros.
 
-    La bandera a cuadros que había antes decía "automovilismo", que es lo que dicen todas las
-    demás. El semáforo dice lo que hace ESTE producto: es quien da la largada y quien decide si
-    la carrera está en verde. Es además el momento más reconocible del deporte.
+    La regla que manda acá es el tamaño chico. A 16x16 px en la pestaña del navegador, y a 26 px en
+    la barra del panel, lo único que sobrevive es la masa de color. Todo lo demás se decide a partir
+    de eso.
 
-    La regla que manda acá es el tamaño chico. A 16x16 px en la pestaña del navegador —y a 26 px
-    en la barra del panel— lo único que sobrevive es la masa de color, así que las lámparas ocupan
-    casi todo el cuadro y el fondo es apenas la junta entre ellas. Un primer intento tenía las
-    lámparas chicas sobre un panel oscuro: en la barra del panel, que ya es oscura, el ícono
-    desaparecía y parecía una imagen rota.
+    Por qué un damero de 3x3 y no de 4x4 ni de 8x8: a 16 px, un damero de 4x4 deja celdas de 4 px y
+    uno de 8x8 celdas de 2 px, y a esa altura el ojo deja de ver cuadros y ve un gris parejo. Con
+    3x3 cada celda mide 5 px y la alternancia todavía se lee. Es el damero más fino que aguanta la
+    pestaña del navegador.
 
-    Cuatro lámparas y no diez por lo mismo: a ese tamaño, cinco luces en fila o un damero de 4x4
-    se vuelven un gris sin forma. Rojo arriba, verde abajo.
+    Por qué el fondo es claro y no oscuro: la barra del panel ya es oscura. Un ícono de fondo oscuro
+    ahí adentro se funde con la barra y parece una imagen rota, que fue exactamente lo que pasó con
+    un intento anterior de este mismo ícono. El blanco le da masa propia en los dos fondos, claro y
+    oscuro.
 
-    La paleta no se inventa: son las mismas variables CSS del panel (las de rojo y verde), así
-    que el ícono y la interfaz quedan coherentes sin trabajo extra.
+    Por qué los cuadros oscuros son del mismo color que el panel: para que el ícono y la interfaz
+    compartan paleta sin trabajo extra. Es el mismo valor que usa el chasis del panel.
 
-    OJO al editar este comentario: un comentario XML no puede contener dos guiones seguidos. Acá
-    estaban escritos los nombres de las variables CSS tal cual, con su prefijo, y eso bastó para
-    que el SVG dejara de parsear entero. El navegador no avisa: dibuja el ícono de imagen rota,
-    que es indistinguible de un 404. Si lo tocás, validalo.
+    El damero va a sangre y recortado por el cuadro redondeado, no centrado con margen: un ícono con
+    aire adentro desperdicia la mitad de los pixeles que tiene disponibles a 16 px.
+
+    OJO al editar este comentario: un comentario XML no puede contener dos guiones seguidos. En una
+    version anterior estaban escritos los nombres de las variables CSS tal cual, con su prefijo, y
+    eso bastó para que el SVG dejara de parsear entero. El navegador no avisa: dibuja el ícono de
+    imagen rota, que es indistinguible de un 404. Si lo tocás, validalo.
   -->
   <defs>
-    <!-- El degradado descentrado hace que la lámpara se lea como una esfera encendida y no como
-         un círculo plano. A 16 px no se nota; a 256 es la diferencia entre un ícono y un dibujo. -->
-    <radialGradient id="rc-rojo" cx="0.35" cy="0.28" r="0.9">
-      <stop offset="0" stop-color="#ffb3b3" />
-      <stop offset="0.5" stop-color="#e85b5b" />
-      <stop offset="1" stop-color="#a32d2d" />
-    </radialGradient>
-    <radialGradient id="rc-verde" cx="0.35" cy="0.28" r="0.9">
-      <stop offset="0" stop-color="#a6f5c8" />
-      <stop offset="0.5" stop-color="#35c76e" />
-      <stop offset="1" stop-color="#17703d" />
-    </radialGradient>
+    <clipPath id="rc-marco">
+      <rect width="256" height="256" rx="54" />
+    </clipPath>
   </defs>
 
-  <!-- El cuadro oscuro no es "el fondo": es el cuerpo del semáforo, y lo que se ve de él es la
-       junta entre las cuatro lámparas. -->
-  <rect width="256" height="256" rx="54" fill="#0c0f15" />
+  <g clip-path="url(#rc-marco)">
+    <!-- La tela. Blanco roto y no blanco puro: el blanco puro sobre fondo claro no tiene borde y el
+         ícono se derrama en la página. -->
+    <rect width="256" height="256" fill="#f4f5f7" />
 
-  <!-- Fila de arriba: rojo. La parrilla formada, esperando. -->
-  <circle cx="76" cy="76" r="44" fill="url(#rc-rojo)" />
-  <circle cx="180" cy="76" r="44" fill="url(#rc-rojo)" />
+    <!-- Los cuadros oscuros del damero. Van en las cuatro posiciones pares de la grilla de 3x3, así
+         las esquinas y el centro quedan claros: es la repartición que más blanco deja arriba, que es
+         donde el ícono toca la barra oscura del panel.
 
-  <!-- Fila de abajo: verde. Largada dada, carrera en curso. -->
-  <circle cx="76" cy="180" r="44" fill="url(#rc-verde)" />
-  <circle cx="180" cy="180" r="44" fill="url(#rc-verde)" />
+         Las medidas son 256/3 = 85.33 redondeado a 85.34 en el ancho para que la tercera columna
+         cierre contra el borde y no quede una línea clara de un pixel. -->
+    <g fill="#11141b">
+      <rect x="85.33" y="0" width="85.34" height="85.34" />
+      <rect x="0" y="85.33" width="85.34" height="85.34" />
+      <rect x="170.67" y="85.33" width="85.33" height="85.34" />
+      <rect x="85.33" y="170.67" width="85.34" height="85.33" />
+    </g>
+
+    <!-- El filo ámbar de abajo es lo único que no es bandera: es la firma del producto. Son los 10
+         px que hacen que el ícono no sea la bandera a cuadros genérica de cualquier app de
+         automovilismo. A 16 px sobrevive como una línea de un pixel, que alcanza para teñir el
+         conjunto sin romper el damero. -->
+    <rect x="0" y="236" width="256" height="20" fill="#f0b429" />
+  </g>
 </svg>

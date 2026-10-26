@@ -26,13 +26,18 @@ function marcarConectado() {
  * sin un solo síntoma que apunte a la causa. Es algo que tiene que arreglar quien opera el
  * servicio, así que el único mensaje honesto es decirlo y no mandarlo a probar cosas.
  */
-function sinDireccion() {
+function sinDireccion(contacto) {
   $("send-address").textContent = "Todavía no hay dirección";
   $("btn-copiar").hidden = true;
   const estado = $("estado");
+  // La dirección va escrita adentro de la frase y no como link: el mensaje se inserta con
+  // textContent, que es la regla del proyecto para todo lo que no sea nuestro.
+  const comoAvisar = contacto
+    ? "escribinos a " + String(contacto).replace(/^mailto:/, "")
+    : "avisale a quien te dio el acceso";
   estado.textContent =
     "Esta liga todavía no tiene una dirección pública asignada. Es algo de nuestro lado, no tuyo: " +
-    "escribinos y lo resolvemos. Mientras tanto no hay nada que configurar en tu hosting.";
+    comoAvisar + " y lo resolvemos. Mientras tanto no hay nada que configurar en tu hosting.";
   estado.style.color = "var(--yellow)";
 }
 
@@ -42,7 +47,7 @@ async function revisar() {
   document.title = liga.name + " — Race Control";
 
   if (!liga.sendAddress) {
-    sinDireccion();
+    sinDireccion(liga.contact);
     return;
   }
   $("send-address").textContent = liga.sendAddress;

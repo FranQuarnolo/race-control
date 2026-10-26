@@ -81,12 +81,32 @@ describe("runDiagnostics", () => {
   it("sin dirección asignada, no manda al admin a arreglar algo que no puede", () => {
     const check = by(
       runDiagnostics(
-        input({ network: { publicIp: "", publicHostSource: "unknown" } })
+        input({ network: { publicIp: "", publicHostSource: "unknown" }, contact: "mailto:hola@race.test" })
       ),
       "public-host"
     );
     assert.strictEqual(check.state, "fail");
-    assert.match(check.action, /escribinos/i);
+    assert.match(check.action, /escribinos a hola@race\.test/i);
+    // El `mailto:` sirve para un href; adentro de una frase sobra.
+    assert.ok(!check.action.includes("mailto:"), "el mailto: no va en el texto que se lee");
+  });
+
+  /**
+   * Sin dirección configurada, el consejo no puede ser "escribinos".
+   *
+   * Durante toda la 0.5 el producto decía "escribinos" en seis pantallas distintas y no existía una
+   * dirección en ninguna parte: el único camino de recuperación terminaba en una pared. Lo que
+   * queda sin `RC_CONTACT` tiene que seguir siendo verdad, aunque sea menos preciso.
+   */
+  it("sin contacto configurado, no manda a escribir a ningún lado", () => {
+    for (const id of ["public-host"]) {
+      const check = by(
+        runDiagnostics(input({ network: { publicIp: "", publicHostSource: "unknown" } })),
+        id
+      );
+      assert.ok(!/escribinos/i.test(check.action), `${id} manda a escribir sin decir a dónde`);
+      assert.match(check.action, /quien te dio el acceso/i);
+    }
   });
 
   // La dirección la fija el portal al arrancar el worker y el panel no la puede editar

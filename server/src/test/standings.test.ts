@@ -1,16 +1,20 @@
 import { strict as assert } from "assert";
 import { test } from "node:test";
-import { computeStandings, SESSION_RACE } from "../state/standings";
+import { computeGaps, computeStandings, SESSION_RACE } from "../state/standings";
 import { brandOf, brandSlug } from "../cars/carBadges";
 
 const SESSION_QUALIFY = 2;
 
-function car(carId: number, over: Partial<{ lapCount: number; spline: number; best: number | null; connected: boolean }> = {}) {
+function car(
+  carId: number,
+  over: Partial<{ lapCount: number; spline: number; best: number | null; last: number | null; connected: boolean }> = {}
+) {
   return {
     carId,
     lapCount: over.lapCount ?? 0,
     normalizedSplinePosition: over.spline ?? 0,
     bestLapMs: over.best === undefined ? null : over.best,
+    lastLapMs: over.last === undefined ? null : over.last,
     connected: over.connected ?? true,
   };
 }
@@ -51,6 +55,144 @@ test("los desconectados no ocupan posición", () => {
   assert.equal(positions.get(0), undefined);
   assert.equal(positions.get(2), 1);
   assert.equal(positions.get(1), 2);
+});
+
+// ======================================================================== intervalos
+
+test("el líder no tiene intervalo: no hay nadie adelante", () => {
+  const gaps = computeGaps(
+    [car(0, { lapCount: 3, spline: 0.5, best: 90_000 }), car(1, { lapCount: 3, spline: 0.2, best: 90_000 })],
+    SESSION_RACE
+  );
+  assert.equal(gaps.get(0)!.aheadMs, null);
+  assert.equal(gaps.get(0)!.leaderMs, null);
+  assert.equal(gaps.get(0)!.lapsDown, 0);
+});
+
+test("en carrera el intervalo sale de la distancia en el trazado por la vuelta de referencia", () => {
+  // 0.1 de vuelta de distancia, vuelta de 90 s → 9 s. El de atrás es quien tiene que recorrerla,
+  // así que la referencia es la suya.
+  const gaps = computeGaps(
+    [car(0, { lapCount: 3, spline: 0.5, best: 90_000 }), car(1, { lapCount: 3, spline: 0.4, best: 100_000 })],
+    SESSION_RACE
+  );
+  assert.equal(gaps.get(1)!.aheadMs, 10_000);
+  assert.equal(gaps.get(1)!.leaderMs, 10_000);
+});
+
+test("el acumulado contra el líder no es la suma de los intervalos cuando los ritmos difieren", () => {
+  // Cada auto convierte la distancia con SU vuelta: por eso el gap al líder del tercero no es
+  // ahead(2) + ahead(3). Es correcto y es la razón de que se calculen los dos por separado.
+  const gaps = computeGaps(
+    [
+      car(0, { lapCount: 5, spline: 0.9, best: 60_000 }),
+      car(1, { lapCount: 5, spline: 0.8, best: 60_000 }),
+      car(2, { lapCount: 5, spline: 0.7, best: 120_000 }),
+    ],
+    SESSION_RACE
+  );
+  assert.equal(gaps.get(1)!.aheadMs, 6_000);
+  assert.equal(gaps.get(2)!.aheadMs, 12_000);
+  assert.equal(gaps.get(2)!.leaderMs, 24_000);
+});
+
+test("un auto doblado no reporta milisegundos, reporta vueltas", () => {
+  const gaps = computeGaps(
+    [car(0, { lapCount: 10, spline: 0.5, best: 90_000 }), car(1, { lapCount: 8, spline: 0.5, best: 90_000 })],
+    SESSION_RACE
+  );
+  assert.equal(gaps.get(1)!.lapsDown, 2);
+  assert.equal(gaps.get(1)!.aheadMs, null);
+  assert.equal(gaps.get(1)!.leaderMs, null);
+});
+
+test("sin ninguna vuelta cerrada, el intervalo no se inventa", () => {
+  // Las primeras curvas de la largada: hay distancia pero no hay con qué convertirla a tiempo.
+  const gaps = computeGaps(
+    [car(0, { spline: 0.2 }), car(1, { spline: 0.1 })],
+    SESSION_RACE
+  );
+  assert.equal(gaps.get(1)!.aheadMs, null);
+  assert.equal(gaps.get(1)!.lapsDown, 0);
+});
+
+test("sin mejor vuelta propia la referencia es la última, y si tampoco hay, la mejor de la sesión", () => {
+  const conUltima = computeGaps(
+    [car(0, { lapCount: 2, spline: 0.5, best: 60_000 }), car(1, { lapCount: 2, spline: 0.4, last: 80_000 })],
+    SESSION_RACE
+  );
+  assert.equal(conUltima.get(1)!.aheadMs, 8_000);
+
+  const sinNada = computeGaps(
+    [car(0, { lapCount: 2, spline: 0.5, best: 60_000 }), car(1, { lapCount: 2, spline: 0.4 })],
+    SESSION_RACE
+  );
+  assert.equal(sinNada.get(1)!.aheadMs, 6_000);
+});
+
+/**
+ * La ventana entre cruzar la meta y que llegue el `LAP_COMPLETED`.
+ *
+ * Por un par de décimas, el spline del que acaba de pasar vale ~0 mientras su `lapCount` sigue
+ * siendo el de antes. Sin el piso en cero, el auto de adelante aparece con un progreso casi una
+ * vuelta menor que el de atrás y la columna muestra un intervalo negativo delante de todo el
+ * mundo. Negativo en una torre de tiempos no significa nada: significa que hay un bug.
+ */
+test("en el cruce de meta ningún intervalo queda negativo", () => {
+  const gaps = computeGaps(
+    [
+      car(0, { lapCount: 4, spline: 0.001, best: 90_000 }), // cruzó y el UDP todavía no avisó
+      car(1, { lapCount: 4, spline: 0.998, best: 90_000 }), // viene atrás, misma vuelta
+    ],
+    SESSION_RACE
+  );
+  for (const gap of gaps.values()) {
+    if (gap.aheadMs !== null) assert.ok(gap.aheadMs >= 0, "intervalo negativo");
+    if (gap.leaderMs !== null) assert.ok(gap.leaderMs >= 0, "intervalo negativo contra el líder");
+  }
+});
+
+test("en clasificación el intervalo es la resta de las mejores vueltas, sin estimar nada", () => {
+  const gaps = computeGaps(
+    [car(0, { best: 90_000 }), car(1, { best: 90_500 }), car(2, { best: 92_000 })],
+    SESSION_QUALIFY
+  );
+  assert.equal(gaps.get(1)!.aheadMs, 500);
+  assert.equal(gaps.get(2)!.aheadMs, 1_500);
+  assert.equal(gaps.get(2)!.leaderMs, 2_000);
+});
+
+test("en clasificación, quien no marcó tiempo no tiene intervalo contra nadie", () => {
+  const gaps = computeGaps([car(0, { best: 90_000 }), car(1, { best: null })], SESSION_QUALIFY);
+  assert.equal(gaps.get(1)!.aheadMs, null);
+  assert.equal(gaps.get(1)!.leaderMs, null);
+});
+
+/**
+ * Posiciones e intervalos tienen que salir del mismo orden.
+ *
+ * Es el motivo por el que `rankCars` está extraída. Con dos copias del `sort`, una divergencia
+ * chica —un criterio de desempate distinto— muestra un gap contra un auto que en la tabla aparece
+ * más atrás, y eso es peor que no mostrar nada: el número se lee igual de creíble.
+ */
+test("el intervalo se mide siempre contra el auto que la tabla pone adelante", () => {
+  const cars = [
+    car(0, { lapCount: 4, spline: 0.30, best: 90_000 }),
+    car(1, { lapCount: 4, spline: 0.60, best: 90_000 }),
+    car(2, { lapCount: 5, spline: 0.10, best: 90_000 }),
+    car(3, { lapCount: 4, spline: 0.45, best: 90_000, connected: false }),
+  ];
+  const positions = computeStandings(cars, SESSION_RACE);
+  const gaps = computeGaps(cars, SESSION_RACE);
+
+  // Cada auto con posición tiene gap, y solo esos.
+  assert.deepEqual([...gaps.keys()].sort(), [...positions.keys()].sort());
+  // El primero de la tabla es el único sin nadie adelante.
+  const lider = [...positions.entries()].find(([, pos]) => pos === 1)![0];
+  for (const [carId, gap] of gaps) {
+    if (carId === lider) assert.equal(gap.aheadMs, null);
+    else assert.ok(gap.aheadMs !== null, `el auto ${carId} no tiene contra quién medirse`);
+  }
 });
 
 test("la marca se deduce del nombre del modelo, con y sin prefijo de Kunos", () => {

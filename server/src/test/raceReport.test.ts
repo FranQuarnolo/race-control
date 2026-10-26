@@ -104,6 +104,58 @@ test("una sanción escalada a DQ marca al piloto como descalificado", () => {
   assert.equal(r.classification[0].disqualified, true);
 });
 
+/**
+ * La mitad que importa de poder anular.
+ *
+ * Si los segundos de una sanción anulada siguieran sumando en el informe, el botón solo cambiaría
+ * una etiqueta en la pantalla: el piloto igual perdería el puesto en la planilla del campeonato,
+ * que es el único lugar donde la sanción tiene consecuencias de verdad.
+ */
+test("una sanción anulada no suma al resultado, pero sigue escrita en el informe", () => {
+  const r = report({
+    cars: [car({ carId: 1 })],
+    penalties: [
+      [
+        "steward",
+        [
+          penalty({ id: "P1", driverGuid: "guid-1", type: "TIME", timePenaltySeconds: 5, status: "served" }),
+          penalty({
+            id: "P2",
+            driverGuid: "guid-1",
+            type: "TIME",
+            timePenaltySeconds: 30,
+            status: "revoked",
+            revokedFrom: "served",
+            revokedAt: 2000,
+          }),
+          penalty({ id: "P3", driverGuid: "guid-1", type: "DT", status: "revoked", revokedFrom: "servingWindow" }),
+        ],
+      ],
+    ],
+  });
+  assert.equal(r.classification[0].timePenaltySeconds, 5);
+  // La DT anulada tampoco queda como deuda: no hay nada que el admin tenga que decidir sobre ella.
+  assert.equal(r.classification[0].unservedPenalties, 0);
+  // Y las tres siguen en la lista, que es lo que permite auditar la corrección.
+  assert.equal(r.penalties.length, 3);
+  assert.equal(r.penalties.filter((p) => p.status === "Anulada").length, 2);
+});
+
+test("un DQ anulado deja de descalificar", () => {
+  // Es el caso en que el registro y la realidad no coinciden: el kick ya se ejecutó. Lo que la
+  // clasificación tiene que reflejar es la decisión final del comisario, no el kick.
+  const r = report({
+    cars: [car({ carId: 1 })],
+    penalties: [
+      [
+        "pit",
+        [penalty({ id: "P1", driverGuid: "guid-1", status: "revoked", revokedFrom: "escalated", escalatedTo: "DQ" })],
+      ],
+    ],
+  });
+  assert.equal(r.classification[0].disqualified, false);
+});
+
 test("el circuito y la variante se muestran como los lee una persona", () => {
   const r = report({ cars: [car({ carId: 1 })] });
   assert.equal(r.track, "Barcelona · GP");

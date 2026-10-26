@@ -113,6 +113,25 @@ button {
 
 button:disabled { opacity: 0.55; cursor: progress; }
 
+/* Campo con un botón adentro, para el "Ver" de la contraseña. El botón va dentro del borde del
+   campo y no debajo porque la acción pertenece al campo: puesto afuera se lee como un segundo
+   control del formulario, al lado de "Entrar", que es justo lo que no es. */
+.campo-con-boton { position: relative; display: flex; align-items: center; }
+.campo-con-boton input { padding-right: 68px; }
+.campo-con-boton button {
+  position: absolute;
+  right: 5px;
+  margin-top: 0;
+  width: auto;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.campo-con-boton button:hover { color: var(--text); border-color: var(--accent); }
+
 /* Los botones de una tabla no pueden ocupar el ancho completo ni empujar la fila. */
 button.compacto {
   margin-top: 0;

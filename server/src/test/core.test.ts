@@ -1,6 +1,8 @@
 import { strict as assert } from "assert";
 import * as dgram from "dgram";
 import * as fs from "fs";
+import * as http from "http";
+import { AddressInfo } from "net";
 import * as os from "os";
 import * as path from "path";
 import { test } from "node:test";
@@ -87,6 +89,42 @@ test("stop() libera el puerto UDP, así que la misma liga puede reiniciarse en c
   });
   segunda.stop();
   fs.rmSync(primera.dataDir, { recursive: true, force: true });
+});
+
+/**
+ * Anular una sanción, de punta a punta.
+ *
+ * Los tests del motor ya cubren la máquina de estados; lo que acá se comprueba es lo único que el
+ * panel ve: que la ruta encuentre la sanción sin que le digan de qué motor salió, y que
+ * `/api/state` la devuelva anulada en el poll siguiente.
+ */
+test("se puede anular una sanción desde la API y el estado lo refleja", async () => {
+  const { rc, dataDir } = await levantar("anular", 12650, 13650);
+  // `createRaceControl` arma la app pero no escucha: quien abre el puerto es el entry. Acá se abre
+  // en uno efímero para no chocar con nada.
+  const server = http.createServer(rc.adminApp);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    const p = rc.stewardPenaltyEngine.issuePenalty(4, "guid-4", "Comisario: toque en la curva 1", "TIME", {
+      timePenaltySeconds: 10,
+    });
+
+    const res = await fetch(`${base}/api/penalties/${p.id}/revoke`, { method: "POST" });
+    assert.equal(res.status, 200);
+    assert.equal(((await res.json()) as any).penalty.status, "revoked");
+
+    const state = (await (await fetch(`${base}/api/state`)).json()) as any;
+    assert.equal(state.stewardPenalties.length, 1, "la anulada sigue en la lista");
+    assert.equal(state.stewardPenalties[0].status, "revoked");
+
+    // El doble click en el botón tiene que dar un error que se pueda leer, no un 500.
+    const repetida = await fetch(`${base}/api/penalties/${p.id}/revoke`, { method: "POST" });
+    assert.equal(repetida.status, 404);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    limpiar(rc, dataDir);
+  }
 });
 
 test("stop() deja de escuchar: lo que llegue después no se procesa", async () => {
