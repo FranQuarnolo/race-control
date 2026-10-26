@@ -245,10 +245,12 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // falta. `SESSION_INFO` es la respuesta a una consulta nuestra; `NEW_SESSION` llega solo.
   const sessionTracker = new SessionTracker();
   udpClient.on("SESSION_INFO", (data: SessionInfo) => sessionTracker.onSessionInfo(data));
-  // El servidor no reenvía las condiciones por su cuenta: sin preguntar cada tanto, el tiempo
-  // corrido se extrapola contra el reloj local y se va desfasando durante toda la carrera.
-  const sessionPoll = setInterval(() => udpClient.requestSessionInfo(), 30_000);
-  sessionPoll.unref();
+  // Acá vivía un `setInterval` propio que pedía `SESSION_INFO` cada 30 segundos, porque el
+  // servidor no reenvía las condiciones solo y el tiempo corrido se desfasa si no se pregunta.
+  // Eso ahora lo hace el latido de `ConnectivityManager`, cada 5 segundos y en el mismo tick que
+  // el `setRealtimePosInterval`. Son el mismo pedido con dos motivos distintos —refrescar el
+  // reloj de la sesión y probar que el servidor sigue ahí— y tenerlo dos veces a dos cadencias
+  // distintas era la clase de duplicación que termina en que alguien cambia una sola.
   udpClient.on("NEW_SESSION", (data: SessionInfo) => {
     journal.log("ac.newSession", { track: data.track, sessionType: data.sessionType, name: data.name });
     sessionTracker.onSessionInfo(data);
@@ -649,7 +651,6 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     clientApp,
     ports: { ...activePorts },
     stop() {
-      clearInterval(sessionPoll);
       clearInterval(trackFlushTimer);
       if (retentionTimer) clearInterval(retentionTimer);
       pitSpeedMonitor.stop();

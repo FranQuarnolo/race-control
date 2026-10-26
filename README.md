@@ -7,8 +7,8 @@ una sola pantalla.
 - 🟢 **Largada en movimiento**, controlada automáticamente.
 - ⏱️ **Torre de tiempos en vivo** con posiciones, el intervalo con el de adelante —o con el líder, a
   un click—, sectores, neumáticos, combustible y ping.
-- 🗺️ **Mapa del circuito en tiempo real**, que se dibuja solo a medida que se corre, con la zona de
-  boxes marcada encima.
+- 🗺️ **Mapa del circuito en tiempo real**, dibujado desde el primer segundo —198 circuitos vienen
+  incluidos— con la zona de boxes marcada encima.
 - 💥 **Bandeja de incidentes**: toques entre autos, choques contra el muro, salidas de pista y
   contramano, con el contexto de cada uno. **Reporta, no sanciona**: eso lo decidís vos.
 - 🚩 **Sanciones** de pit lane y largada automáticas, y las del comisario a un click. Todas se
@@ -60,14 +60,6 @@ descarga es la app de los pilotos.
 Nada más — ni una IP que tipear, ni un archivo que editar. El servidor le manda sola la dirección
 y una credencial por el chat del juego apenas entrás. 🎮
 
-> Si alguna vez te aparece **"Credencial vencida: volvé a entrar al servidor"**, es literal: salí y
-> volvé a entrar, y la app recibe una credencial nueva. Duran 24 horas.
-
-> De fábrica la app es obligatoria: quien entre sin ella es expulsado al minuto. Se puede apagar
-> esa exigencia en **Reglas → App de los pilotos**, y entonces ese piloto aparece en la torre con
-> posición, velocidad, vueltas y tiempos —todo lo que manda el servidor— y guiones en sectores,
-> neumáticos y combustible. Esos datos solo los tiene el juego en la PC de cada uno.
-
 ## 🖥️ Para el admin: qué hay adentro del panel
 
 - **Control de carrera**: los botones de largada, la torre de tiempos y el mapa en vivo. Si se corta
@@ -82,13 +74,3 @@ y una credencial por el chat del juego apenas entrás. 🎮
   cuando algo no cierra.
 - **Modo sombra**: 🛡️ **recomendado para las primeras carreras**. El sistema registra todo pero no
   sanciona a nadie en serio, así podés chequear que funcione antes de confiar en él del todo.
-
-## 📚 Documentación
-
-| Documento | De qué trata |
-|---|---|
-| [PUESTA-EN-MARCHA.md](PUESTA-EN-MARCHA.md) | Cómo poner a punto cada cosa y cómo funciona, de punta a punta |
-| [docs/portal.md](server/docs/portal.md) | Arquitectura del portal: supervisor, workers, puertos, autenticación |
-| [docs/operacion.md](server/docs/operacion.md) | Manual de operación: crear ligas, desplegar, leer logs, restaurar |
-| [docs/seguridad.md](server/docs/seguridad.md) | Modelo de amenazas y qué queda explícitamente aceptado |
-| [CHANGELOG.md](CHANGELOG.md) | Cada decisión de diseño, con el porqué y no solo el qué |

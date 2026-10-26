@@ -44,7 +44,17 @@ export interface DiagnosticsInput {
   contact?: string;
 }
 
-const TELEMETRY_FRESH_MS = 5000;
+/**
+ * El mismo silencio que tolera `ConnectivityManager`, y por el mismo motivo.
+ *
+ * Con la pista vacía el servidor de AC no manda nada por su cuenta: lo único que llega es la
+ * respuesta al latido (`GET_SESSION_INFO`), cada 5 segundos. Una ventana más corta que eso hacía
+ * que el diagnóstico contestara "Bien" o "Falla" según el instante en que se tocara el botón.
+ *
+ * Tiene que seguir siendo igual al de `connectivity.ts`: si no, el botón de la barra y el
+ * diagnóstico dirían cosas distintas sobre exactamente lo mismo.
+ */
+const TELEMETRY_FRESH_MS = 15000;
 
 /**
  * Cómo se le dice al admin que nos avise.

@@ -164,6 +164,55 @@ el del chat, así que no hay forma de que el modo sombra silencie uno y deje pas
 sobre su propia app y es asunto del comisario — decírsela al sospechoso solo le avisaría que lo
 están mirando.
 
+### Lo que no cambió, y por qué
+
+**La biblioteca de logos de marcas no hacía falta.** Ya hay 127 SVG empaquetados, incluido el de
+Mercedes-Benz. El problema era la ruta, no el catálogo.
+
+---
+
+## [0.9] — 2026-10-26
+
+La 0.8 nunca llegó a desplegarse: todo lo de arriba sale a producción con esta. Lo que se sumó
+encima es una tanda de detalles de la torre de tiempos y **un bug de red que hacía parecer que el
+servidor se caía solo cada treinta segundos**.
+
+### El panel decía "Sin señal" con el servidor perfecto
+
+**El síntoma:** con el servidor de Assetto Corsa andando y conectado, el botón de la barra
+parpadeaba. Verde un ratito, rojo un rato largo, verde otra vez. En loop, sin que pasara nada.
+
+**La causa es aritmética, y estaba repartida en dos archivos.** Con nadie manejando, el servidor
+de AC **no manda un solo paquete por su cuenta**: todo su tráfico es telemetría de autos en pista.
+Lo único que llegaba con la pista vacía era la respuesta a nuestro `GET_SESSION_INFO`, que se
+pedía **cada 30 segundos**. Y la ventana que decide "¿me está llegando señal?" era de **5**.
+
+Cinco segundos en verde, veinticinco en rojo. El admin veía su servidor caerse y levantarse solo,
+cada medio minuto, con todo funcionando.
+
+**El arreglo son dos números y una consolidación:**
+
+- El latido bajó de 30 a **5 segundos**, y pasó a vivir en el mismo tick que el keepalive de
+  posiciones, en `ConnectivityManager`. Antes eran dos temporizadores distintos, en dos archivos,
+  mandando pedidos al mismo servidor a cadencias distintas — la clase de duplicación que termina
+  en que alguien cambia una sola.
+- La ventana de silencio subió de 5 a **15 segundos**, que son tres latidos. Hay que perder tres
+  respuestas seguidas para que el panel se ponga en rojo, así que un datagrama perdido —que en UDP
+  pasa— ya no se ve como una caída.
+
+Y queda **más** sensible a una desconexión de verdad, no menos: la ventana de 5 s medida contra un
+latido de 30 no detectaba absolutamente nada; ahora una caída real aparece en 15 segundos.
+
+**`GET_SESSION_INFO` como latido, y no un ping inventado.** El protocolo de plugins de AC no tiene
+un ping. Lo que sí tiene es un pedido que el servidor contesta **siempre**, haya o no alguien en
+pista, y esa respuesta ya hacía falta por otro motivo: sin ella el reloj de la sesión se extrapola
+contra el reloj local y se desfasa durante toda la carrera. Un solo mecanismo para las dos cosas.
+
+**Una invariante nueva (`connectivity.test.ts`).** El test lee las constantes del `dist/` y exige
+que la ventana de silencio sea al menos tres latidos, y que `connectivity.js` y `diagnostics.js`
+usen exactamente el mismo número. Si mañana alguien sube el latido sin tocar la ventana, vuelve
+este bug, y vuelve en silencio — porque todo "funciona".
+
 ### Cinco detalles de la torre de tiempos
 
 Los cinco salen de mirar el panel durante una carrera real. Ninguno es un bug; los cinco son
@@ -215,10 +264,15 @@ construye `createCarRow` en vivo, con las clases escritas a mano en un string. E
 "PIT" y los badges viven ahí. Una errata en ese string no rompe nada —el elemento se dibuja igual,
 sin formato— que es exactamente la familia de bugs que este archivo persigue.
 
-### Lo que no cambió, y por qué
+### El README adelgaza
 
-**La biblioteca de logos de marcas no hacía falta.** Ya hay 127 SVG empaquetados, incluido el de
-Mercedes-Benz. El problema era la ruta, no el catálogo.
+Se le sacó la sección de documentación: el README es la puerta de entrada de quien va a usar el
+producto, no el índice del repositorio. Los documentos siguen donde estaban y enlazados desde
+donde corresponde. También se fue el párrafo sobre credenciales vencidas y sobre la exigencia de
+la app: son detalles de operación que ya viven en `client-app/README.md` y en el propio panel, y
+en la primera página solo agregaban una preocupación antes de tener el producto andando.
+
+### Lo que no cambió, y por qué
 
 **La sección "Cómo conectar tu servidor" se queda donde está.** La pregunta era si no alcanzaba
 con el botón que arma el mensaje para el soporte del hosting, dejando "Revisar ahora" adelante. No

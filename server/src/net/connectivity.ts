@@ -33,13 +33,36 @@ export interface NetworkStatus {
 /** Cuánto se espera el primer paquete antes de decir que no está llegando nada. */
 const TELEMETRY_WAIT_MS = 8000;
 /**
- * Cada cuánto se repite el `setRealtimePosInterval`.
+ * Cada cuánto se le habla al servidor de Assetto Corsa.
  *
- * No es solo un keepalive: si el servidor de Assetto Corsa se reinicia —que es exactamente lo que
- * el admin hace después de pegar el Send Address— arranca sin saber cada cuánto tiene que mandar
- * las posiciones. Sin esta repetición habría que reiniciar también la liga.
+ * Son dos cosas en el mismo tick y las dos importan:
+ *
+ * - **`setRealtimePosInterval`** no es solo un keepalive: si el servidor se reinicia —que es
+ *   exactamente lo que el admin hace después de pegar el Send Address— arranca sin saber cada
+ *   cuánto tiene que mandar las posiciones. Sin esta repetición habría que reiniciar la liga.
+ * - **`requestSessionInfo`** es el latido. El servidor **siempre** contesta un `GET_SESSION_INFO`
+ *   con un `SESSION_INFO`, haya o no alguien manejando, y esa respuesta es lo único que mantiene
+ *   vivo el "está conectado" cuando la pista está vacía. Ver `SILENCIO_TOLERADO_MS`.
  */
-const KEEPALIVE_INTERVAL_MS = 20000;
+const KEEPALIVE_INTERVAL_MS = 5000;
+/**
+ * Cuánto silencio se tolera antes de decir "sin señal".
+ *
+ * **El bug que esto arregla.** Con el servidor andando y la pista vacía, el panel parpadeaba
+ * entre "Conectado" y "Sin señal" cada medio minuto. La causa era aritmética: el único paquete
+ * que llegaba con nadie en pista era la respuesta al `GET_SESSION_INFO`, que se pedía **cada 30
+ * segundos**, y la ventana de frescura era de **5**. O sea: cinco segundos en verde y veinticinco
+ * en rojo, en loop, con todo funcionando perfecto. El admin veía su servidor caerse y levantarse
+ * solo cada treinta segundos.
+ *
+ * Son dos arreglos y hacen falta los dos. El latido bajó a 5 s (`KEEPALIVE_INTERVAL_MS`) y la
+ * ventana subió a 15, que son tres latidos: así hay que perder tres respuestas seguidas para que
+ * el panel se ponga en rojo, y un datagrama perdido —que en UDP pasa— no se ve como una caída.
+ *
+ * Y es **más** sensible que antes a una desconexión de verdad, no menos: antes la ventana de 5 s
+ * se medía contra un latido de 30, así que no detectaba nada; ahora detecta una caída real en 15.
+ */
+const SILENCIO_TOLERADO_MS = 15000;
 
 export class ConnectivityManager {
   private status: NetworkStatus = {
@@ -65,13 +88,11 @@ export class ConnectivityManager {
   /** No bloquea el arranque: la espera del primer paquete corre en segundo plano y va
    * actualizando el estado que expone /api/state, que el panel ya consulta por polling. */
   async start(): Promise<void> {
-    this.keepaliveTimer = setInterval(() => {
-      try {
-        this.udpClient.setRealtimePosInterval(200);
-      } catch {
-        // best-effort: si falla, el próximo tick reintenta solo.
-      }
-    }, KEEPALIVE_INTERVAL_MS);
+    this.keepaliveTimer = setInterval(() => this.latir(), KEEPALIVE_INTERVAL_MS);
+    this.keepaliveTimer.unref();
+    // Y uno de entrada, sin esperar los primeros 5 segundos: es lo que hace que la pantalla de
+    // puesta en marcha se ponga verde apenas el servidor existe, en vez de un tick después.
+    this.latir();
 
     this.esperarPrimerPaquete().catch((err) => console.error("[connectivity] error esperando telemetría:", err));
   }
@@ -80,11 +101,21 @@ export class ConnectivityManager {
     if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
   }
 
+  /** Un latido: reafirma el streaming de posiciones y pide algo que el servidor siempre contesta. */
+  private latir(): void {
+    try {
+      this.udpClient.setRealtimePosInterval(200);
+      this.udpClient.requestSessionInfo();
+    } catch {
+      // best-effort: si falla, el próximo tick reintenta solo.
+    }
+  }
+
   /** Refresca "¿nos está llegando señal AHORA?" — para que el panel pueda avisar si la señal se
    * corta a mitad de una carrera ya en curso. */
   refreshTelemetryFlag(): void {
     const stats = this.udpClient.getStats();
-    this.status.receivingTelemetry = stats.lastPacketAt > 0 && Date.now() - stats.lastPacketAt < 5000;
+    this.status.receivingTelemetry = stats.lastPacketAt > 0 && Date.now() - stats.lastPacketAt < SILENCIO_TOLERADO_MS;
     this.status.lastCheckedAt = Date.now();
   }
 

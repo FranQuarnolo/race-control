@@ -58,10 +58,10 @@ export interface AdminApiDeps {
 const TELEMETRY_STALE_MS = 2000;
 
 /** Versión de producto. Las versiones son de dos números (0.3, 0.4, … 1.0); el tercero aparece
- * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
- * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
- * esto no había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.8";
+ * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
+ * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
+ * había forma de saber qué build está corriendo quien reporta un problema. */
+export const APP_VERSION = "0.9";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -127,31 +127,31 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       cars: connected.map((car) => {
         const telemetry = deps.telemetryStore.get(car.driverGuid);
         return {
-        ...car,
-        position: standings.get(car.carId) ?? null,
-        /** Marca deducida del nombre del modelo, y el archivo de logo que le corresponde en la
-         * biblioteca empaquetada. `brandLogo: null` = no hay logo para esa marca y el panel
-         * dibuja el escudo con monograma, sin pedir una imagen que va a dar 404. */
-        brand: brandOf(car.carModel),
-        brandLogo: brandSlug(brandOf(car.carModel)),
-        telemetryStale: car.lastUpdate === 0 || now - car.lastUpdate > TELEMETRY_STALE_MS,
-        /** Intervalo con el de adelante y con el líder, en ms. `null` donde no hay nada que medir
-         * —el líder, o nadie con una vuelta cerrada todavía— y `lapsDown > 0` cuando está doblado,
-         * que es cuando los milisegundos dejan de significar algo. Ver `computeGaps`. */
-        gapAheadMs: gaps.get(car.carId)?.aheadMs ?? null,
-        gapLeaderMs: gaps.get(car.carId)?.leaderMs ?? null,
-        lapsDown: gaps.get(car.carId)?.lapsDown ?? 0,
-        /** Round-trip de la app del piloto contra el backend. `null` = no tiene la app reportando. */
-        pingMs: deps.presenceWatchdog.getPing(car.driverGuid),
-        /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
-         * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
-        telemetry,
-        /** Vueltas que el servidor le invalidó por irse de pista, en esta sesión. A diferencia de
-         * casi todo lo demás de esta fila, llega **siempre**: sale del `LAP_COMPLETED` del
-         * servidor dedicado y no depende de que el piloto tenga la app. */
-        cuts: deps.trackLimits.getCuts(car.driverGuid),
-        /** Si el auto está en el pit lane. Ver `estaEnPit`. */
-        inPit: estaEnPit(car, telemetry, deps.config.pit.zone),
+          ...car,
+          position: standings.get(car.carId) ?? null,
+          /** Marca deducida del nombre del modelo, y el archivo de logo que le corresponde en la
+           * biblioteca empaquetada. `brandLogo: null` = no hay logo para esa marca y el panel
+           * dibuja el escudo con monograma, sin pedir una imagen que va a dar 404. */
+          brand: brandOf(car.carModel),
+          brandLogo: brandSlug(brandOf(car.carModel)),
+          telemetryStale: car.lastUpdate === 0 || now - car.lastUpdate > TELEMETRY_STALE_MS,
+          /** Intervalo con el de adelante y con el líder, en ms. `null` donde no hay nada que medir
+           * —el líder, o nadie con una vuelta cerrada todavía— y `lapsDown > 0` cuando está doblado,
+           * que es cuando los milisegundos dejan de significar algo. Ver `computeGaps`. */
+          gapAheadMs: gaps.get(car.carId)?.aheadMs ?? null,
+          gapLeaderMs: gaps.get(car.carId)?.leaderMs ?? null,
+          lapsDown: gaps.get(car.carId)?.lapsDown ?? 0,
+          /** Round-trip de la app del piloto contra el backend. `null` = no tiene la app reportando. */
+          pingMs: deps.presenceWatchdog.getPing(car.driverGuid),
+          /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
+           * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
+          telemetry,
+          /** Vueltas que el servidor le invalidó por irse de pista, en esta sesión. A diferencia de
+           * casi todo lo demás de esta fila, llega **siempre**: sale del `LAP_COMPLETED` del
+           * servidor dedicado y no depende de que el piloto tenga la app. */
+          cuts: deps.trackLimits.getCuts(car.driverGuid),
+          /** Si el auto está en el pit lane. Ver `estaEnPit`. */
+          inPit: estaEnPit(car, telemetry, deps.config.pit.zone),
         };
       }),
       formationPenalties: deps.formationPenaltyEngine.getAll(),
