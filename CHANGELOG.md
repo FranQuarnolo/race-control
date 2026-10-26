@@ -164,10 +164,69 @@ el del chat, así que no hay forma de que el modo sombra silencie uno y deje pas
 sobre su propia app y es asunto del comisario — decírsela al sospechoso solo le avisaría que lo
 están mirando.
 
+### Cinco detalles de la torre de tiempos
+
+Los cinco salen de mirar el panel durante una carrera real. Ninguno es un bug; los cinco son
+cosas que la pantalla no terminaba de decir.
+
+**"L4" en vez de "4".** La columna de vueltas queda entre tiempos y velocidades, todos números. Un
+"4" pelado no se lee como vueltas hasta que uno sube la vista al encabezado.
+
+**"PIT" en la columna de velocidad.** En boxes la velocidad no dice nada —va a 40, o a 0— y lo que
+el admin necesita saber es por qué ese auto se descolgó de la clasificación. Hasta ahora la fila
+se pintaba de ámbar **solo** con `telemetry.inPitLane`, que sale de la Shared Memory del juego y
+por lo tanto existe únicamente si el piloto tiene la app. En una liga donde nadie la tiene —el
+caso normal al empezar— no se veía nunca a nadie en boxes.
+
+Ahora hay dos fuentes, en orden: la app del piloto cuando está, y la **zona de pit configurada**
+cuando no. Es la misma zona que ya usan `PitSpeedMonitor` y `PitComplianceTracker` para sancionar,
+a propósito: si el panel dijera PIT con una definición propia, el admin vería a alguien "en boxes"
+al que el motor no le mide la velocidad de pit, y calibraría la zona mirando un dibujo que miente.
+
+Lo que se descartó: deducirlo de "velocidad 0 por mucho tiempo", que es lo intuitivo. Un abandono
+en la grava también está parado, y es justo el caso en el que hace falta ver que **no** es una
+parada en boxes.
+
+**La columna de Ping desaparece cuando nadie la puede llenar.** Decía "sin app" en rojo en cada
+fila. El ping no viene del servidor de Assetto Corsa —el protocolo UDP no transporta ese dato, ni
+el nuestro ni el de ningún plugin— sino que es el round-trip de la app del piloto contra Race
+Control. Sin app no hay número posible, así que veinte celdas rojas no informaban nada y hacían
+parecer roto algo que simplemente no aplica. Cuando al menos un piloto reporta, la columna vuelve.
+
+**El kick se mudó adentro de un menú de tres puntitos.** Un botón "Expulsar" visible en veinte
+filas de una tabla que se reordena sola es un accidente esperando que alguien mueva el mouse en el
+momento equivocado. La doble confirmación sigue igual, y con el menú cerrado queda un punto rojo
+sobre los puntitos: es lo único que avisa que hay un kick a medio confirmar.
+
+El menú se cuelga del `<body>` con `position: fixed`, no de la celda. La tabla vive adentro de un
+contenedor con `overflow: auto` en los dos ejes, así que un popup dentro de la fila quedaría
+recortado por el scroll — y justo en la última fila, que es donde más se usa.
+
+**"Ningún piloto con la app", al lado del título de la torre.** Es la respuesta a "los neumáticos
+y los sectores no me aparecen". No era un bug: Sectores, Box, Neum., Comb. y Ping salen todos del
+mismo lado —la app que instala cada piloto— y sin ella quedan en guiones para siempre. El cajón de
+Conexión ya lo decía bien, en "Pilotos con la app reportando", y nadie abre ese cajón. Ahora el
+aviso está donde se nota el síntoma, en gris y no en rojo —no es una falla, es una pieza que
+todavía no está instalada— y clickearlo abre el diagnóstico.
+
+**Una invariante nueva en `panel.test.ts`.** El test que verifica que toda clase tenga al menos
+una regla CSS solo miraba `index.html`, y la torre de tiempos no está en el HTML: cada fila la
+construye `createCarRow` en vivo, con las clases escritas a mano en un string. El menú nuevo, el
+"PIT" y los badges viven ahí. Una errata en ese string no rompe nada —el elemento se dibuja igual,
+sin formato— que es exactamente la familia de bugs que este archivo persigue.
+
 ### Lo que no cambió, y por qué
 
 **La biblioteca de logos de marcas no hacía falta.** Ya hay 127 SVG empaquetados, incluido el de
 Mercedes-Benz. El problema era la ruta, no el catálogo.
+
+**La sección "Cómo conectar tu servidor" se queda donde está.** La pregunta era si no alcanzaba
+con el botón que arma el mensaje para el soporte del hosting, dejando "Revisar ahora" adelante. No
+alcanza: hay hostings donde el campo **Send Address** está a la vista y se completa en diez
+segundos sin hablar con nadie, y para esos el ticket de soporte es una espera de dos días que no
+hacía falta. El manual primero y el diagnóstico después sigue siendo el orden correcto para quien
+abre ese cajón por primera vez, que es cuando las cuatro filas de estado dicen "--" y no
+significan nada todavía.
 
 ---
 

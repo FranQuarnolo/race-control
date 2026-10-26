@@ -273,9 +273,16 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   aviso sonoro para todos los pilotos que tengan la app. Desde la **0.8** se atenúa y se
   deshabilita en práctica y clasificación, porque la largada es cosa de la carrera. "Reiniciar"
   queda siempre disponible: es la salida de emergencia.
-- **La torre de tiempos**: posición, auto, velocidad, vueltas, **Fuera** (las vueltas que el
+- **La torre de tiempos**: posición, auto, velocidad, vueltas (`L4`), **Fuera** (las vueltas que el
   servidor le invalidó por irse de pista), sectores, última y mejor vuelta, paradas, compuesto,
-  combustible y ping. Un click en un piloto lo resalta en el mapa.
+  combustible y ping. Un click en un piloto lo resalta en el mapa; los tres puntitos del final de
+  la fila abren el kick, que pide confirmación. En la columna de velocidad aparece **PIT** cuando
+  el auto está en el pit lane.
+
+  Cinco de esas columnas —Sectores, Box, Neum., Comb. y Ping— **solo las puede llenar la app del
+  piloto**: son datos de la Shared Memory del juego y el protocolo UDP del servidor no los
+  transporta. Si ningún piloto la tiene, la columna de Ping no se muestra y al lado del título
+  aparece una chapa gris que dice **"ningún piloto con la app"**; clickearla abre el diagnóstico.
 - **El mapa en vivo**: el circuito viene dibujado. Desde la **0.8** los trazados viajan con Race
   Control, así que el mapa sale completo apenas el servidor dice en qué pista está, sin esperar a
   que nadie dé vueltas. Al lado del reloj hay una chapa que dice **P**, **Q** o **R** según el tipo
@@ -369,6 +376,7 @@ dist/sim/demo.js` levanta el panel con una carrera inventada adentro, en
 | Todo verde y el servidor igual descarta | El hosting tiene allowlist de IPs para el plugin UDP | Agregar la IP del servidor a esa lista. Falla en silencio |
 | Una liga aparece "con problemas" | `EADDRINUSE` (worker zombi) o cinco caídas seguidas | `fly logs \| grep "liga:"` |
 | Un piloto no aparece con sus sectores | No tiene la app, o le venció la credencial | Que salga y vuelva a entrar al servidor |
+| **Nadie** tiene sectores, neumáticos ni combustible | Ningún piloto tiene la app reportando. El panel lo dice con la chapa "ningún piloto con la app" | Primero confirmar que la app está instalada; si está, es que no llega el anuncio por chat — revisar "Órdenes hacia el servidor" en el diagnóstico |
 | El admin no puede entrar | Cuenta desactivada, o la contraseña vieja tras un reset | La columna de estado en `/operador` |
 
 Adentro del panel hay un diagnóstico propio: **Conexión → "¿Algo anda mal?" → "Revisar ahora"**.

@@ -121,6 +121,7 @@ const CAMPOS_DERIVADOS = [
   "gapAheadMs",
   "gapLeaderMs",
   "cuts",
+  "inPit",
 ];
 
 test("el panel usa todos los campos que /api/state calcula para él", () => {
@@ -242,6 +243,37 @@ test("toda clase del panel tiene al menos una regla que la alcance", () => {
     `index.html usa clases que no tienen una sola regla en styles.css. No hay error ni consola: ` +
       `eso se ve como contenido sin formato y nada más: ${huerfanas.join(", ")}`
   );
+});
+
+/**
+ * Lo mismo, pero para las clases que arma el JS.
+ *
+ * El test de arriba solo ve `index.html`, y la torre de tiempos no está en el HTML: cada fila la
+ * construye `createCarRow` en vivo. Ahí viven el menú de tres puntitos, el "PIT" de la columna de
+ * velocidad y los badges, todos con clases escritas a mano en un string. Una errata en ese string
+ * no rompe nada: el elemento se dibuja igual, sin formato, en medio de una tabla formateada.
+ */
+test("toda clase que el panel arma en JS tiene al menos una regla", () => {
+  const js = leer(PANEL, "app.js");
+  const css = sinComentarios(leer(PANEL, "styles.css"));
+
+  const conRegla = new Set<string>();
+  for (const [, clase] of css.matchAll(/\.([a-zA-Z][\w-]*)/g)) conRegla.add(clase);
+
+  const asignadas = new Set<string>();
+  for (const [, lista] of js.matchAll(/\.className\s*=\s*"([^"]*)"/g)) {
+    for (const clase of lista.trim().split(/\s+/)) if (clase) asignadas.add(clase);
+  }
+
+  const huerfanas = [...asignadas].filter((c) => !conRegla.has(c)).sort();
+  assert.deepEqual(
+    huerfanas,
+    [],
+    `app.js le pone estas clases a elementos que crea, y la hoja no tiene ninguna regla que las ` +
+      `alcance. El elemento se dibuja igual, sin estilo y sin un solo error: ${huerfanas.join(", ")}`
+  );
+
+  assert.ok(asignadas.size > 10, `Solo encontré ${asignadas.size} clases en JS: el regex quedó viejo`);
 });
 
 /**

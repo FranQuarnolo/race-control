@@ -5,7 +5,8 @@ import { ACTION_LABELS, AUTO_PENALTY_ALLOWED, PRESETS, PresetName } from "../inc
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
-import { StateTracker } from "../state/stateTracker";
+import { CarState, StateTracker } from "../state/stateTracker";
+import { PitZone } from "../instances/pitSpeeding";
 import { ConnectivityManager } from "../net/connectivity";
 import { runDiagnostics, summarize } from "../net/diagnostics";
 import { AcUdpClient } from "../udp/client";
@@ -13,7 +14,7 @@ import { Incident, IncidentEngine } from "../incident/incidentEngine";
 import { SessionTracker } from "../session/sessionInfo";
 import { TrackLearner } from "../track/trackLearner";
 import { TrackLimitsTracker } from "../track/trackLimits";
-import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
+import { DriverTelemetry, DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { brandOf, brandSlug } from "../cars/carBadges";
 import { computeGaps, computeStandings } from "../state/standings";
 import { buildReport, reportFileName, toCsv } from "../report/raceReport";
@@ -63,6 +64,27 @@ const TELEMETRY_STALE_MS = 2000;
 export const APP_VERSION = "0.8";
 
 /**
+ * Si el auto está en el pit lane. Dos fuentes, en este orden:
+ *
+ * 1. **La app del piloto**, cuando la tiene. `inPitLane` sale de la Shared Memory del juego, así
+ *    que es el dato exacto: lo sabe el juego, no lo deducimos nosotros.
+ * 2. **La zona de pit configurada**, cuando no. Es el mismo rango de `normalizedSplinePosition`
+ *    que ya usan `PitSpeedMonitor` y `PitComplianceTracker`, y usar el mismo criterio es a
+ *    propósito: si el panel dijera PIT con una definición propia, el admin vería a alguien "en
+ *    boxes" al que el motor no le mide la velocidad de pit, y calibraría la zona a ciegas.
+ *
+ * Por qué no se deduce de "velocidad 0 por mucho tiempo", que sería lo intuitivo: un auto
+ * detenido en la grava después de un despiste también tiene velocidad 0 por mucho tiempo, y es
+ * justo el caso en el que el admin necesita ver que NO está en boxes.
+ */
+export function estaEnPit(car: CarState, telemetry: DriverTelemetry | null, zone: PitZone): boolean {
+  if (telemetry) return telemetry.inPitLane;
+  // Zona inválida (fin <= inicio): no inventar. El panel ya avisa aparte que está mal definida.
+  if (!(zone.splineEnd > zone.splineStart)) return false;
+  return car.normalizedSplinePosition >= zone.splineStart && car.normalizedSplinePosition <= zone.splineEnd;
+}
+
+/**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
  * a internet. Los endpoints que sí necesitan ser alcanzables desde afuera (cliente Python) viven
  * en clientApi.ts, en un puerto/listener separado.
@@ -102,7 +124,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       shadowMode: deps.config.shadowMode,
       lightState: deps.formationStart.getLightState(),
       phase: deps.getPhase(),
-      cars: connected.map((car) => ({
+      cars: connected.map((car) => {
+        const telemetry = deps.telemetryStore.get(car.driverGuid);
+        return {
         ...car,
         position: standings.get(car.carId) ?? null,
         /** Marca deducida del nombre del modelo, y el archivo de logo que le corresponde en la
@@ -121,12 +145,15 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         pingMs: deps.presenceWatchdog.getPing(car.driverGuid),
         /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
          * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
-        telemetry: deps.telemetryStore.get(car.driverGuid),
+        telemetry,
         /** Vueltas que el servidor le invalidó por irse de pista, en esta sesión. A diferencia de
          * casi todo lo demás de esta fila, llega **siempre**: sale del `LAP_COMPLETED` del
          * servidor dedicado y no depende de que el piloto tenga la app. */
         cuts: deps.trackLimits.getCuts(car.driverGuid),
-      })),
+        /** Si el auto está en el pit lane. Ver `estaEnPit`. */
+        inPit: estaEnPit(car, telemetry, deps.config.pit.zone),
+        };
+      }),
       formationPenalties: deps.formationPenaltyEngine.getAll(),
       pitPenalties: deps.pitPenaltyEngine.getAll(),
       stewardPenalties: deps.stewardPenaltyEngine.getAll(),

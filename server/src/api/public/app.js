@@ -201,8 +201,31 @@ function wireDrawers() {
     });
   }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") closeDrawers();
+    if (e.key !== "Escape") return;
+    // El menú de fila primero: si hay uno abierto, Escape lo cierra a él y no el cajón de atrás.
+    if (openMenu) {
+      closeRowMenu();
+      return;
+    }
+    closeDrawers();
   });
+
+  // Cierre del menú de tres puntitos. Va en fase de captura para correr antes que el handler del
+  // propio botón: así un click en otro kebab cierra el menú viejo y abre el nuevo, en vez de que
+  // el segundo click quede comido.
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!openMenu) return;
+      if (openMenu.el.contains(e.target) || openMenu.anchor.contains(e.target)) return;
+      closeRowMenu();
+    },
+    true
+  );
+  // El menú está en `position: fixed` y la tabla scrollea debajo: sin esto quedaría flotando
+  // apuntando a una fila que ya no está ahí.
+  document.addEventListener("scroll", closeRowMenu, true);
+  window.addEventListener("resize", closeRowMenu);
 }
 
 // ===================================================================== formularios con estado
@@ -617,7 +640,20 @@ function renderTiming(cars) {
     carRows.delete(carId);
     if (selectedCarId === carId) selectedCarId = null;
     if (armedKick && armedKick.carId === carId) disarmKick();
+    if (openMenu && openMenu.carId === carId) closeRowMenu();
   }
+
+  // La columna de Ping desaparece entera cuando nadie la puede llenar.
+  //
+  // El ping no viene del servidor de Assetto Corsa: el protocolo UDP no lo transporta. Es el
+  // round-trip de la app del piloto contra Race Control, así que sin la app no hay dato posible.
+  // Mostrar veinte "sin app" en rojo en una columna propia no informaba nada que el panel no
+  // diga mejor en "La app de los pilotos", y hacía parecer roto algo que simplemente no aplica.
+  $("timing-table").classList.toggle("sin-ping", !cars.some(tienePing));
+}
+
+function tienePing(car) {
+  return car.pingMs !== null && car.pingMs !== undefined;
 }
 
 function createCarRow(carId) {
@@ -643,21 +679,27 @@ function createCarRow(carId) {
     pits: cell("num"),
     tyre: cell(""),
     fuel: cell("num"),
-    ping: cell("num"),
+    ping: cell("num c-ping"),
     actions: cell("actions"),
   };
 
   for (const key of ["sectors", "pits", "tyre", "fuel"]) cells[key].title = NO_APP_TITLE;
 
-  const kick = document.createElement("button");
-  kick.className = "btn-mini";
-  kick.textContent = "Kick";
-  kick.title = "Expulsar a este piloto del servidor";
-  kick.addEventListener("click", () => onKickClick(carId));
-  cells.actions.appendChild(kick);
+  // Las acciones destructivas viven detrás de los tres puntitos, no sueltas en la fila. Un botón
+  // "Kick" visible en veinte filas de una tabla que se reordena sola es un accidente esperando
+  // que alguien mueva el mouse en el momento equivocado.
+  const kebab = document.createElement("button");
+  kebab.className = "btn-kebab";
+  kebab.textContent = "⋮";
+  kebab.title = "Más acciones";
+  kebab.setAttribute("aria-label", "Más acciones");
+  kebab.setAttribute("aria-haspopup", "menu");
+  kebab.setAttribute("aria-expanded", "false");
+  kebab.addEventListener("click", () => toggleRowMenu(carId, kebab));
+  cells.actions.appendChild(kebab);
 
   for (const key of Object.keys(cells)) tr.appendChild(cells[key]);
-  return Object.assign({ tr, kick }, cells);
+  return Object.assign({ tr, kebab }, cells);
 }
 
 function cell(className) {
@@ -689,10 +731,22 @@ function updateCarRow(row, car, sessionBest) {
     aviso.textContent = "sin señal";
     aviso.title = "Hace más de dos segundos que no llega telemetría de este auto. Los datos de esta fila son los últimos que recibimos.";
     row.speed.appendChild(aviso);
+  } else if (car.inPit) {
+    // En boxes la velocidad no dice nada —va a 40 o a 0— y lo que el admin necesita saber de un
+    // vistazo es por qué ese auto se descolgó de la clasificación. El backend lo resuelve con la
+    // app del piloto si la hay y con la zona de pit configurada si no; ver `estaEnPit`.
+    clearChildren(row.speed);
+    const pit = document.createElement("span");
+    pit.className = "en-pit";
+    pit.textContent = "PIT";
+    pit.title = "En el pit lane";
+    row.speed.appendChild(pit);
   } else {
     row.speed.textContent = Math.round(car.speedKmh) + " km/h";
   }
-  row.laps.textContent = String(car.lapCount);
+  // "L" adelante: en una columna de números sueltos entre tiempos y velocidades, un "4" pelado no
+  // se lee como vueltas hasta que uno mira el encabezado.
+  row.laps.textContent = "L" + car.lapCount;
 
   // Cero se dibuja como raya y no como "0": en una tabla de 20 filas, veinte ceros en columna son
   // ruido, y lo único que hay que poder encontrar de un vistazo es a quién le tacharon vueltas.
@@ -718,12 +772,12 @@ function updateCarRow(row, car, sessionBest) {
   clearChildren(row.ping);
   row.ping.appendChild(pingBadge(car));
 
-  row.tr.classList.toggle("in-pit", Boolean(telemetry && telemetry.inPitLane));
+  row.tr.classList.toggle("in-pit", Boolean(car.inPit));
   row.tr.classList.toggle("stale", Boolean(car.telemetryStale));
   row.tr.classList.toggle("selected", selectedCarId === car.carId);
-  const armed = armedKick !== null && armedKick.carId === car.carId;
-  row.kick.classList.toggle("arming", armed);
-  row.kick.textContent = armed ? "¿Seguro?" : "Kick";
+  // El kick vive dentro del menú de tres puntitos, que puede estar cerrado: el punto rojo en los
+  // puntitos es lo único que queda a la vista de que hay un kick a medio confirmar.
+  row.kebab.classList.toggle("arming", armedKick !== null && armedKick.carId === car.carId);
 }
 
 /** Un valor ausente nunca se dibuja como vacío: un hueco se lee como "cero" o como un bug, y acá
@@ -1002,6 +1056,66 @@ function applySelectionToRows() {
   }
 }
 
+// --------------------------------------------------------------- menú de fila (tres puntitos)
+
+/**
+ * El menú vive en `document.body`, no adentro de la celda.
+ *
+ * La tabla está dentro de un contenedor con `overflow: auto` en los dos ejes, así que un popup
+ * posicionado dentro de la fila quedaría recortado por el scroll —visible a medias o directamente
+ * invisible en la última fila, que es donde más se usa—. Con `position: fixed` y las coordenadas
+ * tomadas del botón no hay recorte posible. El precio es que no se mueve con el scroll: por eso
+ * se cierra al scrollear.
+ *
+ * Es uno solo para toda la tabla: nunca hay dos abiertos y no quedan veinte menús ocultos en el
+ * DOM reconstruyéndose en cada poll.
+ */
+let openMenu = null;
+
+function toggleRowMenu(carId, anchor) {
+  const yaEstaba = openMenu !== null && openMenu.carId === carId;
+  closeRowMenu();
+  if (yaEstaba) return;
+
+  const menu = document.createElement("div");
+  menu.className = "menu-fila";
+  menu.setAttribute("role", "menu");
+
+  const kick = document.createElement("button");
+  kick.className = "menu-item peligro";
+  kick.setAttribute("role", "menuitem");
+  kick.textContent = "Expulsar del servidor";
+  kick.addEventListener("click", () => onKickClick(carId));
+  menu.appendChild(kick);
+
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  // Alineado a la derecha del botón y debajo, salvo que no entre: ahí sube por encima.
+  const abajo = r.bottom + 4;
+  const arriba = r.top - menu.offsetHeight - 4;
+  menu.style.top = (abajo + menu.offsetHeight <= window.innerHeight - 8 || arriba < 8 ? abajo : arriba) + "px";
+  menu.style.left = Math.max(8, r.right - menu.offsetWidth) + "px";
+
+  anchor.setAttribute("aria-expanded", "true");
+  openMenu = { carId, el: menu, anchor, kick };
+  syncMenuKick();
+}
+
+function closeRowMenu() {
+  if (!openMenu) return;
+  openMenu.el.remove();
+  openMenu.anchor.setAttribute("aria-expanded", "false");
+  openMenu = null;
+}
+
+/** El texto del kick refleja si está armado, tanto al abrir el menú como cuando se desarma solo. */
+function syncMenuKick() {
+  if (!openMenu) return;
+  const armed = armedKick !== null && armedKick.carId === openMenu.carId;
+  openMenu.kick.textContent = armed ? "¿Seguro? Confirmá para expulsar" : "Expulsar del servidor";
+  openMenu.kick.classList.toggle("arming", armed);
+}
+
 // --------------------------------------------------------------- kick con doble confirmación
 
 function disarmKick() {
@@ -1009,10 +1123,8 @@ function disarmKick() {
   clearTimeout(armedKick.timer);
   const row = carRows.get(armedKick.carId);
   armedKick = null;
-  if (row) {
-    row.kick.classList.remove("arming");
-    row.kick.textContent = "Kick";
-  }
+  if (row) row.kebab.classList.remove("arming");
+  syncMenuKick();
 }
 
 /**
@@ -1025,16 +1137,15 @@ function disarmKick() {
 function onKickClick(carId) {
   if (armedKick && armedKick.carId === carId) {
     disarmKick();
+    closeRowMenu();
     executeKick(carId);
     return;
   }
   disarmKick();
   armedKick = { carId, timer: setTimeout(disarmKick, KICK_ARM_MS) };
   const row = carRows.get(carId);
-  if (row) {
-    row.kick.classList.add("arming");
-    row.kick.textContent = "¿Seguro?";
-  }
+  if (row) row.kebab.classList.add("arming");
+  syncMenuKick();
 }
 
 async function executeKick(carId) {
@@ -1909,6 +2020,15 @@ function renderNetwork(network) {
   driversEl.textContent = d.connected === 0 ? "nadie conectado todavía" : d.reporting + " de " + d.connected;
   driversEl.className = d.connected > 0 && d.reporting === 0 ? "bad" : "";
 
+  // Lo mismo, pero arriba de la torre de tiempos, que es donde se nota: Sectores, Box, Neum. y
+  // Comb. salen de la app del piloto y sin ella quedan en guiones. El cajón de conexión lo decía
+  // bien y nadie lo abre, así que "no me aparecen los neumáticos" se leía como un producto roto.
+  const chip = $("chip-sin-app");
+  chip.hidden = !(d.connected > 0 && d.reporting === 0);
+  chip.title =
+    "Sectores, Box, Neum. y Comb. solo existen en la Shared Memory del juego: los manda la app de " +
+    "Race Control que instala cada piloto, no el servidor de carrera. Clickeá para revisar la conexión.";
+
   // Si los comandos todavía salen a loopback con telemetría entrando, el servidor no se identificó
   // y nada de lo que mande el backend (chat, sanciones, kicks) va a llegar a destino.
   const ac = network.acServer || {};
@@ -2208,6 +2328,7 @@ function wireButtons() {
   });
 
   $("mode-chip").addEventListener("click", () => openDrawer("drawer-network"));
+  $("chip-sin-app").addEventListener("click", () => openDrawer("drawer-network"));
 
   wireWizard();
 }

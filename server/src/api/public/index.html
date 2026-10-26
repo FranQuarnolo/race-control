@@ -98,7 +98,18 @@
     <section class="card" id="card-timing">
       <h2>
         Torre de tiempos
-        <span class="hint" id="cars-count"></span>
+        <!-- Agrupados: el <h2> reparte con `space-between`, y sueltos la cuenta de autos se iba
+             al medio en cuanto aparecía la chapa. -->
+        <span class="h2-derecha">
+          <span class="hint" id="cars-count"></span>
+          <!-- Por qué las columnas que dependen de la app están en guiones. Sin esto, "no me
+               aparecen los neumáticos ni los sectores" se lee como un producto roto, cuando lo
+               que pasa es que esos datos solo existen en la Shared Memory del juego y nadie los
+               está mandando. Abre el cajón de conexión, que es donde está el diagnóstico. -->
+          <button type="button" class="chapa-sin-app" id="chip-sin-app" hidden>
+            ningún piloto con la app
+          </button>
+        </span>
       </h2>
       <div class="table-wrap">
         <table id="timing-table">
@@ -129,7 +140,12 @@
               <th class="num" title="Paradas en boxes completadas. Requiere la app del piloto.">Box</th>
               <th title="Compuesto de neumático. Requiere la app del piloto.">Neum.</th>
               <th class="num" title="Combustible restante. Requiere la app del piloto.">Comb.</th>
-              <th class="num" title="Latencia de la app del piloto contra Race Control (no contra el servidor de AC)">Ping</th>
+              <!-- La columna entera desaparece cuando ningún piloto tiene la app reportando (ver
+                   `.sin-ping` en el CSS). Mide el round-trip de la app contra Race Control, no la
+                   latencia del piloto contra el servidor de carrera: el protocolo UDP de Assetto
+                   Corsa no transporta ese dato, así que sin la app no hay nada que mostrar y una
+                   columna de veinte "sin app" en rojo solo ocupa lugar. -->
+              <th class="num c-ping" title="Latencia de la app del piloto contra Race Control (no contra el servidor de AC)">Ping</th>
               <th></th>
             </tr>
           </thead>

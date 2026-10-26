@@ -530,6 +530,63 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
    al piloto en el acto y no pueden salir de un click fallido en una tabla que se mueve sola. */
 .btn-mini.arming { background: var(--red); color: #1a0505; }
 
+/* ---------------------------------------------------------------- menú de fila (⋮) */
+
+.btn-kebab {
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  font-size: 17px;
+  padding: 0;
+  position: relative;
+}
+.btn-kebab:hover, .btn-kebab[aria-expanded="true"] { background: #343a47; color: var(--text); }
+/* Punto rojo cuando hay un kick a medio confirmar: con el menú cerrado es lo único que queda a
+   la vista de que un segundo click expulsa a alguien. */
+.btn-kebab.arming::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+/* Fijo y colgado del <body>, no de la celda: la tabla scrollea en los dos ejes y adentro de la
+   fila el menú quedaría recortado justo en la última, que es donde más se usa. Ver `toggleRowMenu`. */
+.menu-fila {
+  position: fixed;
+  z-index: 50;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.menu-item:hover { background: #343a47; }
+.menu-item.peligro { color: var(--red); }
+.menu-item.peligro:hover { background: rgba(224, 85, 85, 0.14); }
+/* Segundo paso, igual que en `.btn-mini.arming`: el ítem cambia de texto y se pinta entero. */
+.menu-item.arming, .menu-item.arming:hover { background: var(--red); color: #1a0505; font-weight: 700; }
+
 /* ---------------------------------------------------------------- torre de tiempos */
 
 /*
@@ -550,6 +607,37 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 #timing-table { font-size: 12.5px; }
 #timing-table th, #timing-table td { padding: 5px 5px; white-space: nowrap; }
 #timing-table th.c-driver { width: 20ch; }
+
+/* Aviso de que ningún piloto tiene la app, al lado del título de la torre. Gris y no rojo a
+   propósito: no es una falla del sistema, es una pieza que todavía no está instalada, y la mitad
+   de las ligas van a correr así. Abre el cajón de conexión, donde está el diagnóstico. */
+.h2-derecha { display: flex; align-items: center; gap: 8px; }
+
+.chapa-sin-app {
+  text-transform: none;
+  letter-spacing: 0;
+  background: rgba(139, 147, 163, 0.14);
+  border: 1px solid rgba(139, 147, 163, 0.4);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chapa-sin-app:hover { background: rgba(139, 147, 163, 0.24); color: var(--text); }
+/* Mismo seguro que `.chapa-sombra[hidden]`: cualquier `display` propio le gana al atributo. */
+.chapa-sin-app[hidden] { display: none; }
+
+/* La columna de Ping se saca entera cuando ningún piloto tiene la app reportando: sin app no hay
+   ping posible —el UDP de Assetto Corsa no lo transporta— y una columna de "sin app" en rojo en
+   cada fila hacía parecer roto algo que simplemente no aplica. El panel lo dice donde corresponde,
+   en "La app de los pilotos" del cajón de conexión. */
+#timing-table.sin-ping .c-ping { display: none; }
+
+/* "PIT" en la columna de velocidad. Mismo ámbar que la fila en boxes, para que se lean juntos. */
+#timing-table td .en-pit { color: var(--yellow); font-weight: 700; letter-spacing: 0.04em; }
 
 /* "Fuera": las vueltas invalidadas. Angosta a propósito —casi siempre dice "--"— y en ámbar
    cuando tiene algo que decir, que es el mismo color con el que el panel marca todo lo que es
