@@ -473,6 +473,12 @@ El catálogo se genera desde la instalación de Assetto Corsa de quien lo corra,
 `server/src/track/catalog/` listos para commitear. Lo que no esté en esa instalación no entra: para
 sumar circuitos después alcanza con volver a correr el script en una PC que los tenga.
 
+**Si el juego está en otra PC** —que es lo normal—, no hay que copiar `content\tracks` entero ni
+instalar Node allá: se lleva `server/scripts/recolectar-trazados.ps1`, se ejecuta con botón derecho
+→ *Ejecutar con PowerShell*, y deja un zip de pocos MB en el Escritorio con lo único que el
+generador lee. Está explicado en
+[server/src/track/catalog/README.md](server/src/track/catalog/README.md).
+
 Las capturas conviene sacarlas ahora y no antes: el panel de la 0.8 ya tiene la columna de intervalo,
 la zona de pit en ámbar, el botón de anular y la tabla con los anchos arreglados, así que lo que se
 fotografíe hoy va a seguir siendo cierto por un buen rato. El atajo para sacarlas sin Assetto Corsa

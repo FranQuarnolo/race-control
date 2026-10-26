@@ -61,6 +61,9 @@ function main() {
   if (!raiz) {
     console.error("Uso: node scripts/build-track-catalog.js <ruta a content/tracks>");
     console.error('Ejemplo: node scripts/build-track-catalog.js "C:\\Steam\\steamapps\\common\\assettocorsa\\content\\tracks"');
+    console.error("");
+    console.error("Si el juego esta en otra PC, corre alla scripts/recolectar-trazados.ps1 y");
+    console.error("apunta esto a la carpeta 'tracks' que salga del zip.");
     process.exit(1);
   }
   if (!fs.existsSync(raiz)) {
