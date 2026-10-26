@@ -1517,7 +1517,6 @@ function renderNetwork(network) {
   }
 
   $("net-signal").textContent = network.receivingTelemetry ? "recibiendo" : "sin señal todavía";
-  $("net-snippet").textContent = network.serverSnippet;
   // Es un <input>, no un bloque de texto: va por `value`.
   $("net-send-address").value = network.sendAddress;
   $("wizard-snippet").textContent = network.sendAddress;
@@ -1725,20 +1724,12 @@ function wireButtons() {
 
   wireLogout();
 
-  for (const [boton, origen] of [
-    ["btn-copy-snippet", "net-snippet"],
-    ["btn-copy-send-address", "net-send-address"],
-  ]) {
-    $(boton).addEventListener("click", () => {
-      const el = $(origen);
-      // Uno es un <pre> y el otro un <input>: el texto está en lugares distintos.
-      const texto = "value" in el ? el.value : el.textContent;
-      navigator.clipboard.writeText(texto).then(
-        () => toast("Copiado"),
-        () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
-      );
-    });
-  }
+  $("btn-copy-send-address").addEventListener("click", () => {
+    navigator.clipboard.writeText($("net-send-address").value).then(
+      () => toast("Copiado"),
+      () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
+    );
+  });
 
   // Un click en el campo selecciona todo: si el portapapeles falla —pasa sin HTTPS—, copiarlo a
   // mano queda a un Ctrl+C.

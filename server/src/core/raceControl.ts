@@ -14,7 +14,7 @@ import { BackendAnnouncer } from "../udp/announcer";
 import { CarInfo, CarUpdate, ClientEvent, ConnectionClosed, ErrorMessage, LapCompleted, NewConnection, SessionInfo } from "../udp/protocol";
 import { Incident, IncidentEngine } from "../incident/incidentEngine";
 import { ObservedFact, WrongWayWatcher } from "../incident/raceWatchers";
-import { ConnectivityManager, buildSendAddress, buildServerSnippet } from "../net/connectivity";
+import { ConnectivityManager, buildSendAddress } from "../net/connectivity";
 import { findFreePort } from "../net/ports";
 import { SessionPhaseTracker } from "../session/phase";
 import { SessionTracker } from "../session/sessionInfo";
@@ -534,8 +534,6 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       journal.log("kick.manual", { carId, driverGuid: car?.driverGuid, driverName: car?.driverName });
       udpClient.kick(carId);
     },
-    buildServerSnippet: () =>
-      buildServerSnippet(connectivity.getStatus().publicIp, config.acUdp.localPort, config.acUdp.remotePort),
     buildSendAddress: () => buildSendAddress(connectivity.getStatus().publicIp, config.acUdp.localPort),
     getActivePorts: () => ({ ...activePorts }),
     audit: (entry) => journal.log("audit.action", entry),

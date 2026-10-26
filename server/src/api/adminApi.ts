@@ -40,8 +40,7 @@ export interface AdminApiDeps {
   /** Kick manual pedido por el admin desde la tabla de pilotos. Se inyecta en vez de llamar a
    * `udpClient.kick` directo para que index.ts lo registre en el journal como manual. */
   manualKick: (carId: number) => void;
-  buildServerSnippet: () => string;
-  /** El "Send Address" solo: lo único que el admin tiene que copiar al panel de su hosting. */
+  /** El "Send Address": lo único que el admin tiene que copiar al panel de su hosting. */
   buildSendAddress: () => string;
   /** Puertos realmente en uso. Los asigna el portal al arrancar la liga; el panel los muestra
    * pero no los puede cambiar. */
@@ -127,7 +126,6 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       network: {
         ...deps.connectivity.getStatus(),
         ...deps.getActivePorts(),
-        serverSnippet: deps.buildServerSnippet(),
         sendAddress: deps.buildSendAddress(),
         /** A dónde salen los comandos (chat, kick, ballast). Si queda en loopback con telemetría
          * entrando, es la señal de que el servidor de AC todavía no se identificó. */

@@ -225,10 +225,25 @@
           arranque. Después reiniciá el servidor de Assetto Corsa para que lo tome.
           <a href="docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía</a>.
         </p>
+        <!-- Antes acá había un bloque con las dos líneas del `server_cfg.ini` para copiar a mano.
+             Se sacó: los paneles administrados regeneran ese archivo en cada arranque, así que la
+             edición manual se pierde sola. Lo que ocupa su lugar es el caso real que trae a
+             alguien hasta acá: el campo no aparece en el panel. -->
         <details>
-          <summary class="muted">Si editás el <code>server_cfg.ini</code> a mano</summary>
-          <pre class="snippet" id="net-snippet">--</pre>
-          <button class="secondary" id="btn-copy-snippet">Copiar las dos líneas</button>
+          <summary class="muted">No encuentro el campo "Send Address" en mi panel</summary>
+          <p class="muted">
+            Si tu panel es Assetto Corsa Server Manager —EmperorServers y varios más— el campo
+            está en <b>Server Options</b>, en la sección de <b>plugins UDP</b>. Si esa sección no
+            aparece por ningún lado, no es que esté escondida: el hosting tiene los plugins
+            apagados. Escribile al soporte y pedile que te habilite los plugins UDP del Server
+            Manager.
+          </p>
+          <p class="muted">
+            Editar el <code>server_cfg.ini</code> a mano <b>no sirve</b> en esos paneles, aunque
+            te dejen verlo: el Server Manager lo reescribe entero cada vez que arranca el servidor
+            y se lleva puesto el cambio.
+            <a href="docs/guia-conexion.html" target="_blank" rel="noopener">La guía lo explica con más detalle</a>.
+          </p>
         </details>
       </section>
     </div>
@@ -372,7 +387,8 @@
       <div class="wizard-step" data-step="3" hidden>
         <h2>Conectá tu servidor de Assetto Corsa</h2>
         <p class="muted">
-          Entrá al panel de tu hosting, buscá el campo <b>Send Address</b> y pegale esto:
+          Entrá al panel de tu hosting, abrí <b>Server Options</b> y en la sección de plugins UDP
+          buscá el campo <b>Send Address</b>. Pegale esto:
         </p>
         <pre class="snippet" id="wizard-snippet">--</pre>
         <button class="secondary" id="wizard-copy">Copiar</button>

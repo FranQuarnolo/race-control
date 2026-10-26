@@ -13,8 +13,9 @@
   <section class="caja ancha">
     <h1>Un solo dato y ya está</h1>
     <p>
-      Entrá al panel de tu hosting de Assetto Corsa, buscá el campo <strong>“Send Address”</strong>
-      (en paneles más viejos se llama <code>UDP_PLUGIN_ADDRESS</code>) y pegá esto:
+      Entrá al panel de tu hosting de Assetto Corsa, abrí <strong>“Server Options”</strong> y en la
+      sección de plugins UDP buscá el campo <strong>“Send Address”</strong>
+      (en paneles más viejos se llama <code>UDP_PLUGIN_ADDRESS</code>). Pegá esto ahí:
     </p>
 
     <div class="send-address" id="send-address">…</div>
@@ -23,6 +24,12 @@
     <p class="muted">
       Después reiniciá el servidor. No hace falta tocar ningún otro número: el resto lo
       averiguamos solos en cuanto llegue la primera señal.
+    </p>
+
+    <p class="muted">
+      <strong>¿No aparece ninguna sección de plugins?</strong> No está escondida: tu hosting los
+      tiene apagados. Pedile al soporte que te habilite los plugins UDP del Server Manager. Editar
+      el <code>server_cfg.ini</code> a mano no sirve — el panel lo reescribe en cada arranque.
     </p>
 
     <h2>Esperando la primera señal…</h2>

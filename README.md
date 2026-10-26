@@ -20,7 +20,8 @@ descarga es la app de los pilotos.
 
 1. 🔑 Te pasan la **dirección, un usuario y una contraseña**. Entrás por **"Ingresar"**.
 2. 📋 La pantalla te muestra un renglón tipo `203.0.113.5:30000`. Lo pegás en el campo
-   **"Send Address"** del panel de tu hosting y reiniciás el servidor de Assetto Corsa.
+   **"Send Address"** del panel de tu hosting —está en **"Server Options"**, en la sección de
+   plugins UDP— y reiniciás el servidor de Assetto Corsa.
 3. ✅ La pantalla **se pone verde sola** cuando empieza a llegar la telemetría. No hay nada más
    que configurar: el resto lo averigua solo.
 4. 🎮 Le pasás `RaceControlClient.zip` a cada piloto, una sola vez para toda la temporada.

@@ -116,15 +116,16 @@ export function buildSendAddress(publicIp: string | null, udpLocalPort: number):
   return `${publicIp ?? "<TU_IP_PUBLICA>"}:${udpLocalPort}`;
 }
 
-/**
- * Arma el bloque listo para copiar/pegar en el `server_cfg.ini` del hosting.
+/*
+ * Acá vivía `buildServerSnippet`, que armaba las dos líneas
+ * (`UDP_PLUGIN_LOCAL_PORT` / `UDP_PLUGIN_ADDRESS`) para pegar en el `server_cfg.ini`.
  *
- * Sigue haciendo falta para quien edita el archivo a mano, donde sí hay que declarar las dos
- * líneas. Sirve para cualquier hosting de Assetto Corsa, no solo EmperorServers:
- * `UDP_PLUGIN_LOCAL_PORT` y `UDP_PLUGIN_ADDRESS` son del propio juego, no de ninguna empresa en
- * particular — en los paneles modernos aparecen como "Listen Address" y "Send Address".
+ * Se borró porque en un hosting administrado ese consejo es directamente falso: los paneles tipo
+ * Assetto Corsa Server Manager **regeneran** el `server_cfg.ini` a partir de su propia base cada
+ * vez que arranca el servidor, así que lo que se edite a mano se pierde en el próximo arranque.
+ * Por eso varios paneles —EmperorServers entre ellos— muestran el archivo pero no lo dejan tocar.
+ *
+ * Dar una instrucción que el panel deshace sin avisar es peor que no darla: el admin cree que
+ * conectó la liga y se entera el día de la carrera. El único camino que se documenta ahora es el
+ * campo "Send Address" del panel, y `buildSendAddress` lo arma solo.
  */
-export function buildServerSnippet(publicIp: string | null, udpLocalPort: number, acRemotePort: number): string {
-  const ip = publicIp ?? "<TU_IP_PUBLICA>";
-  return [`UDP_PLUGIN_LOCAL_PORT=${acRemotePort}`, `UDP_PLUGIN_ADDRESS=${ip}:${udpLocalPort}`].join("\n");
-}

@@ -167,6 +167,31 @@ En "Configuración del servidor", el Send Address pasó de ser un `<pre>` a un i
 con el botón de copiar **adentro**. El gesto de copiar queda donde está el dato, y un click en el
 campo lo selecciona entero.
 
+### Se dejó de recomendar editar el `server_cfg.ini`
+
+Salió de una prueba contra un hosting real (EmperorServers): el admin no encontraba el "Send
+Address" por ningún lado, y el `server_cfg.ini` el panel se lo dejaba **ver pero no editar**.
+
+Las dos cosas tienen la misma causa y ninguna era un problema de ese hosting en particular:
+
+- Los paneles tipo Assetto Corsa Server Manager **regeneran** el `server_cfg.ini` desde su propia
+  base cada vez que arranca el servidor. Lo que se edite a mano se pierde en el próximo arranque,
+  que es exactamente el paso siguiente de la guía. Por eso lo muestran en solo lectura: ese
+  archivo es una salida, no una entrada.
+- La sección de plugins del Server Manager **se puede apagar entera** desde su `config.yml`
+  (`disable_plugins`), y apagada no se dibuja. Al admin le parece que el campo no existe, y en su
+  pantalla efectivamente no existe. El archivo lo maneja el hosting, así que la única salida es un
+  ticket al soporte.
+
+Entonces: se borró `buildServerSnippet` y el campo `serverSnippet` de `/api/state`, y con ellos el
+bloque "Si editás el `server_cfg.ini` a mano" del panel. Dar una instrucción que el panel deshace
+sin avisar es peor que no darla — el admin cree que conectó la liga y se entera el día de carrera.
+
+En su lugar, donde estaba ese bloque hay ahora un desplegable **"No encuentro el campo Send
+Address"** con la causa real y qué pedir. La guía de conexión suma una sección propia con el texto
+del ticket listo para copiar, y el camino del campo quedó completo en todos lados: **Server
+Options → sección de plugins UDP → "Send Address"**, y no solo "buscá Send Address".
+
 ### Versión y limpieza
 
 `0.5` en el panel y en `/api/state`, `0.5.0` en `package.json`. La única dependencia de producción

@@ -158,7 +158,8 @@ Esto es lo único que le tenés que explicar, y es corto a propósito.
 
 1. Entra con el usuario y la contraseña que le pasaste.
 2. La pantalla le muestra un renglón: `203.0.113.5:30004`.
-3. Va al panel de su hosting, busca el campo **"Send Address"** y lo pega ahí.
+3. Va al panel de su hosting, abre **"Server Options"**, busca ahí la sección de plugins UDP y
+   pega el renglón en el campo **"Send Address"**.
 4. **Reinicia el servidor de Assetto Corsa.** Sin reiniciar no pasa nada: el servidor lee su
    configuración una sola vez, al arrancar.
 5. La pantalla se pone verde sola cuando llega el primer paquete.
@@ -177,6 +178,23 @@ número solo, del propio tráfico que manda el servidor.
 **El nombre de su liga no lo cambia él**: en su panel el campo es de solo lectura y dice que te lo
 pida. Lo cambiás vos desde `/operador` → "Editar". Es así porque el motor toma el nombre del portal
 cada vez que arranca: si el admin lo editara, su cambio volvería solo en el próximo reinicio.
+
+### Si no encuentra el campo
+
+Es el problema más frecuente después de "no reinicié el servidor", y tiene una causa concreta: en
+Assetto Corsa Server Manager el soporte de plugins se apaga entero desde el `config.yml` del panel
+(`disable_plugins`), y cuando está apagado **la sección no se dibuja**. No está en otra pestaña: no
+está. Ese archivo lo maneja el hosting.
+
+La salida es un ticket al soporte pidiendo que habiliten los plugins UDP del Server Manager. La
+guía que está adentro del producto (**Conexión → "Ver la guía"**) trae el texto del ticket listo
+para copiar.
+
+**Y editar el `server_cfg.ini` a mano no es una alternativa**, aunque el panel lo deje ver: el
+Server Manager regenera ese archivo desde su base en cada arranque, así que el cambio se pierde en
+el reinicio siguiente — que es el paso justo después. Por eso varios paneles lo muestran en solo
+lectura, y por eso Race Control dejó de ofrecer las dos líneas para pegar ahí: era un consejo que
+fallaba en silencio.
 
 ---
 
@@ -282,6 +300,7 @@ dist/sim/demo.js` levanta el panel con una carrera inventada adentro, en
 | Síntoma | Causa más probable | Dónde mirar |
 |---|---|---|
 | La pantalla de conexión nunca se pone verde | No reinició el servidor de AC después de pegar el Send Address | Es la causa número uno. Preguntarlo antes que nada |
+| "No encuentro el campo Send Address" | El hosting tiene los plugins del Server Manager apagados (`disable_plugins`) y la sección no se dibuja | Ticket al soporte del hosting. Ver §5 |
 | Ninguna liga recibe nada, nunca | Falta la IPv4 dedicada | `fly ips list`: tiene que decir "dedicated" |
 | Una liga sí y otra no | El puerto UDP de esa liga no está declarado en `fly.toml` | El bloque `[[services]]` de ese puerto |
 | Entra telemetría pero las sanciones no llegan | Se bindeó a `0.0.0.0` en vez de `fly-global-services` | `RC_UDP_BIND` |

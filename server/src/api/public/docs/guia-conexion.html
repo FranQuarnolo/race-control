@@ -38,11 +38,14 @@
   </div>
 
   <div class="step">
-    <b>Paso 2.</b> Entrá al panel de tu hosting y buscá el campo <b>"Send Address"</b>. Pegá ahí
-    lo que copiaste y guardá.
+    <b>Paso 2.</b> Entrá al panel de tu hosting, abrí <b>"Server Options"</b> (en algunos paneles,
+    "Server settings" u "Opciones del servidor") y buscá ahí la sección de <b>plugins UDP</b>.
+    Pegá lo que copiaste en el campo <b>"Send Address"</b> y guardá.
     <div class="why">Según la versión de tu panel, ese campo puede llamarse <b>"Send Address"</b>,
     <b>"UDP Plugin Address"</b> o <code>udp_plugin_address</code>. Son el mismo campo con tres
-    nombres distintos. Abajo está dónde encontrarlo en los paneles más usados.</div>
+    nombres distintos: lo renombraron en la versión 2.4.8 de Assetto Corsa Server Manager. Si no
+    encontrás ninguna sección de plugins, saltá a
+    <a href="#no-aparece">"No aparece ninguna sección de plugins"</a>.</div>
   </div>
 
   <div class="step">
@@ -68,33 +71,45 @@
     <tr><th>Panel</th><th>Dónde buscarlo</th></tr>
     <tr>
       <td>Assetto Corsa Server Manager<br />(EmperorServers y muchos otros)</td>
-      <td><b>Server Options</b> → sección <b>UDP Plugin</b> → campo <b>"Send Address"</b>. En
-      versiones anteriores a la 2.4.8 el mismo campo se llamaba <b>"UDP Plugin Address"</b>.</td>
-    </tr>
-    <tr>
-      <td>Paneles tipo Pterodactyl<br />(GameServerKings, Nitrado, Streamline y otros)</td>
-      <td>Pestaña <b>"Files"</b> (o "Administrador de archivos"), carpeta <code>cfg/</code>,
-      archivo <code>server_cfg.ini</code>, sección <code>[SERVER]</code>. Ahí el campo se llama
-      <code>UDP_PLUGIN_ADDRESS</code>. Editalo y usá el botón "Restart".</td>
-    </tr>
-    <tr>
-      <td>Tu propio VPS o PC</td>
-      <td><code>cfg/server_cfg.ini</code>, al lado del ejecutable del servidor. Editalo con el
-      Bloc de notas y volvé a arrancar <code>acServer.exe</code>.</td>
+      <td><b>Server Options</b> → la sección de <b>plugins UDP</b> → campo <b>"Send Address"</b>.
+      En versiones anteriores a la 2.4.8 el mismo campo se llamaba <b>"UDP Plugin Address"</b> y
+      estaba junto a "UDP Plugin Local Port".</td>
     </tr>
     <tr>
       <td>Content Manager<br />(servidor local)</td>
-      <td>En la pantalla del servidor, pestaña <b>"Plugins"</b>. Cargalo desde ahí y no editando
-      el archivo: Content Manager reescribe el <code>server_cfg.ini</code> al guardar desde su
-      interfaz, y se lleva puesto lo que hayas puesto a mano.</td>
+      <td>En la pantalla del servidor, pestaña <b>"Plugins"</b>.</td>
+    </tr>
+    <tr>
+      <td>Cualquier otro panel</td>
+      <td>Buscá "plugin" en las opciones del servidor. El campo que necesitás es el que dice
+      <b>"Send"</b> o <b>"Address"</b>, nunca el que dice <b>"Listen"</b> o <b>"Local Port"</b>.</td>
     </tr>
   </table>
 
-  <p>Si editás el archivo a mano, ahí sí hay que declarar las dos líneas. El panel de Race Control
-  te las da armadas en "Si editás el <code>server_cfg.ini</code> a mano", dentro de la misma
-  sección:</p>
-  <pre>UDP_PLUGIN_LOCAL_PORT=11000
-UDP_PLUGIN_ADDRESS=TU_DIRECCION:12000</pre>
+  <h2 id="no-aparece">No aparece ninguna sección de plugins</h2>
+  <p>Pasa, y no es que esté escondida en otra pestaña: en Assetto Corsa Server Manager el soporte
+  de plugins se puede apagar entero desde un archivo de configuración del propio panel
+  (<code>config.yml</code>, la opción <code>disable_plugins</code>), y cuando está apagado la
+  sección no se dibuja. Ese archivo lo maneja el hosting, no vos.</p>
+  <p><b>La solución es un ticket al soporte de tu hosting.</b> Pedíles, con estas palabras, que te
+  habiliten los plugins UDP del Server Manager. Si preferís, pasales esto:</p>
+  <pre>Hola, necesito conectar un plugin UDP externo a mi servidor.
+¿Me pueden habilitar los plugins en el Server Manager
+(disable_plugins: false en el config.yml) para que me aparezca
+el campo "Send Address" en Server Options?</pre>
+  <p>Mientras tanto, también podés pedirles directamente que te pongan el valor: pasales la
+  dirección que te muestra Race Control y decíles que va en el "Send Address" del servidor.</p>
+
+  <h2>Editar el <code>server_cfg.ini</code> a mano no sirve</h2>
+  <p>Es la primera idea que a todo el mundo se le ocurre, y en un hosting administrado está mal.
+  Los paneles tipo Server Manager <b>regeneran</b> el <code>server_cfg.ini</code> desde su propia
+  base de datos cada vez que arranca el servidor: lo que escribas a mano desaparece en el próximo
+  arranque, que es justamente el paso siguiente de esta guía.</p>
+  <p>Por eso varios paneles —EmperorServers entre ellos— te dejan <b>ver</b> el archivo pero no
+  editarlo. No es una limitación de tu plan: es que ese archivo es una salida, no una entrada.</p>
+  <p>Lo mismo con Content Manager en un servidor local: reescribe el <code>server_cfg.ini</code>
+  al guardar desde su interfaz y se lleva puesto lo que hayas puesto a mano. Cargalo desde su
+  pestaña "Plugins".</p>
 
   <h2>Race Control convive con los plugins que ya tengas</h2>
   <p>Desde la versión <b>2.4.8</b> de Assetto Corsa Server Manager se pueden declarar
