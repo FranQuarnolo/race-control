@@ -58,7 +58,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
  * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
  * esto no había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.6";
+export const APP_VERSION = "0.7";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto

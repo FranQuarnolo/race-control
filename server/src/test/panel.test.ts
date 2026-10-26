@@ -193,3 +193,69 @@ test("el panel avisa cuando se queda sin contacto con el motor", () => {
   assert.ok(js.includes("renderLinkState"), "Nadie dibuja el estado del contacto con el motor");
   assert.ok(html.includes('id="link-down"'), "app.js dibuja la banda de contacto perdido pero index.html no la tiene");
 });
+
+/**
+ * Clases que el HTML nombra y que ninguna regla de la hoja alcanza.
+ *
+ * Es el `$("id")` que devuelve `null`, pero del lado del estilo: el navegador acepta cualquier
+ * `class` que le pongas, no existe el concepto de clase inválida, y el resultado es contenido sin
+ * formato en medio de una pantalla formateada. Pasó al mudar el switch de modo al cajón de Conexión:
+ * el manual nuevo salió con `<ol class="pasos">` y `<p class="muted sub">` antes de que esas reglas
+ * existieran, y la única forma de enterarse era abrir esa pantalla con los ojos puestos ahí.
+ *
+ * Se perdonan dos familias, porque en las dos la clase no está para pintar nada. Las de estado, que
+ * el JS prende y apaga (`classList.toggle`), y las que son puro gancho de selección
+ * (`querySelectorAll(".wizard-step")`): esa existe para que el JS encuentre los pasos del asistente,
+ * y que no tenga una sola declaración de estilo es lo correcto, no un olvido.
+ */
+test("toda clase del panel tiene al menos una regla que la alcance", () => {
+  const html = leer(PANEL, "index.html");
+  const css = sinComentarios(leer(PANEL, "styles.css"));
+  const js = leer(PANEL, "app.js");
+
+  const enHtml = new Set<string>();
+  for (const [, lista] of html.matchAll(/\bclass="([^"]+)"/g)) {
+    for (const clase of lista.trim().split(/\s+/)) enHtml.add(clase);
+  }
+
+  const conRegla = new Set<string>();
+  for (const [, clase] of css.matchAll(/\.([a-zA-Z][\w-]*)/g)) conRegla.add(clase);
+  // Las que el JS pone y saca viven en el mismo saco: si el JS la nombra, alguien la pensó.
+  for (const [, clase] of js.matchAll(/classList\.(?:toggle|add|remove)\(\s*"([\w-]+)"/g)) conRegla.add(clase);
+  // Y las que son gancho de selección y no formato.
+  for (const [, clase] of js.matchAll(/querySelectorAll?\(\s*"\.([\w-]+)"/g)) conRegla.add(clase);
+
+  const huerfanas = [...enHtml].filter((c) => !conRegla.has(c)).sort();
+  assert.deepEqual(
+    huerfanas,
+    [],
+    `index.html usa clases que no tienen una sola regla en styles.css. No hay error ni consola: ` +
+      `eso se ve como contenido sin formato y nada más: ${huerfanas.join(", ")}`
+  );
+});
+
+/**
+ * El cartel de modo sombra de la barra.
+ *
+ * El switch estaba arriba, a la vista los siete días, y se mudó al cajón de Conexión porque se toca
+ * dos veces en la vida de una liga. El costo de esa mudanza es que vuelve a ser posible correr una
+ * carrera entera en modo sombra sin notarlo: las sanciones se anotan, nadie las cobra, y el panel se
+ * ve exactamente igual que uno sancionando de verdad. El cartel es lo único que lo impide.
+ */
+test("el modo sombra sigue siendo visible fuera del cajón de conexión", () => {
+  const js = leer(PANEL, "app.js");
+  const html = leer(PANEL, "index.html");
+  const css = sinComentarios(leer(PANEL, "styles.css"));
+
+  assert.ok(html.includes('id="mode-chip"'), "no quedó ningún aviso de modo sombra en la barra");
+  assert.ok(
+    /mode-chip"\s*\)\s*\.hidden\s*=/.test(js),
+    "el cartel de modo sombra existe pero nadie lo muestra ni lo esconde según el modo"
+  );
+  // El bug de `display: flex` ganándole a `[hidden]` ya se pagó una vez con el modal de primer
+  // arranque. Un cartel que no se puede esconder es peor que no tenerlo: grita en modo real.
+  assert.ok(
+    /\.chapa-sombra\[hidden\]\s*{[^}]*display:\s*none/.test(css),
+    "falta el seguro `.chapa-sombra[hidden] { display: none }`: cualquier `display` propio le gana al atributo"
+  );
+});

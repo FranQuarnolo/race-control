@@ -3,6 +3,101 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.7] — 2026-10-26
+
+La 0.6 cerró la auditoría. Esta versión cierra lo que la auditoría no podía ver: el momento en que
+alguien que no es técnico se sienta por primera vez frente al panel y tiene que conectar su
+servidor. Hubo que probarlo contra un hosting real para descubrir que el camino que el producto
+describía no era el camino que terminaba funcionando.
+
+### El ticket de soporte viene escrito
+
+**Contexto:** el campo `Send Address` no siempre existe. Varios hostings de Assetto Corsa vienen con
+el soporte de plugins apagado desde un archivo del propio panel (`disable_plugins` en el
+`config.yml` del Server Manager), y cuando está apagado la sección entera no se dibuja. No está
+escondida en otra pestaña: no está. El admin busca un campo que no existe, y es el primer paso del
+producto.
+
+Ahora el cajón de **Conexión** tiene un botón, **"Copiar el mensaje para mi hosting"**, que arma el
+ticket completo y lo deja en el portapapeles. Tres decisiones sobre ese texto, las tres aprendidas
+de la ida y vuelta real con EmperorServers:
+
+- **Va en inglés.** El soporte de los hostings de AC contesta en inglés. Un ticket en castellano
+  agrega una traducción en el medio y un día de demora.
+- **Pide que configuren el plugin, no que habiliten el campo.** Es la diferencia entre que funcione
+  y esperar para siempre: el soporte no habilitó nada para que lo llenara el cliente, lo
+  configuraron ellos del lado del servidor con la dirección que les pasamos. Pedir "habilitame los
+  plugins así me aparece el campo" deja al admin esperando un campo que nunca va a aparecer.
+- **Pide explícitamente la autorización de salida.** El plugin puede restringir quién le manda
+  comandos, y ese fallo es el peor de todos: la telemetría entra igual, el panel se pone **verde**, y
+  el chat, las credenciales de los pilotos, los kicks y las sanciones se descartan sin un solo error.
+  Verde y sordo al mismo tiempo. Pedirlo en el mismo ticket cuesta cuatro renglones.
+
+La dirección de la liga va adentro del mensaje, ya resuelta. Si todavía no llegó, el botón no copia
+nada y lo dice, en vez de mandar un ticket con un `--` donde iba el dato.
+
+### El cajón de Conexión se da vuelta
+
+Arriba estaba el estado —cuatro filas que dicen `--`— y abajo, adentro de un `<details>`, lo que
+había que hacer. Al revés de como se usa: quien abre ese cajón por primera vez necesita
+instrucciones, y las cuatro filas no significan nada todavía; quien ya conectó no vuelve a entrar.
+
+Ahora arranca con **un manual de tres pasos** en castellano y sin una palabra técnica, el estado va
+abajo, y el `<details>` se fue. El caso "no encuentro el campo" dejó de ser una nota al pie escondida
+en un desplegable y es el paso 2, a la vista, con su botón. El tercer paso explica por qué hay que
+entrar una vez al servidor con el juego: el acServer solo habla cuando pasa algo, y hasta que no diga
+la primera palabra, Race Control no sabe a dónde contestarle.
+
+### El modo sombra deja la barra, pero no desaparece
+
+El switch de modo estaba en la barra de arriba, visible los siete días, y se toca dos veces en la
+vida de una liga. Se mudó a Conexión, que es donde vive lo que se configura una vez.
+
+La mudanza reabre el problema que el switch en la barra resolvía, y conviene decirlo claro: se puede
+correr una carrera entera en modo sombra sin notarlo —las sanciones se anotan, nadie las cobra, y el
+panel se ve idéntico a uno sancionando de verdad—. Por eso en la barra quedó un **cartel ámbar que
+aparece solo cuando el modo está activo** y que al clickearlo lleva derecho al switch. Ocupa lugar
+únicamente cuando hay algo que avisar.
+
+El cartel trae su propio `.chapa-sombra[hidden] { display: none; }`, una línea de seguro contra el
+bug que ya se pagó dos veces en este repo: un `display` propio le gana al atributo `hidden` y el
+elemento queda imposible de esconder.
+
+### La columna "Piloto" se comía la tabla
+
+`#timing-table th.c-driver` tenía `width: 100%`. La columna glotona se quedaba con todo el espacio
+sobrante y empujaba a las otras trece contra el borde derecho, con un hueco en el medio. Se veía peor
+con la tabla vacía —que es como se ve al abrir el panel— pero estaba mal a cualquier ancho. Ahora son
+`20ch`, con el recorte por `text-overflow` que ya estaba para los nombres largos.
+
+### La landing dice menos
+
+Cinco textos. Los dos párrafos que describían columna por columna lo que la captura de al lado
+muestra sola, afuera: en una landing, el texto que explica una imagen que está a diez centímetros
+compite con la imagen y pierde. Lo mismo el párrafo de Reglas y el de la app de los pilotos, que
+explicaba el mecanismo del chat interno del juego —la parte más ingeniosa del producto y la que menos
+le importa a quien está decidiendo si lo contrata—. Y se sacó un ítem que prometía un aviso de
+congelamiento que el panel da, pero no por el canal que la lista daba a entender.
+
+La bajada del hero ahora nombra el dolor antes que la función.
+
+### Dos invariantes nuevas en `panel.test.ts`
+
+Las dos del mismo linaje que las de la 0.6 — cosas que no fallan ruidosamente:
+
+- **Toda clase del HTML tiene al menos una regla que la alcance.** Es el `$("id")` que devuelve
+  `null`, pero del lado del estilo: no existe la clase inválida, el navegador acepta cualquier cosa, y
+  el resultado es contenido sin formato en medio de una pantalla formateada. Lo descubrió al primer
+  intento: el manual nuevo salió con `class="pasos"` antes de que la regla existiera. Perdona las
+  clases de estado y los ganchos de `querySelectorAll`, que no están para pintar nada.
+- **El modo sombra sigue siendo visible fuera del cajón.** Que el cartel exista, que alguien lo
+  muestre y lo esconda según el modo, y que el seguro del `[hidden]` esté puesto.
+
+### Versión
+
+`0.7` en el panel y en `/api/state`, `0.7.0` en `package.json`. La única dependencia de producción
+sigue siendo `express`. 216 tests.
+
 ## [0.6] — 2026-10-26
 
 Una auditoría completa del producto y los arreglos que salieron de ella. No hay funcionalidad nueva

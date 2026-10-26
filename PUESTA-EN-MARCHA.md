@@ -163,14 +163,17 @@ UDP de los diez declarados en `fly.toml`, y cuando se acaban el alta falla. Ampl
 
 ## 5. Lo que hace el admin de la liga
 
-Esto es lo único que le tenés que explicar, y es corto a propósito.
+En realidad no le tenés que explicar casi nada: desde la **0.7**, el cajón de **Conexión** arranca
+con el manual de tres pasos escrito adentro, sin una palabra técnica. Esto es lo que dice.
 
 1. Entra con el usuario y la contraseña que le pasaste.
 2. La pantalla le muestra un renglón: `203.0.113.5:30004`.
 3. Va al panel de su hosting, abre **"Server Options"**, busca ahí la sección de plugins UDP y
-   pega el renglón en el campo **"Send Address"**.
-4. **Reinicia el servidor de Assetto Corsa.** Sin reiniciar no pasa nada: el servidor lee su
-   configuración una sola vez, al arrancar.
+   pega el renglón en el campo **"Send Address"**. Si esa sección no aparece, no la busca más: toca
+   **"Copiar el mensaje para mi hosting"** y lo manda al soporte (ver más abajo).
+4. **Reinicia el servidor de Assetto Corsa y entra una vez con el juego.** Sin reiniciar no pasa
+   nada, porque el servidor lee su configuración una sola vez, al arrancar. Y sin que entre alguien
+   tampoco: el servidor solo habla cuando pasa algo.
 5. La pantalla se pone verde sola cuando llega el primer paquete.
 
 Nada de esto le pide su IP, ni puertos, ni abrir nada en su router. El único número que existe se
@@ -195,9 +198,10 @@ Assetto Corsa Server Manager el soporte de plugins se apaga entero desde el `con
 (`disable_plugins`), y cuando está apagado **la sección no se dibuja**. No está en otra pestaña: no
 está. Ese archivo lo maneja el hosting.
 
-La salida es un ticket al soporte pidiendo que habiliten los plugins UDP del Server Manager. La
-guía que está adentro del producto (**Conexión → "Ver la guía"**) trae el texto del ticket listo
-para copiar.
+La salida es un ticket al soporte, y desde la **0.7** el admin no lo escribe: en **Conexión**, el
+paso 2 tiene un botón, **"Copiar el mensaje para mi hosting"**, que arma el texto completo —en
+inglés, porque así contestan— con la dirección de su liga ya adentro y el pedido de autorización de
+salida incluido. Lo pega en el ticket y listo. No hay nada que explicarle ni que traducirle.
 
 **Y funciona: está confirmado con EmperorServers el 26/10/2026.** Conviene saber cómo contestan,
 porque la respuesta no es la que uno espera:
@@ -266,6 +270,12 @@ de verdad: sirve para mirar un fin de semana entero qué habría hecho el motor 
 campeonato. El kick manual del admin se ejecuta igual, porque es una orden explícita y ya está
 supervisada.
 
+El switch está en **Conexión → "Modo de funcionamiento"** (desde la 0.7; antes estaba en la barra de
+arriba). Mientras el modo esté activo, en la barra aparece un cartel ámbar que dice **"Modo
+sombra"** y que al clickearlo abre ese switch. Está ahí por una razón: sin el cartel se podía correr
+una carrera entera en sombra sin notarlo, porque un panel que sanciona y uno que no se ven exactamente
+igual.
+
 ---
 
 ## 8. El mes a mes
@@ -333,7 +343,7 @@ dist/sim/demo.js` levanta el panel con una carrera inventada adentro, en
 | Síntoma | Causa más probable | Dónde mirar |
 |---|---|---|
 | La pantalla de conexión nunca se pone verde | No reinició el servidor de AC después de pegar el Send Address | Es la causa número uno. Preguntarlo antes que nada |
-| "No encuentro el campo Send Address" | El hosting tiene los plugins del Server Manager apagados (`disable_plugins`) y la sección no se dibuja | Ticket al soporte del hosting. Ver §5 |
+| "No encuentro el campo Send Address" | El hosting tiene los plugins del Server Manager apagados (`disable_plugins`) y la sección no se dibuja | Que use **Conexión → "Copiar el mensaje para mi hosting"** y lo mande al soporte. Ver §5 |
 | Ninguna liga recibe nada, nunca | Falta la IPv4 dedicada | `fly ips list`: tiene que decir "dedicated" |
 | Una liga sí y otra no | El puerto UDP de esa liga no está declarado en `fly.toml` | El bloque `[[services]]` de ese puerto |
 | Entra telemetría pero las sanciones no llegan | Se bindeó a `0.0.0.0` en vez de `fly-global-services` | `RC_UDP_BIND` |
@@ -435,14 +445,14 @@ porque depende de una decisión o de algo que no está en el código.
 
 | Qué | Dónde se hace | Qué pasa si no se hace |
 |---|---|---|
-| Poner `RC_CONTACT` | [3.3 Los tres secretos](#33-los-tres-secretos) | Quien pierde la contraseña no tiene a dónde escribir. **Es el más urgente de esta lista.** |
-| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla" |
+| ~~Poner `RC_CONTACT`~~ | [3.3 Los tres secretos](#33-los-tres-secretos) | **Hecho el 26/10/2026**: quedó `quarnolofrancisco@gmail.com` en producción |
+| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla". **Es el pendiente más urgente de esta lista.** |
 | El video del README | comentario al pie de [README.md](README.md) | Nada se rompe; el `<img>` está comentado a propósito para que no quede una imagen rota |
 
-Las capturas conviene sacarlas ahora y no antes: el panel de la 0.6 ya tiene la columna de intervalo,
-la zona de pit en ámbar y el botón de anular, así que lo que se fotografíe hoy va a seguir siendo
-cierto por un buen rato. El atajo para sacarlas sin Assetto Corsa está en la sección que linkea la
-tabla.
+Las capturas conviene sacarlas ahora y no antes: el panel de la 0.7 ya tiene la columna de intervalo,
+la zona de pit en ámbar, el botón de anular y la tabla con los anchos arreglados, así que lo que se
+fotografíe hoy va a seguir siendo cierto por un buen rato. El atajo para sacarlas sin Assetto Corsa
+está en la sección que linkea la tabla.
 
 ### Dos decisiones abiertas
 

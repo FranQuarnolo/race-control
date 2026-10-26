@@ -1888,6 +1888,12 @@ function renderMode(shadowMode) {
   wrap.title = shadowMode
     ? "El motor detecta y registra, pero no sanciona ni kickea de verdad. Recomendado en las primeras carreras."
     : "El motor aplica sanciones y expulsiones reales.";
+
+  // El switch se mudó adentro del cajón de Conexión, donde no se ve. Eso reabre el problema que el
+  // switch en la barra resolvía: se podía correr una carrera entera sin notar que el motor estaba
+  // en sombra y que ninguna de las sanciones aplicadas contaba. El cartel de la barra es lo que
+  // queda de aquello — aparece solo cuando hay algo que avisar, y clickearlo lleva al switch.
+  $("mode-chip").hidden = !shadowMode;
 }
 
 // ===================================================================== bandera de carrera
@@ -2076,7 +2082,70 @@ function wireButtons() {
   // mano queda a un Ctrl+C.
   $("net-send-address").addEventListener("focus", (e) => e.target.select());
 
+  $("btn-copy-support").addEventListener("click", () => {
+    const address = $("net-send-address").value;
+    // Sin dirección el mensaje sale con un "--" adentro y el soporte configura la nada. Mejor no
+    // copiar nada y decirlo.
+    if (!address || address === "--") {
+      toast("Todavía no tenemos tu dirección. Esperá unos segundos y probá de nuevo.", 5000);
+      return;
+    }
+    navigator.clipboard.writeText(supportMessage(address)).then(
+      () => toast("Mensaje copiado. Pegalo en el ticket de soporte de tu hosting.", 6000),
+      () => toast("No se pudo copiar — abrí la guía completa y copialo de ahí", 5000)
+    );
+  });
+
+  $("mode-chip").addEventListener("click", () => openDrawer("drawer-network"));
+
   wireWizard();
+}
+
+/**
+ * El ticket de soporte, ya armado y con la dirección de esta liga adentro.
+ *
+ * Va en **inglés** y no en castellano porque el soporte de los hostings de Assetto Corsa contesta
+ * en inglés: EmperorServers, Pingperfect, GTXGaming, Nitrado. Un ticket en castellano suma una
+ * traducción en el medio y un día de ida y vuelta.
+ *
+ * Pide que **configuren el plugin apuntando a esta dirección**, no que activen `disable_plugins`.
+ * Es lo que pasó de verdad cuando se probó contra EmperorServers: no habilitaron el campo para que
+ * lo llenara el cliente, lo configuraron ellos del lado del servidor. Pedir lo segundo deja al admin
+ * esperando un campo que nunca va a aparecer.
+ *
+ * El párrafo del allowlist no es decorativo. El plugin de AC puede restringir quién le manda
+ * comandos, y si queda sin autorizar, la telemetría entra igual: el panel se pone verde y todo lo
+ * que sale —chat, credenciales, kicks, sanciones— se descarta en silencio. Verde y sordo al mismo
+ * tiempo es el peor estado posible, y pedirlo en el mismo ticket cuesta cuatro renglones.
+ */
+function supportMessage(address) {
+  return [
+    "Subject: Please enable and configure the UDP plugin on my Assetto Corsa server",
+    "",
+    "Hello,",
+    "",
+    "I use an external race control tool with my Assetto Corsa server. It needs the",
+    "server's UDP plugin enabled and pointed at it. I cannot find the \"Send Address\"",
+    "field in my control panel, so I assume UDP plugins are disabled on my server.",
+    "",
+    "Could you please configure the UDP plugin with this destination?",
+    "",
+    "    Send Address (UDP_PLUGIN_ADDRESS): " + address,
+    "",
+    "Any free port on your side is fine as the Listen Address",
+    "(UDP_PLUGIN_LOCAL_PORT) — I do not need a specific one.",
+    "",
+    "One important detail: if the plugin has an IP allowlist, please also allow",
+    "    " + address.split(":")[0],
+    "to SEND commands to the plugin, not only to receive telemetry. The tool has to",
+    "send chat messages and penalties back to the server. If that address is not",
+    "allowed, everything looks fine on my side while every command is silently",
+    "dropped.",
+    "",
+    "Please restart the server once it is configured and let me know.",
+    "",
+    "Thank you!",
+  ].join("\n");
 }
 
 /**

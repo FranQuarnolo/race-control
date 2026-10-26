@@ -254,6 +254,35 @@ nav.views a[aria-current="page"] { background: #20242e; color: var(--text); }
 }
 .mode-switch.live .track { background: var(--green); }
 .mode-switch.live .track::after { transform: translateX(16px); }
+
+/* Adentro del cajón la sección es un bloque, así que sin esto el interruptor se estiraría a los
+   460 px de ancho y el texto quedaría flotando lejos de la perilla. */
+.drawer .mode-switch { width: fit-content; }
+
+/*
+  El cartel de modo sombra en la barra. Reemplaza al interruptor, que se mudó al cajón de Conexión.
+
+  Es un botón y no un cartel muerto porque el único motivo para mirarlo es querer salir de ese modo:
+  el click abre el cajón donde está la perilla. Y está pintado con el ámbar de aviso, no con el rojo
+  de error, porque el modo sombra no es una falla — es una decisión, que puede haber sido tomada a
+  propósito hace diez minutos.
+*/
+.chapa-sombra {
+  background: rgba(239, 142, 60, 0.14);
+  border: 1px solid rgba(239, 142, 60, 0.45);
+  color: var(--yellow);
+  border-radius: 7px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chapa-sombra:hover { background: rgba(239, 142, 60, 0.22); }
+/* `[hidden]` explícito: la regla de arriba no lo declara, pero este archivo ya tuvo el bug de un
+   `display` ganándole a `[hidden]` y dejando un modal visible para siempre. Una línea de seguro. */
+.chapa-sombra[hidden] { display: none; }
 .mode-switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---------------------------------------------------------------- vistas */
@@ -496,13 +525,23 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 /* ---------------------------------------------------------------- torre de tiempos */
 
 /*
-  Muchas columnas en poco ancho. Dos decisiones para que entre sin achicar la tipografía hasta lo
-  ilegible: todo lo numérico va en `nowrap` con tipografía tabular, y la columna del piloto se
-  queda con TODO el espacio sobrante (`width: 100%`), lo que empuja a las demás a su ancho mínimo.
+  Muchas columnas en poco ancho. Todo lo numérico va en `nowrap` con tipografía tabular para que
+  entre sin achicar la tipografía hasta lo ilegible.
+
+  La columna del piloto tenía `width: 100%`, el truco clásico para que absorba todo el espacio
+  sobrante y los nombres largos se corten con puntos suspensivos. El efecto secundario es el que se
+  ve en un monitor ancho: el piloto se queda con TODO el aire y las otras trece columnas quedan
+  apretadas contra el borde derecho, con un hueco en el medio. Con la tabla vacía es peor todavía,
+  porque no hay ni un nombre que justifique ese ancho.
+
+  Ahora el ancho es concreto: 20ch entran "Maximiliano S." y la enorme mayoría de los nombres que
+  usa la gente, y el espacio que sobra se reparte entre todas las columnas en vez de acumularse en
+  una. El `max-width: 0` del `td` se queda: es lo que deja que el `text-overflow` recorte el nombre
+  largo en vez de ensanchar la columna, y ahora el ancho que manda es el del `th`.
 */
 #timing-table { font-size: 12.5px; }
 #timing-table th, #timing-table td { padding: 5px 5px; white-space: nowrap; }
-#timing-table th.c-driver { width: 100%; }
+#timing-table th.c-driver { width: 20ch; }
 #timing-table td.c-driver { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .c-pos {
@@ -820,6 +859,54 @@ tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
 }
 .drawer section { border-top: 1px solid var(--panel-border); padding-top: 13px; }
 .drawer section:first-of-type { border-top: none; padding-top: 0; }
+
+/*
+  El manual de tres pasos del cajón de Conexión.
+
+  Numeración propia con `counter` y no los números del `<ol>`: el marcador nativo queda fuera de la
+  caja y no se puede pintar, y acá el número es lo que ordena la lectura de alguien que no sabe qué
+  está haciendo. Va en un círculo ámbar para que se encuentre de un vistazo.
+
+  `list-style: none` saca el marcador nativo, pero el elemento sigue siendo un `<ol><li>`: el lector
+  de pantalla lo anuncia como "lista de 3 elementos, elemento 1", que es justo lo que es.
+*/
+ol.pasos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: paso;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+ol.pasos > li {
+  counter-increment: paso;
+  position: relative;
+  padding-left: 30px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+ol.pasos > li::before {
+  content: counter(paso);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239, 142, 60, 0.16);
+  color: var(--yellow);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* El párrafo aclaratorio de adentro de un paso: más chico que el paso y despegado de él, para que
+   se lea como la letra chica que es y no compita con la instrucción. */
+ol.pasos .sub { font-size: 12px; margin: 6px 0 8px 0; }
+ol.pasos .campo-copiable { margin-top: 7px; }
+ol.pasos button { margin-top: 2px; }
 
 .btn-close {
   background: none;

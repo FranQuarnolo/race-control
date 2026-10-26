@@ -91,14 +91,29 @@
   de plugins se puede apagar entero desde un archivo de configuración del propio panel
   (<code>config.yml</code>, la opción <code>disable_plugins</code>), y cuando está apagado la
   sección no se dibuja. Ese archivo lo maneja el hosting, no vos.</p>
-  <p><b>La solución es un ticket al soporte de tu hosting.</b> Pedíles, con estas palabras, que te
-  habiliten los plugins UDP del Server Manager. Si preferís, pasales esto:</p>
-  <pre>Hola, necesito conectar un plugin UDP externo a mi servidor.
-¿Me pueden habilitar los plugins en el Server Manager
-(disable_plugins: false en el config.yml) para que me aparezca
-el campo "Send Address" en Server Options?</pre>
-  <p>Mientras tanto, también podés pedirles directamente que te pongan el valor: pasales la
-  dirección que te muestra Race Control y decíles que va en el "Send Address" del servidor.</p>
+  <p><b>La solución es un ticket al soporte de tu hosting</b>, y el panel te lo arma solo: abrí
+  <b>Conexión</b> y tocá <b>"Copiar el mensaje para mi hosting"</b>. Sale el texto completo, en
+  inglés y con la dirección de tu liga ya adentro. Pegalo en el ticket y listo.</p>
+
+  <div class="ok">
+    <b>No les pidas que te habiliten el campo: pediles que configuren el plugin.</b> Es la diferencia
+    entre esperar días y que funcione. Cuando se probó contra EmperorServers, el soporte no habilitó
+    nada en el panel —lo configuraron ellos del lado del servidor, con la dirección que les pasamos—.
+    Si pedís "habilitame los plugins para que me aparezca el campo", podés quedarte esperando un campo
+    que nunca va a aparecer mientras el servidor ya estaba listo.
+  </div>
+
+  <p>El mensaje que copia el botón también les pide algo que casi nadie pide y que importa mucho: que
+  <b>autoricen a la dirección de Race Control a mandarle órdenes al plugin</b>, no solo a recibir
+  telemetría. El plugin de Assetto Corsa puede tener una lista de direcciones permitidas, y si la
+  nuestra no está, pasa lo peor que puede pasar: la telemetría entra igual, el panel se pone verde,
+  y todo lo que sale —el chat, las credenciales de los pilotos, los kicks, las sanciones— se descarta
+  sin un solo mensaje de error.</p>
+
+  <p>Después de que te contesten, <b>entrá una vez al servidor con el juego</b>. El servidor de
+  Assetto Corsa solo habla cuando pasa algo —cambia la sesión o entra alguien—, así que hasta que no
+  entre el primer piloto no llega el primer paquete y la pantalla sigue en gris aunque esté todo
+  bien.</p>
 
   <h2>Editar el <code>server_cfg.ini</code> a mano no sirve</h2>
   <p>Es la primera idea que a todo el mundo se le ocurre, y en un hosting administrado está mal.
