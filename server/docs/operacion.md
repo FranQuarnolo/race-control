@@ -180,6 +180,50 @@ uno va declarado individualmente con `internal_port` igual al externo.
 El panel de operador muestra cuántos puertos quedan libres, justamente para que esto no te agarre
 de sorpresa un viernes a la noche.
 
+## Una liga corre un circuito que no está en el catálogo
+
+El mapa trae ~200 trazados empaquetados (`src/track/catalog/`), generados de la instalación de
+Assetto Corsa con la que se armó el catálogo. Una liga que instale un mod que no esté ahí —y van a
+pasar, el catálogo de mods de AC no tiene fondo— **no se rompe**: Race Control vuelve solo al
+aprendizaje por telemetría, que es como funcionaba hasta la 0.7.
+
+Qué ve el admin: el mapa arranca vacío con el cartel *"Este circuito no está en el catálogo, así
+que el trazado se dibuja solo a medida que los autos dan vueltas"*, y una barra de progreso. A
+partir del 40% empieza a dibujar y a la vuelta o dos está completo. Queda guardado en la carpeta de
+esa liga, así que la próxima vez que corran ahí ya está.
+
+Eso alcanza para que la carrera salga. Para que salga **bien** hay tres caminos, de menor a mayor
+esfuerzo:
+
+**1. No hacer nada.** Si es una pista que esa liga corre una vez, el aprendizaje la cubre. Lo que
+se pierde es que el dibujo sigue la trayectoria de los autos y no el borde de la pista: donde todos
+cortan una curva, el dibujo corta.
+
+**2. Dejar el trazado en la carpeta de la liga.** Sin deploy y sin tocar el producto. Se genera el
+JSON con el script y se copia a `/data/leagues/<id>/tracks/<clave>.json`:
+
+```bash
+# en una PC con ese circuito instalado
+node scripts/build-track-catalog.js "<...>/content/tracks"
+# queda en server/src/track/catalog/<clave>.json — ese archivo es el que se copia
+```
+
+El formato de lo aprendido y el del catálogo son el mismo **a propósito**, justamente para que esto
+funcione. La clave del archivo es el nombre de la carpeta del circuito, con la variante pegada con
+`__` si tiene más de un trazado (`ks_monza.json`, `ks_nordschleife__endurance.json`). Lo toma en la
+próxima sesión, sin reiniciar nada. Si el nombre no coincide exacto con lo que manda Assetto Corsa,
+no pasa nada malo: simplemente sigue aprendiendo, como si el archivo no estuviera.
+
+**3. Sumarlo al catálogo.** Si es un circuito que va a correr más de una liga, se regenera el
+catálogo en una PC que lo tenga, se commitea y sale en la próxima versión para todas.
+
+### Pistas que no son un circuito
+
+Una subida de montaña o una ruta punto a punto terminan lejos de donde arrancaron. El generador las
+acepta y las marca `closed: false`; el panel entonces no une el último punto con el primero, que
+dibujaría una recta cruzando el mapa entero. Lo único que se descarta son los archivos que no son
+una línea válida.
+
 ## Logs y datos
 
 Todo cuelga del volumen en `/data`:

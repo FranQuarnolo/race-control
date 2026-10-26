@@ -1140,7 +1140,13 @@ function drawMap() {
   }
   // Solo se cierra el circuito si el trazado está completo; con huecos, cerrarlo dibuja una
   // recta falsa de punta a punta que parece parte de la pista.
-  if (trackOutline.coverage > 0.95) ctx.closePath();
+  //
+  // `closed === false` es el otro caso donde no hay que cerrar, y no tiene nada que ver con estar
+  // incompleto: hay pistas que no son un circuito. Una subida de montaña (Trento-Bondone) o una
+  // ruta punto a punto terminan a kilómetros de donde arrancaron, y cerrarlas dibujaría una recta
+  // cruzando el mapa entero. El campo lo pone el catálogo; lo aprendido no lo trae y asume cerrado,
+  // que es lo que era hasta ahora.
+  if (trackOutline.closed !== false && trackOutline.coverage > 0.95) ctx.closePath();
   ctx.strokeStyle = "#2f3545";
   ctx.lineWidth = 13;
   ctx.lineJoin = "round";

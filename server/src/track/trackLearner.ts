@@ -17,6 +17,15 @@ export interface TrackOutline {
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
   /** Qué porcentaje del circuito se conoce, 0..1. El panel lo usa para avisar "aprendiendo". */
   coverage: number;
+  /**
+   * Si la pista vuelve a donde empezó.
+   *
+   * Casi siempre sí, y por eso el default es `true` cuando el campo no está. El caso que obliga a
+   * tenerlo es el de las pistas que no son un circuito —una subida de montaña, una ruta punto a
+   * punto—: ahí el panel no puede unir el último punto con el primero, porque eso dibujaría una
+   * recta cruzando el mapa entero que parece parte del trazado.
+   */
+  closed?: boolean;
 }
 
 /**
@@ -58,6 +67,16 @@ export class TrackLearner {
   private dirty = false;
   /** Trazado exacto, venido del catálogo. Cuando está, no se aprende ni se guarda nada. */
   private catalogued: TrackOutline | null = null;
+  /**
+   * Si la pista cierra. Solo puede ser `false` cuando el archivo de la liga lo dice.
+   *
+   * Lo aprendido no tiene cómo saberlo —aprende tramos sueltos, no la forma— y asume que sí, que
+   * es lo correcto para casi toda pista. El caso que esto cubre es el de un trazado generado con
+   * el script y dejado a mano en la carpeta de la liga, que es cómo se agrega un circuito nuevo
+   * sin esperar a una versión: si el campo se perdiera en ese camino, una subida de montaña se
+   * dibujaría cerrada.
+   */
+  private closed = true;
 
   constructor(
     private storageDir: string,
@@ -80,6 +99,7 @@ export class TrackLearner {
     this.track = normalized;
     this.slots = new Array(SLOTS).fill(null);
     this.catalogued = null;
+    this.closed = true;
     this.loadFromCatalog();
     if (!this.catalogued) this.load();
   }
@@ -117,7 +137,7 @@ export class TrackLearner {
       if (p.z < minZ) minZ = p.z;
       if (p.z > maxZ) maxZ = p.z;
     }
-    return { track: this.track, points, bounds: { minX, maxX, minZ, maxZ }, coverage };
+    return { track: this.track, points, bounds: { minX, maxX, minZ, maxZ }, coverage, closed: this.closed };
   }
 
   /** Cuánto se conoce, incluso por debajo del mínimo para dibujar — el panel muestra el progreso. */
@@ -159,6 +179,7 @@ export class TrackLearner {
   private load(): void {
     const outline = readOutline(this.file());
     if (!outline) return; // no existe todavía: se aprende de cero
+    this.closed = outline.closed !== false;
     for (const p of outline.points) {
       const slot = Math.min(SLOTS - 1, Math.max(0, Math.floor(p.s * SLOTS)));
       this.slots[slot] = { x: p.x, z: p.z };
@@ -232,6 +253,9 @@ function readOutline(file: string): TrackOutline | null {
       points,
       bounds: { minX: bounds.minX, maxX: bounds.maxX, minZ: bounds.minZ, maxZ: bounds.maxZ },
       coverage: typeof raw.coverage === "number" ? raw.coverage : points.length / SLOTS,
+      // Ausente = cerrado. Es lo que vale para todo lo aprendido y para la enorme mayoría de los
+      // circuitos; solo el catálogo marca el caso raro, y solo cuando es falso.
+      closed: raw.closed !== false,
     };
   } catch {
     // No existe, o quedó corrupto. Ninguna de las dos cosas es un error que valga la pena mostrar:

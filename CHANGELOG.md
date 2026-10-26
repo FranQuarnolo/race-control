@@ -42,7 +42,27 @@ saltea con un aviso en vez de generarse: un trazado torcido es peor que no tener
 el mapa dibujaría una pista que no es y nadie lo notaría hasta ver un auto pasar por afuera.
 
 **El aprendizaje no se borró.** Sigue siendo la red de contención para las pistas mod que no estén
-en el catálogo. Lo que cambió es cuál es el camino principal.
+en el catálogo. Lo que cambió es cuál es el camino principal. El panel además dice en cuál de los
+dos está, en vez de prometer siempre un aprendizaje: con catálogo no hay nada que esperar, y sin
+catálogo hay que explicar la espera.
+
+**Van 198 circuitos** en esta primera generación. Para sumar uno que no esté no hace falta una
+versión nueva: el formato de lo aprendido y el del catálogo son el mismo a propósito, así que el
+JSON generado se puede dejar en la carpeta de datos de la liga y se toma en la sesión siguiente.
+Está documentado en [operacion.md](server/docs/operacion.md).
+
+**Pistas que no son un circuito.** Una subida de montaña (Trento-Bondone) o una ruta punto a punto
+terminan a kilómetros de donde arrancaron. La primera versión del generador las descartaba por "la
+línea no cierra", que era confundir "no es una vuelta" con "está roto": son pistas perfectamente
+válidas. Ahora entran marcadas `closed: false` y el panel no une el último punto con el primero
+—hacerlo dibujaría una recta cruzando el mapa entero, y nada en la pantalla diría que esa recta no
+es pista—. De los 199 archivos leídos, el único que se descartó de verdad fue una pista de drift
+sin línea de IA.
+
+**Si el juego está en otra PC** —que es el caso normal— hay un recolector en PowerShell
+(`scripts/recolectar-trazados.ps1`) que junta solo los `fast_lane.ai` en un zip de pocos MB. No
+hace falta copiar `content\tracks`, que son decenas de GB de modelos y texturas, ni instalar Node
+en la máquina del simulador.
 
 **Un bug que apareció al hacer esto:** `setTrack()` recibía el nombre del circuito y descartaba la
 variante. Spa con chicane y sin chicane, o el Nordschleife turístico y el de endurance, son la

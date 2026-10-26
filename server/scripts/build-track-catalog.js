@@ -48,11 +48,14 @@ const MAX_PUNTOS = 200_000;
 const MAX_COORDENADA = 100_000;
 
 /**
- * Cuánto puede separarse el último punto del primero, como fracción del largo total.
+ * Cuánto puede separarse el último punto del primero, como fracción del largo total, para
+ * considerar que la pista es un circuito cerrado.
  *
- * Un circuito cerrado vuelve a donde empezó. Si la línea termina a un 5% del largo de donde
- * arrancó, eso no es una vuelta: es un archivo de otra cosa —un pit lane, un rally point a punto,
- * una línea a medio editar— y dibujarlo daría una pista abierta con un tajo.
+ * Lo que está del otro lado del umbral NO se descarta: se marca `closed: false` y el panel no
+ * cierra el dibujo. Hay pistas que sencillamente no son un circuito —una subida de montaña como
+ * Trento-Bondone, una ruta punto a punto, una pista de drag— y terminan a kilómetros de donde
+ * arrancaron. Descartarlas dejaba sin mapa a pistas perfectamente válidas; cerrarlas a la fuerza
+ * dibujaba una recta cruzando todo el mapa que parecía parte del trazado.
  */
 const TOLERANCIA_CIERRE = 0.05;
 
@@ -169,15 +172,21 @@ function leerTrazado(archivo) {
   if (largo <= 0) return avisar(archivo, "largo total cero");
 
   const cierre = distancia(crudos[0], crudos[crudos.length - 1]);
-  if (cierre / largo > TOLERANCIA_CIERRE) {
-    return avisar(archivo, "la línea no cierra (quedan " + Math.round(cierre) + " m entre el final y el principio)");
+  const cerrado = cierre / largo <= TOLERANCIA_CIERRE;
+  if (!cerrado) {
+    console.log("  ok  " + nombreDe(archivo) + ": punto a punto (" + Math.round(cierre) + " m entre el final y el principio)");
   }
 
-  return remuestrear(crudos, acumulado, largo);
+  return remuestrear(crudos, acumulado, largo, cerrado);
+}
+
+/** El nombre que identifica al circuito en los avisos: la carpeta que contiene al `ai/`. */
+function nombreDe(archivo) {
+  return path.basename(path.dirname(path.dirname(archivo)));
 }
 
 function avisar(archivo, motivo) {
-  console.warn("  --  " + path.basename(path.dirname(path.dirname(archivo))) + ": " + motivo);
+  console.warn("  --  " + nombreDe(archivo) + ": " + motivo);
   return null;
 }
 
@@ -192,7 +201,7 @@ function distancia(a, b) {
  * curvas, pocos en las rectas—. Remuestrear por distancia da un punto cada tantos metros, que es
  * lo que el dibujo necesita y lo que ya producía el aprendizaje por telemetría.
  */
-function remuestrear(crudos, acumulado, largo) {
+function remuestrear(crudos, acumulado, largo, cerrado) {
   const points = [];
   let i = 0;
   for (let slot = 0; slot < SLOTS; slot++) {
@@ -221,7 +230,7 @@ function remuestrear(crudos, acumulado, largo) {
 
   // `coverage: 1` no es optimismo: el trazado está entero porque salió del archivo del circuito,
   // no de ver pasar autos. Es lo que hace que el panel no muestre nunca la barra de "aprendiendo".
-  return { points, bounds: { minX, maxX, minZ, maxZ }, coverage: 1 };
+  return { points, bounds: { minX, maxX, minZ, maxZ }, coverage: 1, closed: cerrado };
 }
 
 /** Un decimal alcanza y sobra para metros, y recorta el JSON a menos de la mitad. */

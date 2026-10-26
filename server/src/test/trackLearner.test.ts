@@ -162,6 +162,50 @@ test("una variante que no está en el catálogo cae al trazado de la pista", () 
   assert.equal(learner.isCatalogued(), true, "mejor el trazado principal que ningún trazado");
 });
 
+test("una pista punto a punto conserva que no cierra", () => {
+  const catalogo = tmpDir();
+  escribirCatalogo(catalogo, "trento-bondone");
+  // Se reescribe con closed:false, que es lo que marca el generador para una subida de montaña.
+  const archivo = path.join(catalogo, "trento-bondone.json");
+  const raw = JSON.parse(fs.readFileSync(archivo, "utf-8"));
+  fs.writeFileSync(archivo, JSON.stringify({ ...raw, closed: false }), "utf-8");
+
+  const learner = new TrackLearner(tmpDir(), catalogo);
+  learner.setTrack("trento-bondone");
+  assert.equal(learner.getOutline()!.closed, false, "si se pierde, el mapa dibuja una recta de punta a punta");
+});
+
+test("un trazado sin el campo `closed` se asume cerrado", () => {
+  const catalogo = tmpDir();
+  escribirCatalogo(catalogo, "ks_monza");
+  const learner = new TrackLearner(tmpDir(), catalogo);
+  learner.setTrack("ks_monza");
+  assert.equal(learner.getOutline()!.closed, true, "es lo que vale para todo lo aprendido y para casi toda pista");
+});
+
+/**
+ * Es el camino para agregar un circuito sin esperar a una versión nueva: se genera el JSON con
+ * `build-track-catalog.js` y se deja en la carpeta de datos de la liga. Vale la pena un test
+ * porque el formato de lo aprendido y el del catálogo son el mismo **a propósito**, y eso es
+ * fácil de romper sin darse cuenta.
+ */
+test("un trazado dejado a mano en la carpeta de la liga se usa tal cual", () => {
+  const datos = tmpDir();
+  escribirCatalogo(datos, "mod_que_no_esta_en_el_catalogo");
+  const archivo = path.join(datos, "mod_que_no_esta_en_el_catalogo.json");
+  const raw = JSON.parse(fs.readFileSync(archivo, "utf-8"));
+  fs.writeFileSync(archivo, JSON.stringify({ ...raw, closed: false }), "utf-8");
+
+  const learner = new TrackLearner(datos, SIN_CATALOGO);
+  learner.setTrack("mod_que_no_esta_en_el_catalogo");
+
+  const outline = learner.getOutline();
+  assert.ok(outline, "no hay que dar ninguna vuelta para que el mapa aparezca");
+  assert.equal(outline!.bounds.maxX, 1000);
+  assert.equal(outline!.closed, false, "el campo tiene que sobrevivir al camino de lo aprendido");
+  assert.equal(learner.isCatalogued(), false, "no vino del catálogo, aunque se comporte igual");
+});
+
 test("una pista que no está en el catálogo vuelve a aprenderse", () => {
   const learner = new TrackLearner(tmpDir(), tmpDir());
   learner.setTrack("mod_inventado_por_alguien");

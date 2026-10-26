@@ -465,19 +465,20 @@ porque depende de una decisión o de algo que no está en el código.
 | Qué | Dónde se hace | Qué pasa si no se hace |
 |---|---|---|
 | ~~Poner `RC_CONTACT`~~ | [3.3 Los tres secretos](#33-los-tres-secretos) | **Hecho el 26/10/2026**: quedó `quarnolofrancisco@gmail.com` en producción |
-| Generar el catálogo de trazados | `cd server && node scripts/build-track-catalog.js "<...>/content/tracks"` | El mapa vuelve al aprendizaje por telemetría de la 0.7: no dibuja nada hasta que alguien complete el 40% del circuito. **Es el pendiente más urgente de esta lista**, y se hace una sola vez desde una PC que tenga Assetto Corsa instalado. |
-| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla" |
+| ~~Generar el catálogo de trazados~~ | `server/scripts/build-track-catalog.js` | **Hecho el 26/10/2026**: 198 circuitos en `server/src/track/catalog/` |
+| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla". **Es el pendiente más urgente de esta lista.** |
 | El video del README | comentario al pie de [README.md](README.md) | Nada se rompe; el `<img>` está comentado a propósito para que no quede una imagen rota |
 
-El catálogo se genera desde la instalación de Assetto Corsa de quien lo corra, y los JSON quedan en
-`server/src/track/catalog/` listos para commitear. Lo que no esté en esa instalación no entra: para
-sumar circuitos después alcanza con volver a correr el script en una PC que los tenga.
+Para **sumar circuitos** al catálogo más adelante alcanza con volver a correr el generador en una
+PC que los tenga instalados. Si el juego está en otra máquina —que es lo normal— no hay que copiar
+`content\tracks` entero ni instalar Node allá: se lleva `server/scripts/recolectar-trazados.ps1`,
+botón derecho → *Ejecutar con PowerShell*, y deja un zip de pocos MB con lo único que el generador
+lee. Está explicado en [server/src/track/catalog/README.md](server/src/track/catalog/README.md).
 
-**Si el juego está en otra PC** —que es lo normal—, no hay que copiar `content\tracks` entero ni
-instalar Node allá: se lleva `server/scripts/recolectar-trazados.ps1`, se ejecuta con botón derecho
-→ *Ejecutar con PowerShell*, y deja un zip de pocos MB en el Escritorio con lo único que el
-generador lee. Está explicado en
-[server/src/track/catalog/README.md](server/src/track/catalog/README.md).
+Y si una liga corre un mod que no está en el catálogo, **no hay que hacer nada urgente**: Race
+Control vuelve solo al aprendizaje por telemetría y el panel lo dice. Los tres caminos para
+arreglarlo bien están en
+[operacion.md](server/docs/operacion.md#una-liga-corre-un-circuito-que-no-está-en-el-catálogo).
 
 Las capturas conviene sacarlas ahora y no antes: el panel de la 0.8 ya tiene la columna de intervalo,
 la zona de pit en ámbar, el botón de anular y la tabla con los anchos arreglados, así que lo que se
