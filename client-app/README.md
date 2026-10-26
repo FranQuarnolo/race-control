@@ -5,19 +5,42 @@
 1. Abrir Content Manager.
 2. Arrastrar `RaceControlClient.zip` (se lo pasa el admin de la liga, o se baja del release) a la
    ventana de Content Manager, como se instala cualquier mod de auto/pista.
-3. Activar la app dentro del juego: menú de Apps (AC Apps) → "Race Control".
+3. Activar las ventanas dentro del juego: menú de Apps (AC Apps) → **RC Mensajes**, **RC Banderas**
+   y **RC Largada**. Son tres entradas separadas y se activan las que uno quiera.
 
 No hay ningún archivo que editar ni ninguna IP que tipear: la app descubre sola a qué backend
 reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
+
+## Las tres ventanas
+
+| Ventana | Qué muestra |
+|---|---|
+| **RC Mensajes** | Los avisos de dirección de carrera: sanciones, vueltas invalidadas por irse de pista, sanciones anuladas. Y el estado de la conexión con Race Control. |
+| **RC Banderas** | La bandera de pista vigente, leída de la memoria del propio juego. |
+| **RC Largada** | El semáforo de la largada en movimiento, con el audio al verde. |
+
+Son tres apps independientes a propósito: hasta la 0.7 era una sola ventana con todo apilado, así
+que el piloto que solo quería ver las banderas tenía que aguantar el resto ocupando pantalla.
+
+**Las tres comparten los mismos hilos de fondo.** Cerrar una ventana —o no abrir ninguna— no apaga
+el heartbeat ni el reporte de telemetría: solo deja de dibujar. Alcanza con tener la app instalada
+y activada en Content Manager.
+
+Los avisos de **RC Mensajes** se borran solos a los 25 segundos y se muestran como máximo cuatro a
+la vez, los más nuevos abajo.
 
 ## Qué hace
 
 - Descubre sola la dirección del backend (mensaje de chat interno que manda el servidor al
   conectarse, invisible para el uso normal del piloto).
 - Muestra el estado del semáforo y reproduce el audio cuando se pone en verde.
-- Muestra en un overlay separado los avisos de sanción (PENALIDAD) que le manda el servidor.
-- Muestra en otro overlay la bandera de pista actual (leída directo de la Shared Memory del
-  juego, no depende del servidor).
+- Muestra los avisos de dirección de carrera. Llegan por **dos** canales: la pizarra del servidor
+  (`/api/client/poll`, que es la que trae las vueltas invalidadas) y el chat del juego. Los dos y
+  no uno porque el chat le llega al piloto aunque el token esté vencido o el backend caído, y es
+  además lo único que ve quien no tiene la app. Un aviso que llega por los dos lados se muestra
+  una sola vez.
+- Muestra la bandera de pista actual (leída directo de la Shared Memory del juego, no depende del
+  servidor).
 - Manda un heartbeat al backend cada 2 segundos. Si el admin dejó activado "Exigir que todos la
   tengan" (Reglas → App de los pilotos, que viene activado), el piloto que no la tenga es
   expulsado del servidor pasado el tiempo de espera.
@@ -25,8 +48,8 @@ reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
   transporta y que solo existe dentro del juego: tiempos por sector, compuesto, combustible,
   paradas en boxes y salidas de pista. Es lo que llena la torre de tiempos del panel; un piloto
   sin la app aparece ahí con guiones en esas columnas.
-- La ventana es una app normal de Content Manager: el piloto la puede mover/redimensionar como
-  cualquier otra.
+- Las ventanas son apps normales de Content Manager: el piloto las puede mover y redimensionar
+  como cualquier otra.
 
 ## Empaquetado (lo hace quien publica Race Control, una vez por versión)
 

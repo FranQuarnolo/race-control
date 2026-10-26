@@ -1,4 +1,4 @@
-import express, { Express } from "express";
+import express, { Express, Response } from "express";
 import * as path from "path";
 import { AppConfig, applyConfigPatch, applyPreset, isFirstRun } from "../config";
 import { ACTION_LABELS, AUTO_PENALTY_ALLOWED, PRESETS, PresetName } from "../incident/catalog";
@@ -12,6 +12,7 @@ import { AcUdpClient } from "../udp/client";
 import { Incident, IncidentEngine } from "../incident/incidentEngine";
 import { SessionTracker } from "../session/sessionInfo";
 import { TrackLearner } from "../track/trackLearner";
+import { TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { brandOf, brandSlug } from "../cars/carBadges";
 import { computeGaps, computeStandings } from "../state/standings";
@@ -29,6 +30,7 @@ export interface AdminApiDeps {
   udpClient: AcUdpClient;
   incidentEngine: IncidentEngine;
   trackLearner: TrackLearner;
+  trackLimits: TrackLimitsTracker;
   sessionTracker: SessionTracker;
   telemetryStore: DriverTelemetryStore;
   /** Tipo de sesión actual del servidor de AC (3 = carrera). Decide si la torre de tiempos se
@@ -58,7 +60,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada, como este. `package.json` queda siempre en
  * semver de tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin
  * esto no había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "0.7";
+export const APP_VERSION = "0.8";
 
 /**
  * Panel y API de administración — se levanta SIEMPRE en 127.0.0.1 (ver index.ts), nunca expuesto
@@ -120,6 +122,10 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
          * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
         telemetry: deps.telemetryStore.get(car.driverGuid),
+        /** Vueltas que el servidor le invalidó por irse de pista, en esta sesión. A diferencia de
+         * casi todo lo demás de esta fila, llega **siempre**: sale del `LAP_COMPLETED` del
+         * servidor dedicado y no depende de que el piloto tenga la app. */
+        cuts: deps.trackLimits.getCuts(car.driverGuid),
       })),
       formationPenalties: deps.formationPenaltyEngine.getAll(),
       pitPenalties: deps.pitPenaltyEngine.getAll(),
@@ -130,7 +136,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       pendingIncidents: deps.incidentEngine.getPending().length,
       /** Solo el progreso, no el trazado: son ~600 puntos y esto se pide una vez por segundo. El
        * dibujo se baja aparte de /api/track, que el panel vuelve a pedir cuando esto cambia. */
-      track: { coverage: deps.trackLearner.getCoverage() },
+      track: { coverage: deps.trackLearner.getCoverage(), catalogued: deps.trackLearner.isCatalogued() },
       /** La zona de pit configurada, para pintarla sobre el mapa.
        *
        * Viaja en `/api/state` y no se lee del formulario de Reglas porque el mapa tiene que
@@ -275,12 +281,35 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     }
   });
 
+  /**
+   * El tipo de sesión que el protocolo de AC llama "carrera". La largada en movimiento no tiene
+   * sentido en ninguna otra: en práctica y clasificación los autos salen de boxes cuando quieren,
+   * no hay parrilla que formar y no hay nadie a quien sancionar por adelantarse.
+   *
+   * El panel ya deshabilita los botones, pero el chequeo vive también acá por la razón de siempre:
+   * un panel abierto desde ayer tiene el estado de ayer, y "el servidor ignora en silencio lo que
+   * no corresponde" es exactamente el modo de falla que este producto persigue. Mejor un 409 con
+   * una frase que explique por qué.
+   */
+  const RACE_SESSION_TYPE = 3;
+
+  function soloEnCarrera(res: Response): boolean {
+    if (deps.getSessionType() === RACE_SESSION_TYPE) return true;
+    res.status(409).json({
+      ok: false,
+      error: "La largada solo se puede dar en una sesión de carrera. Ahora el servidor está en otra sesión.",
+    });
+    return false;
+  }
+
   app.post("/api/formation/begin", (_req, res) => {
+    if (!soloEnCarrera(res)) return;
     deps.formationStart.beginFormation();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
   });
 
   app.post("/api/formation/green", (_req, res) => {
+    if (!soloEnCarrera(res)) return;
     deps.formationStart.triggerGreen();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
   });
@@ -461,6 +490,7 @@ const INCIDENT_LABELS: Record<string, string> = {
   "car-contact": "toque entre autos",
   "env-collision": "choque en solitario",
   "track-limits": "límites de pista",
+  "cut-lap": "vuelta invalidada por irse de pista",
   "telemetry-mismatch": "telemetría inconsistente",
   "wrong-way": "en contramano",
   disconnect: "desconexión en carrera",

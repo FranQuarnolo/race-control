@@ -54,7 +54,8 @@ descarga es la app de los pilotos.
 
 1. Abrí Content Manager.
 2. Arrastrá `RaceControlClient.zip` a la ventana, como instalarías un mod de auto o pista. 📦
-3. Activalo en el juego, en el menú de Apps: "Race Control". ✅
+3. Activá en el juego, en el menú de Apps, las ventanas que quieras: **RC Mensajes** (sanciones y
+   vueltas invalidadas), **RC Banderas** y **RC Largada**. ✅
 
 Nada más — ni una IP que tipear, ni un archivo que editar. El servidor le manda sola la dirección
 y una credencial por el chat del juego apenas entrás. 🎮

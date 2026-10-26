@@ -111,7 +111,17 @@ test("todo id que el panel busca con $() existe en su HTML", () => {
  * no llega. `telemetryStale` estuvo así: el backend marcaba cada auto cuya telemetría se había
  * congelado y el panel lo ignoraba, así que un piloto desconectado se veía igual que uno en pista.
  */
-const CAMPOS_DERIVADOS = ["position", "brand", "brandLogo", "telemetryStale", "pingMs", "telemetry", "gapAheadMs", "gapLeaderMs"];
+const CAMPOS_DERIVADOS = [
+  "position",
+  "brand",
+  "brandLogo",
+  "telemetryStale",
+  "pingMs",
+  "telemetry",
+  "gapAheadMs",
+  "gapLeaderMs",
+  "cuts",
+];
 
 test("el panel usa todos los campos que /api/state calcula para él", () => {
   const js = leer(PANEL, "app.js");
@@ -143,7 +153,7 @@ test("la lista de campos derivados no quedó vieja contra el backend", () => {
  * trabajo tirado, y lo que debía comunicar no llega. `lapsDown` y `pitZone` nacieron en la 0.6 y
  * los dos se pintan en un solo lugar cada uno, así que son fáciles de perder en una refactorización.
  */
-const CAMPOS_DE_ESTADO = ["lapsDown", "pitZone"];
+const CAMPOS_DE_ESTADO = ["lapsDown", "pitZone", "catalogued"];
 
 test("el panel usa los campos de estado que el backend agrega para él", () => {
   const js = leer(PANEL, "app.js");

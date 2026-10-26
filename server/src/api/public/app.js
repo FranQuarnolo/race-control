@@ -636,6 +636,7 @@ function createCarRow(carId) {
     gap: cell("num c-gap"),
     speed: cell("num"),
     laps: cell("num"),
+    cuts: cell("num c-cuts"),
     sectors: cell("c-sectors"),
     last: cell("num lap-time"),
     best: cell("num lap-time"),
@@ -692,6 +693,13 @@ function updateCarRow(row, car, sessionBest) {
     row.speed.textContent = Math.round(car.speedKmh) + " km/h";
   }
   row.laps.textContent = String(car.lapCount);
+
+  // Cero se dibuja como raya y no como "0": en una tabla de 20 filas, veinte ceros en columna son
+  // ruido, y lo único que hay que poder encontrar de un vistazo es a quién le tacharon vueltas.
+  const cuts = car.cuts || 0;
+  setText(row.cuts, cuts > 0 ? String(cuts) : null);
+  row.cuts.classList.toggle("tiene", cuts > 0);
+  row.cuts.title = cuts > 0 ? cuts + " vuelta(s) invalidada(s) por irse de pista" : "";
 
   renderSectors(row.sectors, telemetry);
 
@@ -867,7 +875,11 @@ function renderCarBadge(td, car) {
   img.className = "car-badge";
   img.alt = car.brand || car.carModel;
   img.title = car.brand || car.carModel;
-  img.src = "/brands/" + encodeURIComponent(car.brandLogo) + ".svg";
+  // `BASE` y no una ruta absoluta: en producción el panel vive en `/l/<liga>/`, así que
+  // `/brands/x.svg` no le pega al worker sino a la raíz del portal, que no tiene esa carpeta. El
+  // resultado era un 404 por cada auto y el escudo de iniciales en TODAS las filas, para siempre.
+  // El resto del panel ya usa rutas relativas; esta era la única absoluta y por eso se escapó.
+  img.src = BASE + "/brands/" + encodeURIComponent(car.brandLogo) + ".svg";
   img.addEventListener("error", () => {
     // Si el archivo no está (biblioteca incompleta en un build a medias), la fila no queda vacía.
     if (td.dataset.model !== car.carModel) return;
@@ -1333,16 +1345,37 @@ async function refreshTrack(coverage) {
   }
 }
 
+/**
+ * El cartel de "todavía no hay mapa", que dice dos cosas distintas según de dónde salga el trazado.
+ *
+ * Con catálogo no hay nada que esperar: el dibujo está completo antes de que arranque nadie, y lo
+ * único que falta es que el servidor diga en qué circuito está. Prometer ahí un aprendizaje que no
+ * va a pasar deja al admin esperando una barra que nunca se mueve.
+ *
+ * Sin catálogo —una pista mod que no está en el paquete— sigue valiendo el texto viejo, porque
+ * sigue valiendo el mecanismo viejo.
+ */
 function renderMapStatus(state) {
   const coverage = state.track ? state.track.coverage : 0;
+  const catalogued = state.track ? state.track.catalogued : false;
   const ready = trackOutline !== null;
   $("map-empty").hidden = ready;
-  $("map-hint").textContent = ready && coverage < 0.95 ? "aprendiendo: " + Math.round(coverage * 100) + "%" : "";
+  $("map-hint").textContent =
+    ready && !catalogued && coverage < 0.95 ? "aprendiendo: " + Math.round(coverage * 100) + "%" : "";
+  $("map-progress").hidden = catalogued;
   $("map-progress").firstElementChild.style.width = Math.round(coverage * 100) + "%";
+
+  if (catalogued) {
+    $("map-empty-text").textContent = "Cargando el trazado del circuito.";
+    $("map-empty-sub").textContent = "El dibujo ya viene con Race Control: aparece apenas se conecta el servidor.";
+    return;
+  }
   $("map-empty-text").textContent =
     state.cars.length === 0
       ? "Esperando que alguien salga a pista para aprender el circuito."
       : "Aprendiendo el circuito: " + Math.round(coverage * 100) + "%";
+  $("map-empty-sub").textContent =
+    "Este circuito no está en el catálogo, así que el trazado se dibuja solo a medida que los autos dan vueltas. Se aprende una vez y queda guardado.";
 }
 
 /**
@@ -1385,18 +1418,67 @@ function renderSession(session) {
   $("ses-grip").textContent =
     session.surfaceGrip === null ? "" : "Agarre de pista " + Math.round(session.surfaceGrip * 100) + "%";
 
+  renderSessionChip(session);
+
+  // El renglón del reloj ya no se esconde entero cuando no hay cronómetro: la chapa del tipo de
+  // sesión vive adentro y siempre tiene algo que decir. Lo que se esconde es el par label/valor.
+  clock.hidden = false;
+  const label = $("ses-clock-label");
+  const value = $("ses-clock-value");
+
   if (session.remainingMs === null) {
     // Sesión por vueltas: no hay cronómetro, hay un número de vueltas.
-    clock.hidden = session.laps <= 0;
+    const sinDato = session.laps <= 0;
+    label.hidden = sinDato;
+    value.hidden = sinDato;
     clock.classList.remove("ending");
-    $("ses-clock-label").textContent = "Vueltas";
-    $("ses-clock-value").textContent = String(session.laps);
+    label.textContent = "Vueltas";
+    value.textContent = String(session.laps);
     return;
   }
-  clock.hidden = false;
-  $("ses-clock-label").textContent = "Restan";
-  $("ses-clock-value").textContent = formatClock(session.remainingMs);
+  label.hidden = false;
+  value.hidden = false;
+  label.textContent = "Restan";
+  value.textContent = formatClock(session.remainingMs);
   clock.classList.toggle("ending", session.remainingMs <= 60000);
+}
+
+/**
+ * La letra del tipo de sesión: P, Q o R.
+ *
+ * Son los códigos que usa todo el automovilismo y que un director de carrera lee sin traducir. El
+ * color no es decorativo: dice cuánto pesa lo que se está mirando. En práctica no cuenta nada, en
+ * clasificación se define la parrilla y en carrera se reparten los puntos — y es el único de los
+ * tres donde los botones de largada hacen algo.
+ *
+ * Sale de `sessionType`, que es un número del protocolo, y no del nombre que el admin le puso a la
+ * sesión: ese nombre es texto libre y puede decir "Tanda 3" o "Domingo".
+ */
+const SESSION_CHIPS = {
+  0: { code: "B", kind: "practica", label: "Reserva" },
+  1: { code: "P", kind: "practica", label: "Práctica" },
+  2: { code: "Q", kind: "qualy", label: "Clasificación" },
+  3: { code: "R", kind: "carrera", label: "Carrera" },
+  4: { code: "H", kind: "qualy", label: "Hotlap" },
+  5: { code: "TA", kind: "qualy", label: "Time attack" },
+  6: { code: "D", kind: "practica", label: "Deriva" },
+  7: { code: "RP", kind: "practica", label: "Repetición" },
+};
+
+function renderSessionChip(session) {
+  const chip = $("ses-chip");
+  const spec = SESSION_CHIPS[session.sessionType];
+  if (!spec) {
+    // Un tipo que el protocolo no define: antes que inventar una letra, no se muestra ninguna.
+    chip.hidden = true;
+    return;
+  }
+  chip.hidden = false;
+  chip.textContent = spec.code;
+  chip.className = "chapa-sesion " + spec.kind;
+  // El título lleva la palabra entera: la letra se entiende de reojo, pero quien nunca vio una
+  // planilla de tiempos no tiene por qué saber que Q es clasificación.
+  chip.title = spec.label + (session.typeLabel && session.typeLabel !== spec.label ? " · " + session.typeLabel : "");
 }
 
 /** ms → `mm:ss`, o `h:mm:ss` en una carrera de resistencia. */
@@ -1563,6 +1645,7 @@ const GEOMETRY_LABELS = {
 const INCIDENT_KIND_LABELS = {
   "env-collision": "choque en solitario",
   "track-limits": "límites de pista",
+  "cut-lap": "se fue de pista",
   "telemetry-mismatch": "telemetría inconsistente",
 };
 
@@ -1921,23 +2004,45 @@ const START_ACTIONS = {
   green: { begin: false, green: false, reset: true },
 };
 
-function renderStart(lightState) {
+/** El tipo de sesión "carrera" del protocolo de AC. Ver `RACE_SESSION_TYPE` en adminApi.ts. */
+const RACE_SESSION_TYPE = 3;
+
+function renderStart(lightState, session) {
   const semaforo = $("semaforo");
   semaforo.className = "semaforo " + lightState;
   const labels = { idle: "Esperando", formation: "Formación", green: "VERDE" };
   semaforo.textContent = labels[lightState] || lightState;
 
+  // Fuera de carrera la tarjeta entera se apaga. En práctica y clasificación no hay parrilla que
+  // formar ni nadie a quien sancionar por adelantarse: los autos salen de boxes cuando quieren.
+  // Antes los tres botones estaban activos igual y dar verde en una práctica mandaba un
+  // "GREEN GREEN GREEN" por el chat a 20 pilotos que estaban girando tranquilos.
+  //
+  // Sin sesión todavía (`session` es null hasta el primer SESSION_INFO) NO se bloquea: un panel
+  // recién abierto no sabe en qué sesión está el servidor, y bloquear por las dudas dejaría al
+  // admin sin poder largar justo cuando más lo necesita. El backend tiene el chequeo de verdad.
+  const esCarrera = !session || session.sessionType === RACE_SESSION_TYPE;
+  const card = $("card-start");
+  card.classList.toggle("off-session", !esCarrera);
+
   const allowed = START_ACTIONS[lightState] || START_ACTIONS.idle;
-  $("btn-begin").disabled = !allowed.begin;
-  $("btn-green").disabled = !allowed.green;
+  $("btn-begin").disabled = !allowed.begin || !esCarrera;
+  $("btn-green").disabled = !allowed.green || !esCarrera;
+  // "Reiniciar" sigue disponible siempre a propósito: es la salida de emergencia. Si alguien armó
+  // una formación y el servidor cambió de sesión, tiene que poder apagarla.
   $("btn-reset").disabled = !allowed.reset;
 
   // Con el verde dado, el renglón de ayuda se calla y habla el aviso grande: a esa altura el
   // admin ya no necesita instrucciones, necesita confirmar de un vistazo que la carrera corre.
   const racing = lightState === "green";
-  $("card-start").classList.toggle("racing", racing);
+  card.classList.toggle("racing", racing);
   $("race-live").hidden = !racing;
 
+  if (!esCarrera) {
+    $("start-hint").textContent =
+      "La largada se habilita sola cuando el servidor pase a la sesión de carrera.";
+    return;
+  }
   const hints = {
     idle: "Arrancá la formación cuando la parrilla esté completa.",
     formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
@@ -2005,7 +2110,7 @@ async function refresh() {
     wizardOpen = false;
   }
 
-  renderStart(state.lightState);
+  renderStart(state.lightState, state.session);
   renderRaceFlag(state);
   renderTiming(state.cars);
   renderNetwork(state.network);

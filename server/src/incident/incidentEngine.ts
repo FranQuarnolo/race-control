@@ -14,6 +14,7 @@ export type IncidentKind =
   | "car-contact"
   | "env-collision"
   | "track-limits"
+  | "cut-lap"
   | "telemetry-mismatch"
   | "wrong-way"
   | "disconnect";
@@ -27,11 +28,16 @@ export type ObservedKind = Exclude<IncidentKind, "car-contact" | "env-collision"
  * `telemetry-mismatch` no tiene entrada propia y es correcto que no la tenga: no es una
  * infracción del piloto sino una alerta de integridad del sistema. Vive y muere con el control de
  * límites de pista, que es lo que la produce.
+ *
+ * `cut-lap` sí es una infracción y comparte la entrada de `trackLimits`: son la misma regla vista
+ * por dos ojos distintos —el del servidor, que tacha la vuelta, y el de la app del piloto, que
+ * cuenta ruedas—. Apagar "límites de pista" en Reglas tiene que apagar las dos.
  */
 const TYPE_OF_KIND: Record<IncidentKind, InfractionType | null> = {
   "car-contact": "carContact",
   "env-collision": "envCollision",
   "track-limits": "trackLimits",
+  "cut-lap": "trackLimits",
   "wrong-way": "wrongWay",
   disconnect: "disconnectDuringRace",
   "telemetry-mismatch": null,

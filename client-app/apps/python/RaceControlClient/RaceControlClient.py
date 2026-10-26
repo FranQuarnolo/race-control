@@ -5,10 +5,32 @@ Responsabilidades:
   - Descubrir solo la direccion del backend (chat interno, sin configuracion manual).
   - Avisar presencia al backend (heartbeat) mientras la app este activa.
   - Escuchar el estado del semaforo (polling HTTP) y reproducir "green green green" al verde.
-  - Escuchar el chat del servidor y mostrar en overlay los avisos de PENALIDAD.
+  - Mostrar los avisos de direccion de carrera: sanciones, vueltas invalidadas, anulaciones.
   - Mostrar la bandera de pista actual, leida de la Shared Memory del propio juego.
   - Reportar al backend la telemetria fina que el protocolo UDP de AC NO transporta: tiempos por
     sector, compuesto, combustible, paradas en boxes y ruedas fuera de pista.
+
+---
+
+TRES VENTANAS, NO UNA (desde la 0.8)
+
+Hasta la 0.7 todo esto vivia en una sola ventana "Race Control" con cuatro etiquetas apiladas.
+Tenia dos problemas, y los dos son del piloto y no del codigo: en el menu de apps del juego
+aparecia una sola entrada, asi que no se podia elegir ver las banderas y no el resto; y la ventana
+ocupaba lugar en pantalla incluso cuando lo unico que interesaba era el semaforo de la largada.
+
+Ahora son tres apps independientes, cada una con su entrada en el menu del juego:
+
+  - RC Mensajes  -- avisos de direccion de carrera, al estilo RealPenalty
+  - RC Banderas  -- la bandera de pista vigente
+  - RC Largada   -- el semaforo de la largada en movimiento
+
+Las tres comparten los mismos hilos de fondo (hay UNO de cada cosa, no tres): cerrar o no abrir una
+ventana no apaga nada, solo deja de dibujar. Por eso los hilos arrancan en acMain y no al abrirse
+cada ventana -- el heartbeat tiene que seguir saliendo aunque el piloto no tenga ninguna abierta,
+o el watchdog de presencia lo daria por desconectado.
+
+---
 
 Nota: corre dentro del interprete Python embebido de Assetto Corsa, que es Python 3.3 -- NO
 soporta f-strings (son de Python 3.6+). Por eso todo el formateo de texto usa .format()/% .
@@ -43,15 +65,31 @@ BACKEND_ANNOUNCE_PREFIX = "RACECONTROL_BACKEND:"
 # canal no sale a internet. Ver server/src/security/pilotToken.ts.
 BACKEND_ANNOUNCE_SEPARATOR = "|"
 
-app_window = None
+# Cuantas lineas de aviso entran en la ventana de mensajes, y cuanto se quedan en pantalla.
+#
+# Cuatro y 25 segundos no son numeros redondos por casualidad: un aviso tiene que seguir visible
+# despues de la curva en la que uno estaba cuando aparecio, y cuatro lineas es lo que entra sin
+# tapar el espejo. Pasado ese tiempo se va solo -- un aviso viejo que no se borra nunca termina
+# siendo indistinguible de uno nuevo, que es el modo de fallo que tiene este tipo de overlay.
+MESSAGE_LINES = 4
+MESSAGE_TTL_SECONDS = 25.0
+
+window_messages = None
+window_flags = None
+window_lights = None
+
 label_backend_status = None
+label_messages = []
 label_light = None
-label_penalty = None
 label_flag = None
 
 backend_url = None  # None hasta que llega el chat de auto-discovery.
 backend_token = None  # Credencial firmada que acredita a este piloto. Vence a las 24 h.
 last_seen_seq = 0
+# Ultimo aviso de la pizarra del servidor que ya se mostro. Viaja en cada poll para que el servidor
+# no tenga que recordar que le entrego a quien. Ver server/src/instances/pilotMessages.ts.
+last_message_seq = 0
+steam_guid = ""
 poll_thread_running = False
 
 # Ultimo snapshot de telemetria leido de la Shared Memory. Lo escribe sharedMemoryLoop y lo lee
@@ -61,43 +99,82 @@ telemetry_snapshot = None
 
 
 def acMain(ac_version):
-    global app_window, label_backend_status, label_light, label_penalty, label_flag, poll_thread_running
+    global window_messages, window_flags, window_lights
+    global label_backend_status, label_messages, label_light, label_flag
+    global steam_guid, poll_thread_running
 
-    app_window = ac.newApp("Race Control")
-    ac.setSize(app_window, 320, 170)
-    ac.setTitle(app_window, "Race Control")
+    # ---------------------------------------------------------------- RC Mensajes
+    window_messages = ac.newApp("RC Mensajes")
+    ac.setSize(window_messages, 420, 150)
+    ac.setTitle(window_messages, "RC Mensajes")
 
-    label_backend_status = ac.addLabel(app_window, "Buscando servidor de Race Control...")
-    ac.setPosition(label_backend_status, 10, 25)
+    label_backend_status = ac.addLabel(window_messages, "Buscando servidor de Race Control...")
+    ac.setPosition(label_backend_status, 10, 28)
 
-    label_light = ac.addLabel(app_window, "Semaforo: --")
-    ac.setPosition(label_light, 10, 55)
+    label_messages = []
+    for i in range(MESSAGE_LINES):
+        label = ac.addLabel(window_messages, "")
+        ac.setPosition(label, 10, 52 + i * 22)
+        label_messages.append(label)
 
-    label_penalty = ac.addLabel(app_window, "")
-    ac.setPosition(label_penalty, 10, 85)
+    # ---------------------------------------------------------------- RC Banderas
+    window_flags = ac.newApp("RC Banderas")
+    ac.setSize(window_flags, 220, 70)
+    ac.setTitle(window_flags, "RC Banderas")
 
-    label_flag = ac.addLabel(app_window, "Bandera: --")
-    ac.setPosition(label_flag, 10, 130)
+    label_flag = ac.addLabel(window_flags, "Bandera: --")
+    ac.setPosition(label_flag, 10, 32)
 
-    ac.addOnChatMessageListener(app_window, onChatMessage)
+    # ---------------------------------------------------------------- RC Largada
+    window_lights = ac.newApp("RC Largada")
+    ac.setSize(window_lights, 220, 70)
+    ac.setTitle(window_lights, "RC Largada")
+
+    label_light = ac.addLabel(window_lights, "Semaforo: --")
+    ac.setPosition(label_light, 10, 32)
+
+    # El listener del chat va en una sola ventana: el juego lo entrega una vez por listener
+    # registrado, asi que ponerlo en las tres mostraria cada anuncio por triplicado.
+    ac.addOnChatMessageListener(window_messages, onChatMessage)
+
+    # El SteamID se resuelve una sola vez y antes de arrancar los hilos: lo necesitan los dos
+    # (el heartbeat para identificarse, el poll para pedir SUS avisos y no los de otro).
+    steam_guid = readSteamGuid()
 
     poll_thread_running = True
     threading.Thread(target=heartbeatLoop, daemon=True).start()
     threading.Thread(target=sharedMemoryLoop, daemon=True).start()
 
-    return "Race Control"
+    return "RC Mensajes"
 
 
 def acUpdate(deltaT):
-    pass
+    # El vencimiento de los avisos se hace aca y no en el hilo del poll a proposito: un aviso tiene
+    # que desaparecer a los 25 segundos aunque el backend se haya caido y el poll este fallando.
+    expireMessages()
+
+
+def readSteamGuid():
+    # driverGuid en el protocolo ACSP es el SteamID -- ac.getUserSteamID() es la funcion
+    # documentada para obtenerlo del lado cliente.
+    try:
+        return str(ac.getUserSteamID())
+    except Exception as e:
+        ac.log("[RaceControlClient] no se pudo leer SteamID: {0}".format(e))
+        return ""
 
 
 def onChatMessage(message, author):
     if message.startswith(BACKEND_ANNOUNCE_PREFIX):
         setBackendUrl(message[len(BACKEND_ANNOUNCE_PREFIX):].strip())
         return
-    if message.upper().startswith("PENALIDAD"):
-        ac.setText(label_penalty, message)
+    # El chat sigue siendo un camino valido hacia la ventana de mensajes y no un resto del diseno
+    # viejo: le llega al piloto aunque la pizarra del servidor no haya podido entregarle nada
+    # --token vencido, backend caido, app recien abierta-- y es la unica via que no depende de que
+    # el poll funcione. Si llega por los dos lados, showMessage descarta el duplicado.
+    upper = message.upper()
+    if upper.startswith("PENALIDAD") or upper.startswith("SANCION") or upper.startswith("SANCIÓN"):
+        showMessage(message)
 
 
 def setBackendUrl(announce):
@@ -118,6 +195,56 @@ def setBackendUrl(announce):
     threading.Thread(target=pollLoop, daemon=True).start()
 
 
+# =============================================================================================
+# Ventana de mensajes
+#
+# Los avisos llegan por dos caminos (la pizarra del servidor y el chat) y se muestran en uno solo.
+# El lock esta porque los dos caminos corren en hilos distintos: el chat lo entrega el juego en el
+# hilo principal y la pizarra la trae el hilo del poll. Sin el lock, dos avisos simultaneos pueden
+# dejar la lista a medio escribir.
+# =============================================================================================
+
+messages = []  # [{"text": str, "at": float}], del mas viejo al mas nuevo
+messages_lock = threading.Lock()
+
+
+def showMessage(text):
+    """Pone un aviso en la ventana de mensajes. Repetido seguido, no se duplica."""
+    text = (text or "").strip()
+    if not text:
+        return
+    now = time.time()
+    with messages_lock:
+        # El mismo aviso puede llegar por la pizarra y por el chat -- son dos canales a proposito.
+        # Repetir la linea no agrega informacion y gasta una de las cuatro que hay.
+        for existing in messages:
+            if existing["text"] == text:
+                existing["at"] = now
+                break
+        else:
+            messages.append({"text": text, "at": now})
+            if len(messages) > MESSAGE_LINES:
+                del messages[0:len(messages) - MESSAGE_LINES]
+    renderMessages()
+
+
+def expireMessages():
+    cutoff = time.time() - MESSAGE_TTL_SECONDS
+    with messages_lock:
+        vivos = [m for m in messages if m["at"] > cutoff]
+        if len(vivos) == len(messages):
+            return
+        messages[:] = vivos
+    renderMessages()
+
+
+def renderMessages():
+    with messages_lock:
+        textos = [m["text"] for m in messages]
+    for i in range(len(label_messages)):
+        ac.setText(label_messages[i], textos[i] if i < len(textos) else "")
+
+
 def authHeaders():
     """Cabeceras de autenticacion, vacias si todavia no hay credencial."""
     if backend_token:
@@ -136,17 +263,28 @@ def openAuthed(url, data=None, timeout=2):
 
 
 def pollLoop():
-    global last_seen_seq
+    global last_seen_seq, last_message_seq
     my_backend_url = backend_url
     while poll_thread_running and backend_url == my_backend_url:
         try:
-            with openAuthed("{0}/api/client/poll".format(backend_url)) as resp:
+            # `since` y `guid` van en la URL porque esto es un GET: el servidor devuelve solo los
+            # avisos posteriores al ultimo que se mostro. Sin `since` mandaria los mismos una y
+            # otra vez; sin `guid` no sabria de quien son (con token lo saca del token e ignora
+            # este, que es lo que corresponde -- ver clientApi.ts).
+            url = "{0}/api/client/poll?since={1}&guid={2}".format(backend_url, last_message_seq, steam_guid)
+            with openAuthed(url) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             light_event = data.get("lightEvent", {})
             seq = light_event.get("seq", 0)
             state = light_event.get("type", "idle")
 
             ac.setText(label_light, "Semaforo: {0}".format(state))
+
+            for message in data.get("messages", []):
+                showMessage(message.get("text", ""))
+                # El maximo y no el ultimo: si alguna vez llegaran desordenados, quedarse con el
+                # ultimo haria que los anteriores se volvieran a pedir para siempre.
+                last_message_seq = max(last_message_seq, message.get("seq", 0))
 
             if seq != last_seen_seq:
                 last_seen_seq = seq
@@ -163,14 +301,6 @@ def pollLoop():
 
 
 def heartbeatLoop():
-    # driverGuid en el protocolo ACSP es el SteamID -- ac.getUserSteamID() es la funcion
-    # documentada para obtenerlo del lado cliente (a confirmar firma exacta en la practica).
-    try:
-        steam_guid = str(ac.getUserSteamID())
-    except Exception as e:
-        ac.log("[RaceControlClient] no se pudo leer SteamID: {0}".format(e))
-        steam_guid = ""
-
     # Round-trip del heartbeat anterior. Se manda en el siguiente porque recien se conoce DESPUES
     # de que la request vuelve. Es un ping real de la conexion de este piloto, pero hacia Race
     # Control, no hacia el servidor de AC: el protocolo UDP de AC no expone el ping al servidor

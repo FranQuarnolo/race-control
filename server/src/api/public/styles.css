@@ -376,6 +376,14 @@ main[hidden] { display: none; }
 #card-start .btn-row { flex: 0 0 auto; }
 #card-start .start-hint { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
 
+/* Fuera de la sesión de carrera. El semáforo se apaga y la tarjeta se corre al fondo visual: los
+   botones ya están deshabilitados por `disabled`, pero una tarjeta que se ve igual de viva que
+   siempre invita a clickearla y después no explica nada. El texto de ayuda queda en pie —es el
+   único que dice por qué— así que no se le baja la opacidad junto con el resto. */
+#card-start.off-session .semaforo,
+#card-start.off-session .btn-row { opacity: 0.4; }
+#card-start.off-session > h2 { color: var(--muted); }
+
 .semaforo {
   font-size: 19px;
   font-weight: 700;
@@ -542,6 +550,12 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 #timing-table { font-size: 12.5px; }
 #timing-table th, #timing-table td { padding: 5px 5px; white-space: nowrap; }
 #timing-table th.c-driver { width: 20ch; }
+
+/* "Fuera": las vueltas invalidadas. Angosta a propósito —casi siempre dice "--"— y en ámbar
+   cuando tiene algo que decir, que es el mismo color con el que el panel marca todo lo que es
+   una decisión a tomar y no una falla. */
+#timing-table th.c-cuts, #timing-table td.c-cuts { width: 5ch; }
+#timing-table td.c-cuts.tiene { color: var(--yellow); font-weight: 600; }
 #timing-table td.c-driver { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .c-pos {
@@ -739,6 +753,44 @@ tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
    ícono — todo correcto salvo que no pasa nada. Los colores de este archivo son --green/--yellow/
    --red; el aviso es naranja y no rojo porque es una decisión a tomar, no una falla. */
 #session-clock.ending .value { color: var(--yellow); }
+#session-clock .label[hidden], #session-clock .value[hidden] { display: none; }
+
+/*
+  La chapa P / Q / R, al lado del reloj.
+
+  El color codifica cuánto pesa la sesión, no el tipo por el tipo mismo: gris en práctica porque no
+  cuenta nada, ámbar en clasificación porque ahí se define la parrilla, verde en carrera porque es
+  la única donde se reparten puntos —y la única donde los botones de largada hacen algo—.
+
+  `align-self: center` porque el contenedor alinea por `baseline` para que la etiqueta y el número
+  grande del reloj compartan la línea de base; una chapa con fondo alineada así queda colgando.
+*/
+.chapa-sesion {
+  align-self: center;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+.chapa-sesion[hidden] { display: none; }
+.chapa-sesion.practica {
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: var(--muted);
+}
+.chapa-sesion.qualy {
+  background: rgba(239, 142, 60, 0.14);
+  border-color: rgba(239, 142, 60, 0.45);
+  color: var(--yellow);
+}
+.chapa-sesion.carrera {
+  background: rgba(53, 199, 110, 0.14);
+  border-color: rgba(53, 199, 110, 0.45);
+  color: var(--green);
+}
 
 #map-host {
   flex: 1 1 auto;

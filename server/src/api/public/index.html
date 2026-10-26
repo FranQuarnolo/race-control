@@ -119,6 +119,10 @@
               </th>
               <th class="num">Vel.</th>
               <th class="num" title="Vueltas completadas">Vts.</th>
+              <!-- Las vueltas que el servidor le invalidó por irse de pista. Va pegada a "Vts."
+                   porque la pregunta es la misma leída al revés: cuántas dio y cuántas le contaron.
+                   No necesita la app del piloto — sale del propio servidor de Assetto Corsa. -->
+              <th class="num c-cuts" title="Vueltas que el servidor invalidó por irse de pista, en esta sesión">Fuera</th>
               <th title="Tiempos por sector de la última vuelta. Requiere la app del piloto.">Sectores</th>
               <th class="num">Última</th>
               <th class="num">Mejor</th>
@@ -158,9 +162,12 @@
         <canvas id="map-canvas"></canvas>
         <div id="map-tooltip" hidden></div>
         <div id="map-empty">
-          <span id="map-empty-text">Esperando telemetría para aprender el circuito.</span>
+          <span id="map-empty-text">Esperando telemetría del circuito.</span>
           <div id="map-progress"><div></div></div>
-          <span class="muted">El trazado se dibuja solo a medida que los autos dan vueltas. Se aprende una vez y queda guardado.</span>
+          <!-- El texto de abajo depende de si el circuito está en el catálogo: con catálogo no hay
+               nada que aprender y prometer un aprendizaje sería mentir; sin catálogo hay que
+               explicar la espera. Lo escribe `renderMapStatus`. -->
+          <span class="muted" id="map-empty-sub"></span>
         </div>
       </div>
       <!-- Lectura del punto de la vuelta, para calibrar la zona de pit. Reglas manda a "mirar el
@@ -172,7 +179,12 @@
         <span class="value" id="map-spline">--</span>
         <span class="muted" id="map-zone-hint"></span>
       </div>
+      <!-- La chapa del tipo de sesión va pegada al reloj y no arriba con el nombre, porque la
+           pregunta que contesta es la misma que el reloj: "¿esto que estoy mirando cuenta?". El
+           nombre que el admin le puso en el server_cfg puede decir cualquier cosa ("Tanda 3",
+           "Domingo"); la letra sale del tipo que declara el protocolo y no se puede renombrar. -->
       <div id="session-clock">
+        <span class="chapa-sesion" id="ses-chip" hidden>--</span>
         <span class="label" id="ses-clock-label">Restan</span>
         <span class="value" id="ses-clock-value">--:--</span>
       </div>

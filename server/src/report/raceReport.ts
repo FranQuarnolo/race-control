@@ -93,6 +93,7 @@ const INCIDENT_LABELS: Record<string, string> = {
   "car-contact": "Toque entre autos",
   "env-collision": "Choque en solitario",
   "track-limits": "Límites de pista",
+  "cut-lap": "Vuelta invalidada por irse de pista",
   "wrong-way": "Contramano",
   "telemetry-mismatch": "Telemetría inconsistente",
   "disconnect-during-race": "Se desconectó en carrera",

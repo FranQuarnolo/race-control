@@ -30,38 +30,62 @@ const SLOTS = 600;
 const MIN_COVERAGE_TO_DRAW = 0.4;
 
 /**
- * Aprende el trazado del circuito solo, mirando por dónde pasan los autos.
+ * El trazado del circuito: del catálogo si está, aprendido de la telemetría si no.
  *
- * El protocolo de AC no entrega el dibujo de la pista, y pedirle al admin que consiga los
- * archivos del circuito sería exactamente el tipo de paso técnico que este producto evita.
- * Pero `CAR_UPDATE` ya trae `posX`/`posZ` en coordenadas reales del mundo junto con la posición
- * normalizada en la vuelta: basta con guardar, para cada tramo de la vuelta, dónde estaba el auto.
+ * **Primero el catálogo.** `src/track/catalog/` trae un JSON por circuito, generado con
+ * `scripts/build-track-catalog.js` a partir de la línea de la IA que viene adentro de cada pista de
+ * Assetto Corsa. Cuando la pista está ahí, el mapa sale dibujado entero desde el primer segundo,
+ * con la forma real.
  *
- * Se indexa por `normalizedSplinePosition` y no por orden de llegada porque así el trazado sale
- * ordenado aunque las muestras lleguen mezcladas de 20 autos repartidos por toda la pista — de
- * hecho, cuantos más autos hay, más rápido se completa.
+ * **Si no está, se aprende.** Es lo que hacía el producto hasta la 0.7 y sigue siendo la red de
+ * contención para las pistas mod que no estén en el catálogo. `CAR_UPDATE` trae `posX`/`posZ` en
+ * coordenadas del mundo junto con la posición normalizada en la vuelta, así que alcanza con
+ * guardar, para cada tramo, dónde estaba el auto. Se indexa por `normalizedSplinePosition` y no
+ * por orden de llegada: así el trazado sale ordenado aunque las muestras lleguen mezcladas de 20
+ * autos repartidos por toda la pista.
  *
- * Se aprende una vez por circuito y queda en disco para siempre.
+ * Por qué dejó de ser el camino principal: el aprendizaje necesita que alguien dé vueltas, y hasta
+ * que junta el 40% no dibuja nada. Con un solo auto en pista —que es el caso de la primera prueba
+ * de cualquier liga, y el de la práctica libre— eso es una tarde entera mirando una barra de
+ * progreso. Y lo que aprende es por dónde pasaron los autos, no dónde está la pista: en una curva
+ * que todos cortan, el dibujo corta.
+ *
+ * Lo aprendido queda en disco por liga; el catálogo viaja con la app y es igual para todas.
  */
 export class TrackLearner {
   private slots: Array<{ x: number; z: number } | null> = new Array(SLOTS).fill(null);
   private track = "";
   private dirty = false;
+  /** Trazado exacto, venido del catálogo. Cuando está, no se aprende ni se guarda nada. */
+  private catalogued: TrackOutline | null = null;
 
-  constructor(private storageDir: string) {}
+  constructor(
+    private storageDir: string,
+    /** Dónde están los JSON del catálogo. Inyectable para que los tests no dependan del empaquetado. */
+    private catalogDir: string = path.join(__dirname, "catalog")
+  ) {}
 
-  /** Cambio de circuito: se guarda lo aprendido del anterior y se carga lo que ya hubiera del nuevo. */
-  setTrack(track: string): void {
-    const normalized = normalizeTrackName(track);
+  /**
+   * Cambio de circuito: se guarda lo aprendido del anterior y se carga lo que haya del nuevo.
+   *
+   * `config` es la variante del circuito y entra en la clave a propósito. Spa con chicane y sin
+   * chicane, o el Nordschleife turístico y el de endurance, son la misma carpeta de pista y dos
+   * dibujos distintos. Hasta la 0.7 compartían una sola entrada y el segundo que se corriera
+   * quedaba mirando el trazado del primero.
+   */
+  setTrack(track: string, config = ""): void {
+    const normalized = trackKey(track, config);
     if (normalized === this.track) return;
     this.flush();
     this.track = normalized;
     this.slots = new Array(SLOTS).fill(null);
-    this.load();
+    this.catalogued = null;
+    this.loadFromCatalog();
+    if (!this.catalogued) this.load();
   }
 
   onCarUpdate(car: Pick<CarState, "posX" | "posZ" | "normalizedSplinePosition">): void {
-    if (!this.track) return;
+    if (!this.track || this.catalogued) return;
     // El auto parado en boxes manda posiciones válidas con un spline que no corresponde al
     // trazado; (0,0) es además el valor que llega antes del primer sample real.
     if (car.posX === 0 && car.posZ === 0) return;
@@ -73,6 +97,8 @@ export class TrackLearner {
   }
 
   getOutline(): TrackOutline | null {
+    if (this.catalogued) return this.catalogued;
+
     const points: TrackPoint[] = [];
     for (let i = 0; i < SLOTS; i++) {
       const p = this.slots[i];
@@ -96,31 +122,55 @@ export class TrackLearner {
 
   /** Cuánto se conoce, incluso por debajo del mínimo para dibujar — el panel muestra el progreso. */
   getCoverage(): number {
+    if (this.catalogued) return 1;
     return this.slots.filter(Boolean).length / SLOTS;
+  }
+
+  /** Si el trazado salió del catálogo. El panel lo usa para no prometer un aprendizaje que no va a
+   * pasar: con catálogo no hay nada que esperar, y sin catálogo hay que explicar la espera. */
+  isCatalogued(): boolean {
+    return this.catalogued !== null;
   }
 
   private file(): string {
     return path.join(this.storageDir, `${this.track}.json`);
   }
 
-  private load(): void {
-    try {
-      const raw = JSON.parse(fs.readFileSync(this.file(), "utf-8"));
-      if (!Array.isArray(raw?.points)) return;
-      for (const p of raw.points) {
-        if (typeof p?.s !== "number" || typeof p?.x !== "number" || typeof p?.z !== "number") continue;
-        const slot = Math.min(SLOTS - 1, Math.max(0, Math.floor(p.s * SLOTS)));
-        this.slots[slot] = { x: p.x, z: p.z };
+  /**
+   * Busca la pista en el catálogo empaquetado.
+   *
+   * Si la pista tiene variante y esa variante no está, se prueba con la pista sola. Es deliberado:
+   * un circuito de una sola configuración declarado con variante vacía, o una variante de mod que
+   * no llegó al catálogo, son más parecidos al trazado principal que a nada. Lo que no se hace es
+   * al revés —usar una variante cualquiera cuando se pidió la pista base— porque ahí sí se elegiría
+   * un dibujo entre varios posibles sin ningún criterio.
+   */
+  private loadFromCatalog(): void {
+    const base = this.track.split("__")[0];
+    for (const clave of this.track === base ? [base] : [this.track, base]) {
+      const outline = readOutline(path.join(this.catalogDir, `${clave}.json`));
+      if (outline) {
+        this.catalogued = { ...outline, track: this.track, coverage: 1 };
+        return;
       }
-      this.dirty = false;
-    } catch {
-      // No existe todavía, o quedó corrupto: se vuelve a aprender solo. No es un error que valga
-      // la pena mostrarle a nadie.
     }
+  }
+
+  private load(): void {
+    const outline = readOutline(this.file());
+    if (!outline) return; // no existe todavía: se aprende de cero
+    for (const p of outline.points) {
+      const slot = Math.min(SLOTS - 1, Math.max(0, Math.floor(p.s * SLOTS)));
+      this.slots[slot] = { x: p.x, z: p.z };
+    }
+    this.dirty = false;
   }
 
   /** Persiste lo aprendido. Es idempotente y barato de llamar de más. */
   flush(): void {
+    // Con catálogo no hay nada aprendido que guardar, y escribirlo igual dejaría una copia en la
+    // carpeta de la liga que le ganaría al catálogo si alguna vez se corrige un trazado.
+    if (this.catalogued) return;
     if (!this.dirty || !this.track) return;
     const outline = this.getOutline();
     if (!outline) return; // no guardar medio trazado: la próxima sesión lo completa igual
@@ -138,4 +188,54 @@ export class TrackLearner {
  * no pueden ir en un nombre de archivo. */
 function normalizeTrackName(track: string): string {
   return (track || "desconocido").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 80);
+}
+
+/**
+ * La clave con la que se guarda y se busca un trazado: pista y variante, separadas por `__`.
+ *
+ * El mismo formato que genera `scripts/build-track-catalog.js`; si una de las dos puntas cambia,
+ * el catálogo deja de encontrarse y el mapa vuelve a salir vacío sin decir por qué.
+ */
+function trackKey(track: string, config: string): string {
+  const base = normalizeTrackName(track);
+  if (!config) return base;
+  return `${base}__${normalizeTrackName(config)}`;
+}
+
+/**
+ * Lee un trazado de disco, o `null` si no está o no es un trazado.
+ *
+ * Lo comparten el catálogo y lo aprendido porque son el mismo formato a propósito: un JSON
+ * generado por el script se puede dejar a mano en la carpeta de una liga y funciona igual.
+ */
+function readOutline(file: string): TrackOutline | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf-8"));
+    if (!Array.isArray(raw?.points) || raw.points.length === 0) return null;
+    const points: TrackPoint[] = [];
+    for (const p of raw.points) {
+      if (typeof p?.s !== "number" || typeof p?.x !== "number" || typeof p?.z !== "number") continue;
+      points.push({ s: p.s, x: p.x, z: p.z });
+    }
+    if (points.length === 0) return null;
+    const bounds = raw.bounds;
+    if (
+      typeof bounds?.minX !== "number" ||
+      typeof bounds?.maxX !== "number" ||
+      typeof bounds?.minZ !== "number" ||
+      typeof bounds?.maxZ !== "number"
+    ) {
+      return null;
+    }
+    return {
+      track: typeof raw.track === "string" ? raw.track : "",
+      points,
+      bounds: { minX: bounds.minX, maxX: bounds.maxX, minZ: bounds.minZ, maxZ: bounds.maxZ },
+      coverage: typeof raw.coverage === "number" ? raw.coverage : points.length / SLOTS,
+    };
+  } catch {
+    // No existe, o quedó corrupto. Ninguna de las dos cosas es un error que valga la pena mostrar:
+    // sin catálogo se aprende, y sin lo aprendido se vuelve a aprender.
+    return null;
+  }
 }

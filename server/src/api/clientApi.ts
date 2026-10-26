@@ -1,10 +1,13 @@
 import express, { Express } from "express";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
 import { LightEventTracker } from "../instances/lightEventTracker";
+import { PilotMessageBoard } from "../instances/pilotMessages";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 
 export interface ClientApiDeps {
   lightEventTracker: LightEventTracker;
+  /** Los avisos que la app del piloto muestra en pantalla. Ver instances/pilotMessages.ts. */
+  messageBoard: PilotMessageBoard;
   presenceWatchdog: PresenceWatchdog;
   telemetryStore: DriverTelemetryStore;
   /** Salidas de pista ya cerradas que el cliente venía acumulando. Llegan por lote, no como
@@ -99,8 +102,24 @@ export function createClientApi(deps: ClientApiDeps): Express {
 
   app.use(express.json({ limit: "10kb" }));
 
-  app.get("/api/client/poll", (_req, res) => {
-    res.json({ lightEvent: deps.lightEventTracker.get() });
+  /**
+   * Lo único que el cliente pregunta cada segundo: semáforo y avisos nuevos.
+   *
+   * El `since` lo lleva el cliente y no el servidor a propósito. Si el servidor recordara qué le
+   * entregó a cada piloto, una app que se cierra y se vuelve a abrir a mitad de carrera no vería
+   * nada hasta la próxima infracción, y un worker que se reinicia perdería ese registro igual.
+   * Con el `seq` del lado del cliente, el único estado que hay que mantener es la cola.
+   */
+  app.get("/api/client/poll", (req, res) => {
+    // Mismo criterio que el heartbeat: con token manda el token; sin token (modo local, donde el
+    // canal no sale a internet) se acepta el guid que diga el cliente.
+    const guid = (req as AuthedRequest).pilotGuid || String(req.query.guid ?? "");
+    const since = Number(req.query.since);
+    const messages =
+      STEAM_GUID_PATTERN.test(guid) && Number.isFinite(since) && since >= 0
+        ? deps.messageBoard.since(guid, since)
+        : [];
+    res.json({ lightEvent: deps.lightEventTracker.get(), messages });
   });
 
   /**

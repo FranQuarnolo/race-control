@@ -11,8 +11,14 @@ function setup(overrides: Partial<TrackLimitsRule> = {}, hasClient = true) {
   tracker.onNewConnection({ carId: 3, driverName: "Fulano", driverGuid: "guid-3", carModel: "x", carSkin: "y" } as any);
   const limits = new TrackLimitsTracker(tracker, { ...RULES, ...overrides }, () => hasClient);
   const incidents: TrackLimitsIncident[] = [];
+  const penalties: Array<{ driverGuid: string; reason: string }> = [];
   limits.on("incident", (i: TrackLimitsIncident) => incidents.push(i));
-  return { tracker, limits, incidents };
+  limits.on("penalty", (p: { driverGuid: string; reason: string }) => penalties.push(p));
+  // Los tests que miran "¿se abrió un incidente por lo que estoy probando?" filtran por tipo: desde
+  // la 0.8 una vuelta con `cuts > 0` abre además su propia entrada, y sin filtrar, cualquier test
+  // que use un corte para otra cosa contaría esa entrada de más.
+  const soloDe = (kind: TrackLimitsIncident["kind"]) => incidents.filter((i) => i.kind === kind);
+  return { tracker, limits, incidents, penalties, soloDe };
 }
 
 function excursion(tyres: number, durationMs = 1000) {
@@ -94,40 +100,93 @@ test("la mejor vuelta de referencia ignora las vueltas sucias", () => {
 });
 
 test("los cortes del servidor que el cliente nunca reportó terminan en la bandeja", () => {
-  const { limits, incidents } = setup();
+  const { limits, soloDe } = setup();
   limits.onLapCompleted(3, 95_000, 1);
   limits.onLapCompleted(3, 95_000, 1);
-  assert.equal(incidents.length, 0); // 2 de diferencia: puede ser desfasaje del heartbeat
+  assert.equal(soloDe("telemetry-mismatch").length, 0); // 2 de diferencia: desfasaje del heartbeat
   limits.onLapCompleted(3, 95_000, 1);
 
-  assert.equal(incidents.length, 1);
-  assert.equal(incidents[0].kind, "telemetry-mismatch");
+  assert.equal(soloDe("telemetry-mismatch").length, 1);
 });
 
 test("un piloto sin la app no genera incidente por telemetría inconsistente", () => {
-  const { limits, incidents } = setup({}, false);
+  const { limits, soloDe } = setup({}, false);
   for (let i = 0; i < 5; i++) limits.onLapCompleted(3, 95_000, 2);
-  assert.equal(incidents.length, 0);
+  assert.equal(soloDe("telemetry-mismatch").length, 0);
 });
 
 test("las salidas que el cliente sí reportó compensan los cortes del servidor", () => {
-  const { limits, incidents } = setup();
+  const { limits, soloDe } = setup();
   // Tres cortes reales, los tres informados por el cliente: no hay nada sospechoso.
   for (let i = 0; i < 3; i++) {
     limits.report("guid-3", [excursion(2)]);
     limits.onLapCompleted(3, 95_000, 1);
   }
-  assert.equal(incidents.length, 0);
+  assert.equal(soloDe("telemetry-mismatch").length, 0);
 });
 
 test("las salidas de dos ruedas cuentan para la validación cruzada aunque no para el umbral", () => {
-  const { limits, incidents } = setup(); // umbral en 4 ruedas
+  const { limits, soloDe } = setup(); // umbral en 4 ruedas
   for (let i = 0; i < 4; i++) {
     limits.report("guid-3", [excursion(2)]);
     limits.onLapCompleted(3, 95_000, 1);
   }
   assert.equal(limits.getCount("guid-3"), 0); // no superan el umbral del admin
-  assert.equal(incidents.length, 0); // pero el servidor y el cliente coinciden
+  assert.equal(soloDe("telemetry-mismatch").length, 0); // y el servidor y el cliente coinciden
+});
+
+/**
+ * El caso que originó el cambio de la 0.8: un piloto se fue de pista, el juego le invalidó la
+ * vuelta, y en Race Control no apareció absolutamente nada. Pasaba por los dos filtros que tenía
+ * encima el único camino que existía — tener la app y superar el umbral de 4 ruedas.
+ */
+test("una vuelta invalidada por el servidor entra en la bandeja aunque el piloto no tenga la app", () => {
+  const { limits, soloDe } = setup({}, false);
+  limits.onLapCompleted(3, 95_000, 1);
+
+  const cortes = soloDe("cut-lap");
+  assert.equal(cortes.length, 1);
+  assert.equal(cortes[0].driverName, "Fulano");
+  assert.equal(cortes[0].carId, 3);
+  assert.match(cortes[0].detail, /invalidó la vuelta/);
+  assert.equal(limits.getCuts("guid-3"), 1);
+});
+
+test("una vuelta con varios cortes es una sola entrada, no una por corte", () => {
+  const { limits, soloDe } = setup({}, false);
+  limits.onLapCompleted(3, 95_000, 3);
+  assert.equal(soloDe("cut-lap").length, 1);
+  assert.match(soloDe("cut-lap")[0].detail, /3 veces/);
+  assert.equal(limits.getCuts("guid-3"), 3);
+});
+
+test("una vuelta limpia no abre ninguna entrada por corte", () => {
+  const { limits, soloDe } = setup();
+  limits.onLapCompleted(3, 95_000, 0);
+  assert.equal(soloDe("cut-lap").length, 0);
+});
+
+test("la sanción automática sale de los cortes del servidor, no de la app", () => {
+  const { limits, penalties } = setup({ action: "penalty" }, false);
+  limits.onLapCompleted(3, 95_000, 1);
+  limits.onLapCompleted(3, 95_000, 1);
+  assert.equal(penalties.length, 0); // umbral por defecto: 3
+  limits.onLapCompleted(3, 95_000, 1);
+  assert.equal(penalties.length, 1);
+  assert.match(penalties[0].reason, /3 vueltas invalidadas/);
+});
+
+/**
+ * La sanción automática se emitía desde los dos caminos a la vez, y un piloto con la app se habría
+ * llevado dos sanciones por la misma salida. Vive solo en el camino del servidor.
+ */
+test("un piloto con la app no se lleva dos sanciones por la misma salida", () => {
+  const { limits, penalties } = setup({ action: "penalty", minTyresOut: 2 });
+  for (let i = 0; i < 3; i++) {
+    limits.report("guid-3", [excursion(2)]);
+    limits.onLapCompleted(3, 95_000, 1);
+  }
+  assert.equal(penalties.length, 1);
 });
 
 test("un reporte con basura no rompe ni cuenta", () => {

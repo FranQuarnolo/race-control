@@ -1,6 +1,6 @@
 {
   "name": "Race Control",
   "author": "Race Control",
-  "version": "1.0",
-  "description": "Avisos de largada, sanciones y bandera de pista de Race Control."
+  "version": "1.1",
+  "description": "Tres ventanas para el menu del juego: RC Mensajes (sanciones y vueltas invalidadas), RC Banderas y RC Largada (semaforo de la largada en movimiento)."
 }

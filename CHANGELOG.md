@@ -3,6 +3,154 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [0.8] — 2026-10-26
+
+La 0.7 cerró la puesta en marcha. Esta versión sale de la primera carrera de verdad: alguien
+manejó, se fue de pista dos veces, chocó contra un muro dos veces, y después contó qué vio y qué
+no. Seis cosas, y las tres primeras son fallas silenciosas de manual — el producto estaba
+"funcionando" en todas ellas.
+
+### El circuito ya no se aprende: viene dibujado
+
+**Contexto:** hasta ahora el trazado del mapa se aprendía de la telemetría. Cada `CAR_UPDATE` trae
+la posición del auto en el mundo y en qué punto de la vuelta está, así que con suficientes vueltas
+el dibujo se arma solo. Funcionaba en la demo y no funcionaba en pista, por dos razones que no se
+arreglan afinando el algoritmo:
+
+- **Necesita que alguien dé vueltas, y no dibuja nada hasta el 40%.** Con un solo auto en pista
+  —que es exactamente el caso de la primera prueba de cualquier liga, y el de toda la práctica
+  libre— eso es una tarde mirando una barra de progreso.
+- **Aprende por dónde pasaron los autos, no dónde está la pista.** En una curva que todos cortan,
+  el dibujo corta.
+
+Ahora hay un **catálogo**: un JSON por circuito que viaja empaquetado con Race Control, y el mapa
+sale completo y con la forma real desde el primer segundo. Los trazados se generan con
+`server/scripts/build-track-catalog.js` sobre una instalación de Assetto Corsa.
+
+**De dónde sale el dibujo.** De `ai/fast_lane.ai`, la línea de la IA que cada circuito trae
+adentro. Y no del `map.png`, que era la opción obvia: el PNG es una imagen, y sacarle la forma
+obliga a recorrer píxeles y adivinar el orden del recorrido. La línea de la IA ya es lo que hace
+falta —una secuencia **ordenada** de coordenadas del mundo, en el mismo sistema en el que el
+servidor reporta la posición de cada auto—, así que el dibujo y los puntitos quedan alineados sin
+convertir nada.
+
+**Lo que se descartó a propósito:** el campo `length` del archivo. Está ahí y era cómodo, pero
+obliga a confiar en que ese float signifique lo que uno cree. La distancia acumulada entre puntos
+se calcula sola y da lo mismo, porque `normalizedSplinePosition` de AC es exactamente eso. Un
+supuesto menos. Y un archivo que no cierra —una línea que termina lejos de donde empezó— se
+saltea con un aviso en vez de generarse: un trazado torcido es peor que no tener trazado, porque
+el mapa dibujaría una pista que no es y nadie lo notaría hasta ver un auto pasar por afuera.
+
+**El aprendizaje no se borró.** Sigue siendo la red de contención para las pistas mod que no estén
+en el catálogo. Lo que cambió es cuál es el camino principal.
+
+**Un bug que apareció al hacer esto:** `setTrack()` recibía el nombre del circuito y descartaba la
+variante. Spa con chicane y sin chicane, o el Nordschleife turístico y el de endurance, son la
+misma carpeta y dos dibujos distintos: compartían una sola entrada, y el segundo que se corriera
+quedaba mirando el trazado del primero. Ahora la variante entra en la clave.
+
+### Irse de pista por fin cuenta
+
+**Contexto:** el piloto se fue de pista dos veces, el juego le invalidó las dos vueltas, y en Race
+Control no apareció absolutamente nada. Los choques contra el muro sí se registraron.
+
+El único camino que existía para detectar una salida pasaba por tres filtros: que el piloto tuviera
+la app instalada, que la salida superara el umbral de ruedas del admin (4 por defecto), y que
+hubiera tres salidas antes de que algo llegara a la bandeja. Mientras tanto, el `cuts` que manda el
+propio servidor en cada `LAP_COMPLETED` —que es exactamente lo que había invalidado esas vueltas—
+se usaba solo para detectar telemetría inconsistente.
+
+Se dio vuelta: **el corte del servidor es ahora la fuente principal**, y la app del piloto pasa a
+aportar el detalle. Quedó así:
+
+| | De dónde sale | Llega siempre | Qué hace |
+|---|---|---|---|
+| **Corte** | `cuts` del `LAP_COMPLETED` | sí | cuenta en la torre, abre la entrada en la bandeja, dispara la sanción por reincidencia |
+| **Salida** | `numberOfTyresOut` de la app | solo con la app | aporta ruedas, duración, dónde, y la revisión por ganancia de tiempo |
+
+Tres consecuencias:
+
+- **Columna "Fuera" en la torre de tiempos**, visible siempre, con las vueltas que el servidor le
+  invalidó a cada piloto en esta sesión.
+- **Una entrada en la bandeja por vuelta invalidada**, no una por corte: una vuelta con tres
+  cortes es un renglón que dice tres, no tres renglones.
+- **La sanción automática ahora sale del corte del servidor.** Esto corrige algo que, de haberse
+  dejado como estaba, habría sancionado dos veces por la misma salida al piloto que tiene la app y
+  nunca al que no la tiene — la misma infracción costando distinto según lo que cada uno tenga
+  instalado. Hay un test que lo cubre.
+
+### El logo de la marca no se veía en ninguna fila
+
+**Contexto:** se probó con un Mercedes y la columna "Auto" mostraba el escudo con iniciales. No
+era un problema de reconocer la marca: `mercedes-benz.svg` está en la biblioteca y el modelo
+resolvía bien.
+
+El panel pedía el logo a `/brands/<marca>.svg`, una ruta **absoluta**. En producción el panel vive
+en `/l/<liga>/`, así que esa ruta no le pegaba al worker de la liga sino a la raíz del portal, que
+no tiene esa carpeta. 404 por cada auto, y el escudo de iniciales en **todas** las filas, siempre,
+desde que el producto salió a internet. En desarrollo —panel en la raíz— andaba perfecto.
+
+Es el mismo error que ya tenía su propia regla en el proyecto: toda URL del panel va con el prefijo
+`BASE`. Lo cumplían los `fetch` y los links de navegación; esta imagen, no.
+
+### Práctica, Qualy o Carrera, al lado del reloj
+
+Una chapa de una letra junto al reloj de sesión: **P**, **Q** o **R**, con color propio. El panel
+mostraba el tiempo restante sin decir de qué sesión era, y no es un detalle: la torre de tiempos se
+ordena distinto en carrera que en clasificación, así que leerla sin saber en cuál se está es leer
+mal.
+
+### La largada se apaga fuera de la carrera
+
+Los botones de formación y verde solo tienen sentido en una carrera. En práctica o clasificación
+quedaban habilitados, y apretarlos mandaba comandos que no significaban nada. Ahora la tarjeta se
+atenúa y los botones se deshabilitan; el backend además rechaza el pedido con un mensaje claro, por
+si llega por otro camino.
+
+**"Reiniciar" queda siempre disponible**, a propósito: es la salida de emergencia, y una salida de
+emergencia que se deshabilita sola según el estado no es una salida de emergencia.
+
+### La app del piloto: tres ventanas en vez de una
+
+**Contexto:** la app funcionaba, pero en el menú de apps del juego aparecía una sola entrada con
+las cuatro etiquetas apiladas. El piloto que solo quería ver las banderas tenía que aguantar el
+resto ocupando pantalla.
+
+Ahora son tres entradas independientes:
+
+- **RC Mensajes** — los avisos de dirección de carrera, al estilo RealPenalty.
+- **RC Banderas** — la bandera de pista vigente.
+- **RC Largada** — el semáforo de la largada en movimiento.
+
+Las tres comparten los mismos hilos de fondo. Cerrar una ventana, o no abrir ninguna, no apaga el
+heartbeat ni el reporte de telemetría: solo deja de dibujar. Si fuera al revés, un piloto que
+cierra la ventana equivocada sería expulsado por el watchdog de presencia sin entender por qué.
+
+**Lo nuevo de fondo es la pizarra de avisos.** Hasta ahora el único canal hacia el piloto era el
+chat, y la app mostraba únicamente lo que empezara con "PENALIDAD". Las vueltas invalidadas, las
+sanciones anuladas y todo lo demás no llegaban. Ahora el servidor mantiene una pizarra por piloto
+(`/api/client/poll`) y la app la muestra: hasta cuatro avisos a la vez, que se borran solos a los
+25 segundos.
+
+**Los dos canales conviven y no es redundancia.** El chat le llega a cualquiera, tenga la app o no,
+y es la única garantía de que un sancionado se entere; la pizarra deja el aviso fijo en pantalla en
+vez de que se pierda entre las líneas de "fulano se conectó". Un aviso que llega por los dos lados
+se muestra una sola vez.
+
+**El modo sombra calla a los dos.** El aviso por la app sale desde adentro de la misma acción que
+el del chat, así que no hay forma de que el modo sombra silencie uno y deje pasar el otro.
+
+**Un dato que no se le manda al piloto:** la sospecha de telemetría inconsistente. Es una sospecha
+sobre su propia app y es asunto del comisario — decírsela al sospechoso solo le avisaría que lo
+están mirando.
+
+### Lo que no cambió, y por qué
+
+**La biblioteca de logos de marcas no hacía falta.** Ya hay 127 SVG empaquetados, incluido el de
+Mercedes-Benz. El problema era la ruta, no el catálogo.
+
+---
+
 ## [0.7] — 2026-10-26
 
 La 0.6 cerró la auditoría. Esta versión cierra lo que la auditoría no podía ver: el momento en que

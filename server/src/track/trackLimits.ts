@@ -13,6 +13,21 @@ import { TrackLimitsRule } from "../incident/catalog";
  *
  * El cliente es un `.py` en texto plano en la PC del piloto: es editable. La defensa no es
  * cifrarlo sino **contrastarlo** — ver `onLapCompleted`.
+ *
+ * ---
+ *
+ * **Quién manda (cambió en la 0.8).** Hay dos fuentes y hacen cosas distintas:
+ *
+ * | | De dónde sale | Llega siempre | Qué hace |
+ * |---|---|---|---|
+ * | **Corte** | `cuts` del `LAP_COMPLETED` del servidor | sí | cuenta en la torre, abre la entrada en la bandeja y dispara la sanción por reincidencia |
+ * | **Salida** | `numberOfTyresOut` de la app del piloto | solo con la app | aporta el detalle (ruedas, duración, dónde), la revisión por ganancia de tiempo y la validación cruzada |
+ *
+ * Hasta la 0.6 mandaba la salida, y eso tenía dos filtros encima —tener la app instalada y superar
+ * el umbral de ruedas del admin, 4 por defecto—. El resultado era que alguien podía irse de pista,
+ * ver cómo el juego le tachaba la vuelta, y que en Race Control no apareciera nada. Un piloto sin
+ * la app no se llevaba jamás una sanción por irse de pista y uno con la app sí, que es la misma
+ * infracción costando distinto según lo que cada uno tenga instalado.
  */
 
 /** Una salida ya cerrada, tal como la reporta el cliente. Llega de afuera: se sanea entera. */
@@ -26,7 +41,7 @@ export interface Excursion {
 }
 
 export interface TrackLimitsIncident {
-  kind: "track-limits" | "telemetry-mismatch";
+  kind: "track-limits" | "telemetry-mismatch" | "cut-lap";
   carId: number;
   driverGuid: string;
   driverName: string;
@@ -66,6 +81,8 @@ interface DriverLimits {
   excursionsSeen: number;
   /** Total de `cuts` que reportó el servidor en la sesión. Autoritativo. */
   cutsSeen: number;
+  /** Cuántos cortes tenía la última vez que se aplicó una sanción automática por reincidencia. */
+  cutsPenalizedAt: number;
   /** Diferencia con la que se avisó por última vez, para no repetir el mismo aviso cada vuelta. */
   mismatchReportedAt: number;
   /** Mejor vuelta limpia del piloto: sin salidas reportadas y sin cortes según el servidor. */
@@ -79,6 +96,7 @@ function emptyLimits(): DriverLimits {
     currentLap: [],
     excursionsSeen: 0,
     cutsSeen: 0,
+    cutsPenalizedAt: 0,
     mismatchReportedAt: 0,
     bestCleanLapMs: null,
   };
@@ -100,6 +118,18 @@ export class TrackLimitsTracker extends EventEmitter {
   /** Salidas en la sesión, para mostrarlas en el panel. */
   getCount(driverGuid: string): number {
     return this.byGuid.get(driverGuid)?.count ?? 0;
+  }
+
+  /**
+   * Cortes que contó el servidor en la sesión: las veces que Assetto Corsa invalidó una vuelta por
+   * irse de pista. Es el número que el panel muestra en la torre.
+   *
+   * Es distinto de `getCount()` y los dos tienen que estar: éste llega siempre —no necesita que el
+   * piloto tenga la app— y es el criterio del propio juego, el mismo que le tachó la vuelta. El
+   * otro es el de la app, filtrado por el umbral de ruedas que eligió el admin.
+   */
+  getCuts(driverGuid: string): number {
+    return this.byGuid.get(driverGuid)?.cutsSeen ?? 0;
   }
 
   /** Procesa las salidas que vinieron en un heartbeat. `raw` llega del cliente sin validar. */
@@ -126,10 +156,14 @@ export class TrackLimitsTracker extends EventEmitter {
         limits.reportedAt = limits.count;
         const detail = `${limits.count} salidas de pista con ${this.rules.minTyresOut} ruedas o más`;
         this.raise(driverGuid, { kind: "track-limits", lap: excursion.lap, splinePosition: excursion.splinePosition, detail });
-        // La sanción automática se aplica SOLO por reincidencia, nunca por la ganancia de tiempo
-        // de abajo: contar salidas es objetivo, decidir si una vuelta rápida fue un atajo no lo
-        // es. Esa sigue yendo a la bandeja para que la mire un humano.
-        if (this.rules.action === "penalty") this.emit("penalty", { driverGuid, reason: detail });
+        // Acá NO se emite la sanción automática, aunque hasta la 0.7 se emitía. Se mudó al cierre
+        // de vuelta, que cuenta los cortes del servidor. El motivo: este camino depende de que el
+        // piloto tenga la app instalada y de un umbral de ruedas elegido a mano, así que un piloto
+        // sin app no se llevaba jamás una sanción por irse de pista, y uno con app sí. La misma
+        // infracción no puede costar distinto según lo que cada uno tenga instalado.
+        //
+        // Esto sigue yendo a la bandeja porque dice algo que el corte no dice: cuántas ruedas y
+        // cuánto tiempo estuvo afuera.
       }
     }
   }
@@ -159,6 +193,8 @@ export class TrackLimitsTracker extends EventEmitter {
     const plausible = Number.isFinite(lapTimeMs) && lapTimeMs >= MIN_PLAUSIBLE_LAP_MS;
     const clean = lapExcursions.length === 0 && cuts === 0;
 
+    if (cuts > 0) this.onCutLap(car.driverGuid, limits, car.lapCount, cuts, lapExcursions);
+
     if (plausible && clean && (limits.bestCleanLapMs === null || lapTimeMs < limits.bestCleanLapMs)) {
       limits.bestCleanLapMs = lapTimeMs;
     }
@@ -182,6 +218,51 @@ export class TrackLimitsTracker extends EventEmitter {
     }
 
     this.checkMismatch(car.driverGuid, limits, car.lapCount);
+  }
+
+  /**
+   * Una vuelta que el servidor invalidó por irse de pista.
+   *
+   * Es el camino que faltaba, y faltaba el que más importa. Hasta la 0.7, irse de pista solo se
+   * registraba si el piloto tenía la app instalada **y** la salida superaba el umbral de ruedas
+   * que eligió el admin —4 por defecto—. Con esos dos filtros encima, alguien podía irse de pista,
+   * ver cómo el juego le tachaba la vuelta, y que en Race Control no apareciera absolutamente
+   * nada. Eso fue exactamente lo que pasó en la primera prueba real.
+   *
+   * `cuts` viene en el `LAP_COMPLETED` del servidor dedicado. Es el mismo número con el que el
+   * juego decidió invalidar la vuelta, llega para todos los pilotos tengan o no la app, y no se
+   * puede falsificar desde la PC del piloto. Por eso **es el que manda**: cuenta para la torre, abre
+   * la entrada en la bandeja y es el que dispara la sanción automática por reincidencia.
+   *
+   * Una entrada por vuelta invalidada, no una por corte: si alguien se fue tres veces en la misma
+   * vuelta, eso es una vuelta tachada y una línea en la bandeja que dice tres. Así la bandeja de
+   * una carrera de 20 autos sigue siendo leíble por un humano.
+   */
+  private onCutLap(
+    driverGuid: string,
+    limits: DriverLimits,
+    lap: number,
+    cuts: number,
+    lapExcursions: Excursion[]
+  ): void {
+    // Si la app reportó la salida, se usa su punto de la vuelta para ubicarla en el mapa. El
+    // servidor manda cuántos cortes hubo, nunca dónde.
+    const last = lapExcursions.length > 0 ? lapExcursions[lapExcursions.length - 1] : null;
+    const veces = cuts === 1 ? "una vez" : `${cuts} veces`;
+    this.raise(driverGuid, {
+      kind: "cut-lap",
+      lap,
+      splinePosition: last ? last.splinePosition : 0,
+      detail: `Se fue de pista ${veces}: el servidor invalidó la vuelta ${lap}`,
+    });
+
+    if (limits.cutsSeen - limits.cutsPenalizedAt < this.rules.excursionsForIncident) return;
+    limits.cutsPenalizedAt = limits.cutsSeen;
+    if (this.rules.action !== "penalty") return;
+    this.emit("penalty", {
+      driverGuid,
+      reason: `${limits.cutsSeen} vueltas invalidadas por salirse de pista`,
+    });
   }
 
   private checkMismatch(driverGuid: string, limits: DriverLimits, lap: number): void {

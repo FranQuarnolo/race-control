@@ -10,6 +10,10 @@ const root = path.join(__dirname, "..");
 const carpetas = [
   ["src/api/public", "dist/api/public"],
   ["src/portal/public", "dist/portal/public"],
+  // El catálogo de trazados son JSON, y `tsc` solo emite TypeScript: sin esta línea la carpeta no
+  // llega a `dist/`, `loadFromCatalog()` no encuentra nada y el mapa vuelve a salir vacío —en
+  // producción, en silencio, y andando perfecto en desarrollo.
+  ["src/track/catalog", "dist/track/catalog"],
 ];
 
 for (const [desde, hacia] of carpetas) {

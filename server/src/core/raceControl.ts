@@ -21,6 +21,7 @@ import { SessionTracker } from "../session/sessionInfo";
 import { Journal, RawCapture, pruneOldLogs } from "../log/journal";
 import { restoreState } from "../log/restore";
 import { LightEventTracker } from "../instances/lightEventTracker";
+import { PilotMessageBoard } from "../instances/pilotMessages";
 import { TrackLearner } from "../track/trackLearner";
 import { TrackLimitsIncident, TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
@@ -261,15 +262,25 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     stewardPenaltyEngine.resetSession();
     // Las salidas de pista de la clasificación no se arrastran a la carrera.
     trackLimits.resetSession();
+    // Ni los avisos: que la app del piloto siga mostrando una sanción de la qualy en la vuelta 1
+    // de la carrera es peor que no mostrar nada.
+    messageBoard.resetSession();
     wrongWay.reset();
     // Los tiempos de la sesión anterior no valen en la nueva: sin esto, la mejor vuelta de la
     // clasificación quedaría liderando la torre durante toda la carrera.
     stateTracker.onNewSession();
-    trackLearner.setTrack(data.track);
+    // La variante va aparte del nombre de pista y hay que pasarla: Spa con chicane y sin chicane
+    // son la misma carpeta y dos dibujos distintos.
+    trackLearner.setTrack(data.track, data.trackConfig);
   });
 
   const phaseTracker = new SessionPhaseTracker();
   phaseTracker.on("phaseChanged", (phase) => journal.log("phase.changed", { phase }));
+
+  // Pizarra de avisos hacia la app del piloto. No reemplaza al chat del servidor —ese le llega a
+  // todos, con app o sin ella— sino que le agrega lo que el chat no puede: que el aviso quede en
+  // pantalla en vez de pasar volando. Ver instances/pilotMessages.ts.
+  const messageBoard = new PilotMessageBoard();
 
   // Bandeja de incidentes: toques entre autos y choques contra el circuito. NO sanciona — el
   // servidor sabe que hubo contacto, no quién tuvo la culpa, así que esto va a revisión humana.
@@ -321,7 +332,15 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   );
   // El journal no se escribe acá: `incidentEngine` ya registra todo incidente que entra a la
   // bandeja, incluido el `detail`. Duplicarlo solo haría que el admin los cuente dos veces.
-  trackLimits.on("incident", (data: TrackLimitsIncident) => incidentEngine.reportObserved(data));
+  trackLimits.on("incident", (data: TrackLimitsIncident) => {
+    incidentEngine.reportObserved(data);
+    // El corte se le avisa al piloto; el desfasaje de telemetría no. Ese último es una sospecha
+    // sobre su propia app y es asunto del comisario: decírselo al sospechoso solo le avisaría que
+    // lo están mirando.
+    if (data.kind === "cut-lap") {
+      messageBoard.push(data.driverGuid, "warning", `Vuelta ${data.lap} invalidada: te fuiste de pista`);
+    }
+  });
   // Única infracción con sanción automática habilitable: contar ruedas afuera es objetivo. Reusa
   // el motor de pit porque la sanción se cumple igual, pasando por el pit lane.
   trackLimits.on("penalty", (data: { driverGuid: string; reason: string }) => {
@@ -407,6 +426,20 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     action();
   };
 
+  /**
+   * Todo aviso al piloto sale por dos canales a la vez: el chat del servidor y la pizarra de la app.
+   *
+   * Los dos y no uno: el chat le llega a cualquiera, tenga la app o no, y es la garantía de que el
+   * sancionado se entere; la pizarra deja el aviso fijo en pantalla en vez de que se pierda entre
+   * las líneas de "fulano se conectó". Van juntos adentro de la misma acción para que el modo
+   * sombra los calle a los dos — avisarle al piloto por la app lo que el chat no le dijo sería,
+   * justamente, dejar de ser modo sombra.
+   */
+  const avisar = (carId: number, driverGuid: string, kind: "penalty" | "info", texto: string) => {
+    udpClient.sendChatToCar(carId, texto);
+    messageBoard.push(driverGuid, kind, texto);
+  };
+
   const handlePenaltyIssued = (engineLabel: string) => (p: Penalty) => {
     const carId = resolveCurrentCarId(p);
     if (p.type === "BALLAST") {
@@ -419,13 +452,19 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       // No hay nada que cumplir en pista: se le avisa al piloto y queda anotada para el informe
       // de fin de carrera, que es donde el admin la vuelca al resultado.
       dispatchOrSuppress(
-        () => udpClient.sendChatToCar(carId, `PENALIDAD: +${p.timePenaltySeconds}s al resultado final. ${p.reason}`),
+        () => avisar(carId, p.driverGuid, "penalty", `PENALIDAD: +${p.timePenaltySeconds}s al resultado final. ${p.reason}`),
         "penalty.time",
         { engine: engineLabel, carId, driverGuid: p.driverGuid, reason: p.reason, seconds: p.timePenaltySeconds }
       );
     } else {
       dispatchOrSuppress(
-        () => udpClient.sendChatToCar(carId, `PENALIDAD: ${p.reason}. Tenés ${p.graceLapsRemaining} vuelta(s) para cumplirla.`),
+        () =>
+          avisar(
+            carId,
+            p.driverGuid,
+            "penalty",
+            `PENALIDAD: ${p.reason}. Tenés ${p.graceLapsRemaining} vuelta(s) para cumplirla.`
+          ),
         "penalty.issued",
         { engine: engineLabel, carId, driverGuid: p.driverGuid, reason: p.reason, type: p.type }
       );
@@ -452,12 +491,12 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     if (p.type === "BALLAST") {
       dispatchOrSuppress(() => {
         udpClient.sendAdminCommand(`/ballast ${carId} 0`);
-        udpClient.sendChatToCar(carId, `SANCIÓN ANULADA por el comisario: te sacamos el lastre. ${p.reason}`);
+        avisar(carId, p.driverGuid, "info", `SANCIÓN ANULADA por el comisario: te sacamos el lastre. ${p.reason}`);
       }, "penalty.revoked", data);
       return;
     }
     dispatchOrSuppress(
-      () => udpClient.sendChatToCar(carId, `SANCIÓN ANULADA por el comisario: ${p.reason}`),
+      () => avisar(carId, p.driverGuid, "info", `SANCIÓN ANULADA por el comisario: ${p.reason}`),
       "penalty.revoked",
       data
     );
@@ -559,6 +598,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     udpClient,
     incidentEngine,
     trackLearner,
+    trackLimits,
     sessionTracker,
     telemetryStore,
     getSessionType: () => sessionType,
@@ -579,6 +619,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
 
   const clientApp = createClientApi({
     lightEventTracker,
+    messageBoard,
     presenceWatchdog,
     telemetryStore,
     onExcursions: (guid: string, excursions: unknown) => trackLimits.report(guid, excursions),

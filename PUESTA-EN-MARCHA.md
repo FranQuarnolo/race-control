@@ -241,7 +241,20 @@ Una vez por temporada, por piloto:
 
 1. Abrir Content Manager.
 2. Arrastrar `RaceControlClient.zip` a la ventana, como cualquier mod.
-3. Activarla en el juego: menú de Apps → "Race Control".
+3. Activar las ventanas en el juego: menú de Apps → **RC Mensajes**, **RC Banderas** y **RC
+   Largada**.
+
+Son tres entradas desde la **0.8** y cada piloto activa las que quiera:
+
+| Ventana | Qué muestra |
+|---|---|
+| **RC Mensajes** | Sanciones, vueltas invalidadas por irse de pista, sanciones anuladas. Y si la app está conectada. |
+| **RC Banderas** | La bandera de pista vigente. |
+| **RC Largada** | El semáforo de la largada en movimiento, con el aviso sonoro al verde. |
+
+**No hace falta tener ninguna abierta para que Race Control funcione.** Alcanza con que la app esté
+instalada y activada: el reporte de telemetría y la señal de presencia salen igual. Cerrar una
+ventana solo deja de dibujarla.
 
 No hay nada que configurar adentro. Cuando el piloto entra al servidor, Race Control le manda por
 el chat del juego —solo a su auto— la dirección a la que reportar y una credencial firmada que
@@ -257,11 +270,17 @@ vuelve a entrar, y recibe una nueva.
 El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
 
 - **La banda de largada**: iniciar formación, verde, reiniciar. El semáforo se pone en verde con
-  aviso sonoro para todos los pilotos que tengan la app.
-- **La torre de tiempos**: posición, auto, velocidad, vueltas, sectores, última y mejor vuelta,
-  paradas, compuesto, combustible y ping. Un click en un piloto lo resalta en el mapa.
-- **El mapa en vivo**: el circuito se dibuja solo a medida que se corre. No hace falta cargar
-  ningún archivo de pista.
+  aviso sonoro para todos los pilotos que tengan la app. Desde la **0.8** se atenúa y se
+  deshabilita en práctica y clasificación, porque la largada es cosa de la carrera. "Reiniciar"
+  queda siempre disponible: es la salida de emergencia.
+- **La torre de tiempos**: posición, auto, velocidad, vueltas, **Fuera** (las vueltas que el
+  servidor le invalidó por irse de pista), sectores, última y mejor vuelta, paradas, compuesto,
+  combustible y ping. Un click en un piloto lo resalta en el mapa.
+- **El mapa en vivo**: el circuito viene dibujado. Desde la **0.8** los trazados viajan con Race
+  Control, así que el mapa sale completo apenas el servidor dice en qué pista está, sin esperar a
+  que nadie dé vueltas. Al lado del reloj hay una chapa que dice **P**, **Q** o **R** según el tipo
+  de sesión. Una pista mod que no esté en el catálogo se sigue aprendiendo de la telemetría, como
+  antes, y el cartel lo aclara.
 - **Sanciones**: lo que se aplicó solo y lo que aplicó el comisario, más "Descargar informe de
   carrera" al terminar.
 
@@ -446,10 +465,15 @@ porque depende de una decisión o de algo que no está en el código.
 | Qué | Dónde se hace | Qué pasa si no se hace |
 |---|---|---|
 | ~~Poner `RC_CONTACT`~~ | [3.3 Los tres secretos](#33-los-tres-secretos) | **Hecho el 26/10/2026**: quedó `quarnolofrancisco@gmail.com` en producción |
-| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla". **Es el pendiente más urgente de esta lista.** |
+| Generar el catálogo de trazados | `cd server && node scripts/build-track-catalog.js "<...>/content/tracks"` | El mapa vuelve al aprendizaje por telemetría de la 0.7: no dibuja nada hasta que alguien complete el 40% del circuito. **Es el pendiente más urgente de esta lista**, y se hace una sola vez desde una PC que tenga Assetto Corsa instalado. |
+| Las cuatro capturas de la landing | [Poner las capturas en la landing](#poner-las-capturas-en-la-landing) | La página pública muestra cuatro rectángulos grises justo donde promete "mirá qué clara es la pantalla" |
 | El video del README | comentario al pie de [README.md](README.md) | Nada se rompe; el `<img>` está comentado a propósito para que no quede una imagen rota |
 
-Las capturas conviene sacarlas ahora y no antes: el panel de la 0.7 ya tiene la columna de intervalo,
+El catálogo se genera desde la instalación de Assetto Corsa de quien lo corra, y los JSON quedan en
+`server/src/track/catalog/` listos para commitear. Lo que no esté en esa instalación no entra: para
+sumar circuitos después alcanza con volver a correr el script en una PC que los tenga.
+
+Las capturas conviene sacarlas ahora y no antes: el panel de la 0.8 ya tiene la columna de intervalo,
 la zona de pit en ámbar, el botón de anular y la tabla con los anchos arreglados, así que lo que se
 fotografíe hoy va a seguir siendo cierto por un buen rato. El atajo para sacarlas sin Assetto Corsa
 está en la sección que linkea la tabla.
