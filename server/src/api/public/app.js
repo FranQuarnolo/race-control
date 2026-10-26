@@ -1995,12 +1995,26 @@ function resolveButton(id, status, label, cls) {
 
 // ===================================================================== red
 
+/**
+ * La dirección `ip:puerto` que el servidor de Assetto Corsa tiene que apuntar.
+ *
+ * Vive acá, en el módulo, y no en el `value` de un input como antes: el campo copiable se fue del
+ * cajón de Conexión, pero el mensaje para el soporte del hosting la sigue necesitando. Leerla de
+ * un elemento del DOM la ataba a que ese elemento existiera, que es exactamente la clase de falla
+ * silenciosa que ya nos costó caro: `$()` devuelve `null` y el botón deja de andar sin decir nada.
+ */
+let sendAddress = "--";
+
 function renderNetwork(network) {
+  sendAddress = network.sendAddress;
+
   // La dirección de la liga es el único dato del que depende que el servidor de AC pueda
   // encontrarnos. La asigna el portal al arrancar; si falta, algo está mal de nuestro lado.
+  // Se muestra con el puerto: es el renglón exacto que el hosting tiene que haber cargado, así
+  // que sirve para verificar de un vistazo, no solo para saber "cuál es mi IP".
   const ipEl = $("net-ip");
   if (network.publicIp) {
-    ipEl.textContent = network.publicIp;
+    ipEl.textContent = network.sendAddress;
     ipEl.className = "ok";
   } else {
     ipEl.textContent = "sin asignar";
@@ -2008,8 +2022,6 @@ function renderNetwork(network) {
   }
 
   $("net-signal").textContent = network.receivingTelemetry ? "recibiendo" : "sin señal todavía";
-  // Es un <input>, no un bloque de texto: va por `value`.
-  $("net-send-address").value = network.sendAddress;
   $("wizard-snippet").textContent = network.sendAddress;
 
   // "Llega telemetría" y "los pilotos alcanzan el backend" son dos cosas distintas que fallan por
@@ -2097,12 +2109,6 @@ function renderMode(shadowMode) {
   wrap.title = shadowMode
     ? "El motor detecta y registra, pero no sanciona ni kickea de verdad. Recomendado en las primeras carreras."
     : "El motor aplica sanciones y expulsiones reales.";
-
-  // El switch se mudó adentro del cajón de Conexión, donde no se ve. Eso reabre el problema que el
-  // switch en la barra resolvía: se podía correr una carrera entera sin notar que el motor estaba
-  // en sombra y que ninguna de las sanciones aplicadas contaba. El cartel de la barra es lo que
-  // queda de aquello — aparece solo cuando hay algo que avisar, y clickearlo lleva al switch.
-  $("mode-chip").hidden = !shadowMode;
 }
 
 // ===================================================================== bandera de carrera
@@ -2302,35 +2308,28 @@ function wireButtons() {
 
   wireLogout();
 
-  $("btn-copy-send-address").addEventListener("click", () => {
-    navigator.clipboard.writeText($("net-send-address").value).then(
-      () => toast("Copiado"),
-      () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
-    );
-  });
+  $("btn-copy-support").addEventListener("click", copiarMensajeDeSoporte);
 
-  // Un click en el campo selecciona todo: si el portapapeles falla —pasa sin HTTPS—, copiarlo a
-  // mano queda a un Ctrl+C.
-  $("net-send-address").addEventListener("focus", (e) => e.target.select());
-
-  $("btn-copy-support").addEventListener("click", () => {
-    const address = $("net-send-address").value;
-    // Sin dirección el mensaje sale con un "--" adentro y el soporte configura la nada. Mejor no
-    // copiar nada y decirlo.
-    if (!address || address === "--") {
-      toast("Todavía no tenemos tu dirección. Esperá unos segundos y probá de nuevo.", 5000);
-      return;
-    }
-    navigator.clipboard.writeText(supportMessage(address)).then(
-      () => toast("Mensaje copiado. Pegalo en el ticket de soporte de tu hosting.", 6000),
-      () => toast("No se pudo copiar — abrí la guía completa y copialo de ahí", 5000)
-    );
-  });
-
-  $("mode-chip").addEventListener("click", () => openDrawer("drawer-network"));
   $("chip-sin-app").addEventListener("click", () => openDrawer("drawer-network"));
 
   wireWizard();
+}
+
+/**
+ * Copiar el ticket de soporte. Lo llaman dos botones —el del cajón de Conexión y el del paso 3 del
+ * asistente—, que desde que la configuración manual se fue hacen exactamente lo mismo.
+ */
+function copiarMensajeDeSoporte() {
+  // Sin dirección el mensaje sale con un "--" adentro y el soporte configura la nada. Mejor no
+  // copiar nada y decirlo.
+  if (!sendAddress || sendAddress === "--") {
+    toast("Todavía no tenemos tu dirección. Esperá unos segundos y probá de nuevo.", 5000);
+    return;
+  }
+  navigator.clipboard.writeText(supportMessage(sendAddress)).then(
+    () => toast("Mensaje copiado. Pegalo en el ticket de soporte de tu hosting.", 6000),
+    () => toast("No se pudo copiar — abrí la guía completa y copialo de ahí", 5000)
+  );
 }
 
 /**
@@ -2424,12 +2423,9 @@ let wizardOpen = null;
 function wireWizard() {
   $("wizard-next").addEventListener("click", () => advanceWizard());
   $("wizard-back").addEventListener("click", () => showWizardStep(wizardStep - 1));
-  $("wizard-copy").addEventListener("click", () => {
-    navigator.clipboard.writeText($("wizard-snippet").textContent).then(
-      () => toast("Copiado"),
-      () => toast("No se pudo copiar — seleccionalo y copialo a mano", 4000)
-    );
-  });
+  // El mismo mensaje que el botón del cajón de Conexión. El snippet de arriba quedó como dato a
+  // la vista, no como algo que haya que copiar por separado.
+  $("wizard-copy").addEventListener("click", copiarMensajeDeSoporte);
   $("wizard-test").addEventListener("click", async (e) => {
     const button = e.currentTarget;
     button.disabled = true;

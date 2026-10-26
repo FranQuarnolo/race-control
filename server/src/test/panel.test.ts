@@ -277,27 +277,54 @@ test("toda clase que el panel arma en JS tiene al menos una regla", () => {
 });
 
 /**
- * El cartel de modo sombra de la barra.
+ * Acá vivía "el modo sombra sigue siendo visible fuera del cajón de conexión", que exigía un cartel
+ * en la barra mientras el motor estuviera en sombra. El cartel se sacó por pedido explícito —el
+ * modo vive entero adentro del cajón de Conexión—, así que el test se fue con él.
  *
- * El switch estaba arriba, a la vista los siete días, y se mudó al cajón de Conexión porque se toca
- * dos veces en la vida de una liga. El costo de esa mudanza es que vuelve a ser posible correr una
- * carrera entera en modo sombra sin notarlo: las sanciones se anotan, nadie las cobra, y el panel se
- * ve exactamente igual que uno sancionando de verdad. El cartel es lo único que lo impide.
+ * El riesgo que cubría no desapareció: se puede correr una carrera entera en sombra sin notarlo,
+ * con las sanciones anotándose y nadie cobrándolas, y el panel viéndose idéntico a uno que sanciona
+ * de verdad. Si eso pasa en una fecha real, lo que hay que reponer es un aviso en el encabezado de
+ * la torre de tiempos —junto a `chip-sin-app`— y este test detrás.
  */
-test("el modo sombra sigue siendo visible fuera del cajón de conexión", () => {
-  const js = leer(PANEL, "app.js");
-  const html = leer(PANEL, "index.html");
+
+/**
+ * Todo elemento de la barra que arranca escondido y se muestra por condición tiene que poder
+ * esconderse de verdad.
+ *
+ * `[hidden]` es `display: none` por hoja del navegador, y cualquier `display` propio en una regla
+ * de clase le gana. Este archivo ya pagó ese bug entero: un `display: flex` incondicional dejó el
+ * modal de primer arranque visible para siempre. El botón de Salir es el caso vivo —es `flex` y
+ * arranca `hidden`—: sin el seguro promete una sesión que en modo local no existe.
+ */
+test("lo que arranca escondido en la barra se puede esconder", () => {
   const css = sinComentarios(leer(PANEL, "styles.css"));
 
-  assert.ok(html.includes('id="mode-chip"'), "no quedó ningún aviso de modo sombra en la barra");
   assert.ok(
-    /mode-chip"\s*\)\s*\.hidden\s*=/.test(js),
-    "el cartel de modo sombra existe pero nadie lo muestra ni lo esconde según el modo"
+    /\.btn-salir\[hidden\]\s*{[^}]*display:\s*none/.test(css),
+    "falta el seguro `.btn-salir[hidden] { display: none }`: el `display: flex` de la clase le gana al atributo"
   );
-  // El bug de `display: flex` ganándole a `[hidden]` ya se pagó una vez con el modal de primer
-  // arranque. Un cartel que no se puede esconder es peor que no tenerlo: grita en modo real.
+});
+
+/**
+ * Control de carrera y Sanciones son secciones, no acciones.
+ *
+ * Antes se dibujaban con el mismo `#20242e` que usan los botones de la barra en hover, así que la
+ * pestaña activa y un botón cualquiera eran indistinguibles: tres cosas que abren un cajón y dos
+ * que cambian la pantalla entera, todas iguales. El grupo tiene que tener forma propia —el marco
+ * del control segmentado— y la pestaña activa tiene que distinguirse de la inactiva.
+ */
+test("las pestañas de sección se dibujan distinto de los botones de acción", () => {
+  const css = sinComentarios(leer(PANEL, "styles.css"));
+
+  const contenedor = /nav\.views\s*{([^}]*)}/.exec(css);
+  assert.ok(contenedor, "no hay regla para `nav.views`");
   assert.ok(
-    /\.chapa-sombra\[hidden\]\s*{[^}]*display:\s*none/.test(css),
-    "falta el seguro `.chapa-sombra[hidden] { display: none }`: cualquier `display` propio le gana al atributo"
+    /background\s*:/.test(contenedor![1]) && /border\s*:/.test(contenedor![1]),
+    "`nav.views` no tiene marco propio: sin fondo y borde el grupo no se lee como un control aparte"
+  );
+
+  assert.ok(
+    /nav\.views\s+a\[aria-current="page"\]\s*{[^}]*background\s*:/.test(css),
+    "la pestaña activa no se distingue de la inactiva"
   );
 });

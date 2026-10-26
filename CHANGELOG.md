@@ -3,6 +3,195 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.0] — 2026-10-26
+
+**Primer release público.** El repositorio pasa a ser público y el `.zip` de la app de los pilotos
+deja de dar 404 a quien no tenga acceso — era la única pieza que impedía que un admin ajeno al
+proyecto pudiera arrancar solo. El salto de número es por eso y no por el tamaño del cambio: lo
+que sigue es media docena de ajustes de barra y de cajón, pero son los que hacen que la primera
+pantalla se entienda sin que nadie la explique al lado.
+
+### La configuración manual del hosting se fue
+
+**Contexto:** la 0.9 decidió dejarla. El razonamiento está escrito más abajo y era defendible:
+había hostings donde el campo **Send Address** está a la vista, se completa en diez segundos y el
+ticket de soporte era una espera de dos días al pedo. Lo que lo invalida es un dato nuevo: **el
+primer release sale sobre EmperorServers**, y ahí ese campo no existe. Los plugins UDP vienen
+apagados de fábrica y la sección directamente no se dibuja. Es decir que los dos primeros pasos
+del manual mandaban al admin a buscar algo que no estaba, y el camino real —el botón del final,
+que arma el ticket en inglés con la dirección ya adentro— quedaba escondido como nota al pie del
+paso 2.
+
+**Ahora el cajón de Conexión tiene un paso y es ese botón.** El campo copiable, su botón de copiar
+y la instrucción de pegarlo en **Server Options** se fueron. El paso 3 del asistente de primer
+arranque dice lo mismo que el cajón, así que cambió igual. La guía completa sigue linkeada y sigue
+documentando el campo, que es donde corresponde que viva el caso del hosting que sí lo expone.
+
+**La dirección no desapareció, cambió de rol.** Estaba en un input porque era algo que había que
+copiar; ahora está en la fila "La dirección de tu liga" del bloque de Estado, **con el puerto**
+—antes mostraba solo la IP—, que es el renglón exacto que el soporte del hosting tiene que haber
+cargado. Sirve para verificar, no para configurar. Y como el mensaje de soporte la sigue
+necesitando, dejó de leerse del DOM y pasó a una variable del módulo: leerla de un input la ataba
+a que ese input existiera, que es la clase de falla silenciosa que este proyecto ya pagó varias
+veces —`$()` devuelve `null`, el botón deja de andar, nadie se entera—.
+
+### La barra de arriba
+
+**Control de carrera y Sanciones ahora se ven como lo que son: secciones.** Eran dos links de
+texto gris con el mismo fondo `#20242e` que los botones usan en hover, así que la pestaña activa y
+un botón cualquiera se dibujaban idénticos. Cinco cosas en fila, todas iguales, y dos de ellas
+cambian la pantalla entera mientras las otras tres abren un cajón y te devuelven donde estabas.
+Ahora las dos pestañas viven en un control segmentado: un hueco hundido, más oscuro que la barra,
+con la activa levantada adentro. La diferencia con los botones es de **relieve**, no de color, y
+por eso se lee sin tener que comparar — un grupo está metido en la barra y el otro apoyado encima.
+Sanciones además tiene ícono, un mazo de juez. No otra bandera: a 15 px se confundiría con la de
+al lado.
+
+**Salir es un ícono y es rojo.** Una puerta con la flecha saliendo, sin texto y sin fondo. Es la
+única acción de la barra que no se deshace con otro click, así que conviene que no se parezca a
+las dos que sí. El nombre accesible va en `aria-label`, y el área de click se mantiene en 30×30
+aunque el ícono mida 16.
+
+**El cartel de modo sombra se fue de la barra.** El modo vive entero adentro del cajón de
+Conexión: el interruptor y la explicación.
+
+**Esto reabre un riesgo conocido y conviene dejarlo dicho.** El cartel existía porque se puede
+correr una carrera entera en sombra sin notarlo: las sanciones se anotan, nadie las cobra, y el
+panel se ve exactamente igual que uno sancionando de verdad. El test
+`el modo sombra sigue siendo visible fuera del cajón de conexión` se borró con él. Queda anotado,
+en el HTML y en el test que lo reemplaza, dónde reponer el aviso si eso llega a pasar en una fecha
+real: en el encabezado de la torre de tiempos, junto a la chapa de "ningún piloto con la app", que
+es donde el ojo ya está.
+
+### Tests
+
+Los dos que se fueron se reemplazaron por dos que cubren lo que quedó: que `.btn-salir[hidden]`
+tenga su `display: none` explícito —es `flex` y arranca escondido, exactamente el bug que dejó el
+modal de primer arranque visible para siempre— y que el control segmentado tenga marco propio y la
+pestaña activa se distinga de la inactiva. **256 tests, todos verdes.**
+
+### Un arreglo de orden en este mismo archivo
+
+La entrada de la 0.9 había quedado **debajo** de la 0.8, entre la 0.8 y la 0.7. Está movida arriba
+de todo donde corresponde. No cambió una palabra de su contenido, incluido el párrafo "Lo que no
+cambió, y por qué" que esta versión revierte: un changelog que se corrige a sí mismo hacia atrás
+deja de servir para entender por qué se decidió algo.
+
+---
+
+## [0.9] — 2026-10-26
+
+La 0.8 nunca llegó a desplegarse: todo lo de esa versión sale a producción con esta. Lo que se
+sumó encima es una tanda de detalles de la torre de tiempos y **un bug de red que hacía parecer
+que el servidor se caía solo cada treinta segundos**.
+
+### El panel decía "Sin señal" con el servidor perfecto
+
+**El síntoma:** con el servidor de Assetto Corsa andando y conectado, el botón de la barra
+parpadeaba. Verde un ratito, rojo un rato largo, verde otra vez. En loop, sin que pasara nada.
+
+**La causa es aritmética, y estaba repartida en dos archivos.** Con nadie manejando, el servidor
+de AC **no manda un solo paquete por su cuenta**: todo su tráfico es telemetría de autos en pista.
+Lo único que llegaba con la pista vacía era la respuesta a nuestro `GET_SESSION_INFO`, que se
+pedía **cada 30 segundos**. Y la ventana que decide "¿me está llegando señal?" era de **5**.
+
+Cinco segundos en verde, veinticinco en rojo. El admin veía su servidor caerse y levantarse solo,
+cada medio minuto, con todo funcionando.
+
+**El arreglo son dos números y una consolidación:**
+
+- El latido bajó de 30 a **5 segundos**, y pasó a vivir en el mismo tick que el keepalive de
+  posiciones, en `ConnectivityManager`. Antes eran dos temporizadores distintos, en dos archivos,
+  mandando pedidos al mismo servidor a cadencias distintas — la clase de duplicación que termina
+  en que alguien cambia una sola.
+- La ventana de silencio subió de 5 a **15 segundos**, que son tres latidos. Hay que perder tres
+  respuestas seguidas para que el panel se ponga en rojo, así que un datagrama perdido —que en UDP
+  pasa— ya no se ve como una caída.
+
+Y queda **más** sensible a una desconexión de verdad, no menos: la ventana de 5 s medida contra un
+latido de 30 no detectaba absolutamente nada; ahora una caída real aparece en 15 segundos.
+
+**`GET_SESSION_INFO` como latido, y no un ping inventado.** El protocolo de plugins de AC no tiene
+un ping. Lo que sí tiene es un pedido que el servidor contesta **siempre**, haya o no alguien en
+pista, y esa respuesta ya hacía falta por otro motivo: sin ella el reloj de la sesión se extrapola
+contra el reloj local y se desfasa durante toda la carrera. Un solo mecanismo para las dos cosas.
+
+**Una invariante nueva (`connectivity.test.ts`).** El test lee las constantes del `dist/` y exige
+que la ventana de silencio sea al menos tres latidos, y que `connectivity.js` y `diagnostics.js`
+usen exactamente el mismo número. Si mañana alguien sube el latido sin tocar la ventana, vuelve
+este bug, y vuelve en silencio — porque todo "funciona".
+
+### Cinco detalles de la torre de tiempos
+
+Los cinco salen de mirar el panel durante una carrera real. Ninguno es un bug; los cinco son
+cosas que la pantalla no terminaba de decir.
+
+**"L4" en vez de "4".** La columna de vueltas queda entre tiempos y velocidades, todos números. Un
+"4" pelado no se lee como vueltas hasta que uno sube la vista al encabezado.
+
+**"PIT" en la columna de velocidad.** En boxes la velocidad no dice nada —va a 40, o a 0— y lo que
+el admin necesita saber es por qué ese auto se descolgó de la clasificación. Hasta ahora la fila
+se pintaba de ámbar **solo** con `telemetry.inPitLane`, que sale de la Shared Memory del juego y
+por lo tanto existe únicamente si el piloto tiene la app. En una liga donde nadie la tiene —el
+caso normal al empezar— no se veía nunca a nadie en boxes.
+
+Ahora hay dos fuentes, en orden: la app del piloto cuando está, y la **zona de pit configurada**
+cuando no. Es la misma zona que ya usan `PitSpeedMonitor` y `PitComplianceTracker` para sancionar,
+a propósito: si el panel dijera PIT con una definición propia, el admin vería a alguien "en boxes"
+al que el motor no le mide la velocidad de pit, y calibraría la zona mirando un dibujo que miente.
+
+Lo que se descartó: deducirlo de "velocidad 0 por mucho tiempo", que es lo intuitivo. Un abandono
+en la grava también está parado, y es justo el caso en el que hace falta ver que **no** es una
+parada en boxes.
+
+**La columna de Ping desaparece cuando nadie la puede llenar.** Decía "sin app" en rojo en cada
+fila. El ping no viene del servidor de Assetto Corsa —el protocolo UDP no transporta ese dato, ni
+el nuestro ni el de ningún plugin— sino que es el round-trip de la app del piloto contra Race
+Control. Sin app no hay número posible, así que veinte celdas rojas no informaban nada y hacían
+parecer roto algo que simplemente no aplica. Cuando al menos un piloto reporta, la columna vuelve.
+
+**El kick se mudó adentro de un menú de tres puntitos.** Un botón "Expulsar" visible en veinte
+filas de una tabla que se reordena sola es un accidente esperando que alguien mueva el mouse en el
+momento equivocado. La doble confirmación sigue igual, y con el menú cerrado queda un punto rojo
+sobre los puntitos: es lo único que avisa que hay un kick a medio confirmar.
+
+El menú se cuelga del `<body>` con `position: fixed`, no de la celda. La tabla vive adentro de un
+contenedor con `overflow: auto` en los dos ejes, así que un popup dentro de la fila quedaría
+recortado por el scroll — y justo en la última fila, que es donde más se usa.
+
+**"Ningún piloto con la app", al lado del título de la torre.** Es la respuesta a "los neumáticos
+y los sectores no me aparecen". No era un bug: Sectores, Box, Neum., Comb. y Ping salen todos del
+mismo lado —la app que instala cada piloto— y sin ella quedan en guiones para siempre. El cajón de
+Conexión ya lo decía bien, en "Pilotos con la app reportando", y nadie abre ese cajón. Ahora el
+aviso está donde se nota el síntoma, en gris y no en rojo —no es una falla, es una pieza que
+todavía no está instalada— y clickearlo abre el diagnóstico.
+
+**Una invariante nueva en `panel.test.ts`.** El test que verifica que toda clase tenga al menos
+una regla CSS solo miraba `index.html`, y la torre de tiempos no está en el HTML: cada fila la
+construye `createCarRow` en vivo, con las clases escritas a mano en un string. El menú nuevo, el
+"PIT" y los badges viven ahí. Una errata en ese string no rompe nada —el elemento se dibuja igual,
+sin formato— que es exactamente la familia de bugs que este archivo persigue.
+
+### El README adelgaza
+
+Se le sacó la sección de documentación: el README es la puerta de entrada de quien va a usar el
+producto, no el índice del repositorio. Los documentos siguen donde estaban y enlazados desde
+donde corresponde. También se fue el párrafo sobre credenciales vencidas y sobre la exigencia de
+la app: son detalles de operación que ya viven en `client-app/README.md` y en el propio panel, y
+en la primera página solo agregaban una preocupación antes de tener el producto andando.
+
+### Lo que no cambió, y por qué
+
+**La sección "Cómo conectar tu servidor" se queda donde está.** La pregunta era si no alcanzaba
+con el botón que arma el mensaje para el soporte del hosting, dejando "Revisar ahora" adelante. No
+alcanza: hay hostings donde el campo **Send Address** está a la vista y se completa en diez
+segundos sin hablar con nadie, y para esos el ticket de soporte es una espera de dos días que no
+hacía falta. El manual primero y el diagnóstico después sigue siendo el orden correcto para quien
+abre ese cajón por primera vez, que es cuando las cuatro filas de estado dicen "--" y no
+significan nada todavía.
+
+---
+
 ## [0.8] — 2026-10-26
 
 La 0.7 cerró la puesta en marcha. Esta versión sale de la primera carrera de verdad: alguien
@@ -168,119 +357,6 @@ están mirando.
 
 **La biblioteca de logos de marcas no hacía falta.** Ya hay 127 SVG empaquetados, incluido el de
 Mercedes-Benz. El problema era la ruta, no el catálogo.
-
----
-
-## [0.9] — 2026-10-26
-
-La 0.8 nunca llegó a desplegarse: todo lo de arriba sale a producción con esta. Lo que se sumó
-encima es una tanda de detalles de la torre de tiempos y **un bug de red que hacía parecer que el
-servidor se caía solo cada treinta segundos**.
-
-### El panel decía "Sin señal" con el servidor perfecto
-
-**El síntoma:** con el servidor de Assetto Corsa andando y conectado, el botón de la barra
-parpadeaba. Verde un ratito, rojo un rato largo, verde otra vez. En loop, sin que pasara nada.
-
-**La causa es aritmética, y estaba repartida en dos archivos.** Con nadie manejando, el servidor
-de AC **no manda un solo paquete por su cuenta**: todo su tráfico es telemetría de autos en pista.
-Lo único que llegaba con la pista vacía era la respuesta a nuestro `GET_SESSION_INFO`, que se
-pedía **cada 30 segundos**. Y la ventana que decide "¿me está llegando señal?" era de **5**.
-
-Cinco segundos en verde, veinticinco en rojo. El admin veía su servidor caerse y levantarse solo,
-cada medio minuto, con todo funcionando.
-
-**El arreglo son dos números y una consolidación:**
-
-- El latido bajó de 30 a **5 segundos**, y pasó a vivir en el mismo tick que el keepalive de
-  posiciones, en `ConnectivityManager`. Antes eran dos temporizadores distintos, en dos archivos,
-  mandando pedidos al mismo servidor a cadencias distintas — la clase de duplicación que termina
-  en que alguien cambia una sola.
-- La ventana de silencio subió de 5 a **15 segundos**, que son tres latidos. Hay que perder tres
-  respuestas seguidas para que el panel se ponga en rojo, así que un datagrama perdido —que en UDP
-  pasa— ya no se ve como una caída.
-
-Y queda **más** sensible a una desconexión de verdad, no menos: la ventana de 5 s medida contra un
-latido de 30 no detectaba absolutamente nada; ahora una caída real aparece en 15 segundos.
-
-**`GET_SESSION_INFO` como latido, y no un ping inventado.** El protocolo de plugins de AC no tiene
-un ping. Lo que sí tiene es un pedido que el servidor contesta **siempre**, haya o no alguien en
-pista, y esa respuesta ya hacía falta por otro motivo: sin ella el reloj de la sesión se extrapola
-contra el reloj local y se desfasa durante toda la carrera. Un solo mecanismo para las dos cosas.
-
-**Una invariante nueva (`connectivity.test.ts`).** El test lee las constantes del `dist/` y exige
-que la ventana de silencio sea al menos tres latidos, y que `connectivity.js` y `diagnostics.js`
-usen exactamente el mismo número. Si mañana alguien sube el latido sin tocar la ventana, vuelve
-este bug, y vuelve en silencio — porque todo "funciona".
-
-### Cinco detalles de la torre de tiempos
-
-Los cinco salen de mirar el panel durante una carrera real. Ninguno es un bug; los cinco son
-cosas que la pantalla no terminaba de decir.
-
-**"L4" en vez de "4".** La columna de vueltas queda entre tiempos y velocidades, todos números. Un
-"4" pelado no se lee como vueltas hasta que uno sube la vista al encabezado.
-
-**"PIT" en la columna de velocidad.** En boxes la velocidad no dice nada —va a 40, o a 0— y lo que
-el admin necesita saber es por qué ese auto se descolgó de la clasificación. Hasta ahora la fila
-se pintaba de ámbar **solo** con `telemetry.inPitLane`, que sale de la Shared Memory del juego y
-por lo tanto existe únicamente si el piloto tiene la app. En una liga donde nadie la tiene —el
-caso normal al empezar— no se veía nunca a nadie en boxes.
-
-Ahora hay dos fuentes, en orden: la app del piloto cuando está, y la **zona de pit configurada**
-cuando no. Es la misma zona que ya usan `PitSpeedMonitor` y `PitComplianceTracker` para sancionar,
-a propósito: si el panel dijera PIT con una definición propia, el admin vería a alguien "en boxes"
-al que el motor no le mide la velocidad de pit, y calibraría la zona mirando un dibujo que miente.
-
-Lo que se descartó: deducirlo de "velocidad 0 por mucho tiempo", que es lo intuitivo. Un abandono
-en la grava también está parado, y es justo el caso en el que hace falta ver que **no** es una
-parada en boxes.
-
-**La columna de Ping desaparece cuando nadie la puede llenar.** Decía "sin app" en rojo en cada
-fila. El ping no viene del servidor de Assetto Corsa —el protocolo UDP no transporta ese dato, ni
-el nuestro ni el de ningún plugin— sino que es el round-trip de la app del piloto contra Race
-Control. Sin app no hay número posible, así que veinte celdas rojas no informaban nada y hacían
-parecer roto algo que simplemente no aplica. Cuando al menos un piloto reporta, la columna vuelve.
-
-**El kick se mudó adentro de un menú de tres puntitos.** Un botón "Expulsar" visible en veinte
-filas de una tabla que se reordena sola es un accidente esperando que alguien mueva el mouse en el
-momento equivocado. La doble confirmación sigue igual, y con el menú cerrado queda un punto rojo
-sobre los puntitos: es lo único que avisa que hay un kick a medio confirmar.
-
-El menú se cuelga del `<body>` con `position: fixed`, no de la celda. La tabla vive adentro de un
-contenedor con `overflow: auto` en los dos ejes, así que un popup dentro de la fila quedaría
-recortado por el scroll — y justo en la última fila, que es donde más se usa.
-
-**"Ningún piloto con la app", al lado del título de la torre.** Es la respuesta a "los neumáticos
-y los sectores no me aparecen". No era un bug: Sectores, Box, Neum., Comb. y Ping salen todos del
-mismo lado —la app que instala cada piloto— y sin ella quedan en guiones para siempre. El cajón de
-Conexión ya lo decía bien, en "Pilotos con la app reportando", y nadie abre ese cajón. Ahora el
-aviso está donde se nota el síntoma, en gris y no en rojo —no es una falla, es una pieza que
-todavía no está instalada— y clickearlo abre el diagnóstico.
-
-**Una invariante nueva en `panel.test.ts`.** El test que verifica que toda clase tenga al menos
-una regla CSS solo miraba `index.html`, y la torre de tiempos no está en el HTML: cada fila la
-construye `createCarRow` en vivo, con las clases escritas a mano en un string. El menú nuevo, el
-"PIT" y los badges viven ahí. Una errata en ese string no rompe nada —el elemento se dibuja igual,
-sin formato— que es exactamente la familia de bugs que este archivo persigue.
-
-### El README adelgaza
-
-Se le sacó la sección de documentación: el README es la puerta de entrada de quien va a usar el
-producto, no el índice del repositorio. Los documentos siguen donde estaban y enlazados desde
-donde corresponde. También se fue el párrafo sobre credenciales vencidas y sobre la exigencia de
-la app: son detalles de operación que ya viven en `client-app/README.md` y en el propio panel, y
-en la primera página solo agregaban una preocupación antes de tener el producto andando.
-
-### Lo que no cambió, y por qué
-
-**La sección "Cómo conectar tu servidor" se queda donde está.** La pregunta era si no alcanzaba
-con el botón que arma el mensaje para el soporte del hosting, dejando "Revisar ahora" adelante. No
-alcanza: hay hostings donde el campo **Send Address** está a la vista y se completa en diez
-segundos sin hablar con nadie, y para esos el ticket de soporte es una espera de dos días que no
-hacía falta. El manual primero y el diagnóstico después sigue siendo el orden correcto para quien
-abre ese cajón por primera vez, que es cuando las cuatro filas de estado dicen "--" y no
-significan nada todavía.
 
 ---
 

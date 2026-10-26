@@ -130,21 +130,46 @@ body.link-down #card-map {
 }
 .topbar .spacer { flex: 1 1 auto; }
 
-nav.views { display: flex; gap: 4px; }
+/* Control segmentado: las dos secciones del panel.
+   Reglas, Conexión y Salir son acciones y se dibujan como botones sueltos y elevados
+   (`.status-button`, más abajo). Estas dos cambian la pantalla entera, así que van al revés:
+   un hueco hundido —más oscuro que la barra— con la pestaña activa levantada adentro. La
+   diferencia es de relieve, no de color, y por eso se lee sin tener que comparar: un grupo
+   está metido en la barra y el otro apoyado encima.
+   Antes las dos pestañas eran texto gris con el mismo fondo `#20242e` del hover de los botones,
+   o sea que la pestaña activa y un botón cualquiera se dibujaban exactamente igual. */
+nav.views {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9px;
+  background: #11131a;
+  border: 1px solid #22262f;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
 nav.views a {
   color: var(--muted);
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
-  padding: 7px 12px;
-  border-radius: 7px;
+  padding: 6px 13px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 7px;
   white-space: nowrap;
 }
-nav.views a:hover { background: #20242e; color: var(--text); }
-nav.views a[aria-current="page"] { background: #20242e; color: var(--text); }
+nav.views a:hover { color: var(--text); }
+nav.views a[aria-current="page"] {
+  background: #272c38;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* El ícono de la pestaña —el mazo de Sanciones— sigue al color del texto, igual que la bandera
+   cuando no hay carrera. Así la pestaña entera se enciende de una sola pieza al activarse. */
+.nav-icon { display: flex; flex: 0 0 auto; color: inherit; }
+.nav-icon svg { width: 15px; height: 15px; display: block; }
 
 .count-badge {
   background: var(--red);
@@ -259,31 +284,42 @@ nav.views a[aria-current="page"] { background: #20242e; color: var(--text); }
    460 px de ancho y el texto quedaría flotando lejos de la perilla. */
 .drawer .mode-switch { width: fit-content; }
 
-/*
-  El cartel de modo sombra en la barra. Reemplaza al interruptor, que se mudó al cajón de Conexión.
+.mode-switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  Es un botón y no un cartel muerto porque el único motivo para mirarlo es querer salir de ese modo:
-  el click abre el cajón donde está la perilla. Y está pintado con el ámbar de aviso, no con el rojo
-  de error, porque el modo sombra no es una falla — es una decisión, que puede haber sido tomada a
-  propósito hace diez minutos.
+/*
+  Salir: solo el ícono, en rojo.
+
+  Es la única acción de la barra que no se puede deshacer con otro click —cierra la sesión y te
+  devuelve a la pantalla de ingreso—, así que se dibuja distinto de los otros botones a propósito:
+  sin texto, sin fondo, y en el rojo que en todo el panel significa "esto termina algo". Al lado de
+  Reglas y Conexión, que son dos puertas que se abren y se cierran, conviene que no se parezca.
+
+  Sin texto, el nombre accesible lo pone el `aria-label` del HTML. El área de click se mantiene en
+  30×30 aunque el ícono mida 16: un objetivo de 16 px es imposible de acertar con el mouse.
 */
-.chapa-sombra {
-  background: rgba(239, 142, 60, 0.14);
-  border: 1px solid rgba(239, 142, 60, 0.45);
-  color: var(--yellow);
+.btn-salir {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: 7px;
-  padding: 5px 11px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  background: transparent;
+  color: var(--red);
   cursor: pointer;
 }
-.chapa-sombra:hover { background: rgba(239, 142, 60, 0.22); }
-/* `[hidden]` explícito: la regla de arriba no lo declara, pero este archivo ya tuvo el bug de un
-   `display` ganándole a `[hidden]` y dejando un modal visible para siempre. Una línea de seguro. */
-.chapa-sombra[hidden] { display: none; }
-.mode-switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-salir svg { width: 16px; height: 16px; display: block; }
+.btn-salir:hover {
+  background: rgba(224, 85, 85, 0.14);
+  border-color: rgba(224, 85, 85, 0.45);
+}
+/* `[hidden]` explícito: el `display: flex` de arriba le gana al atributo y el botón quedaría
+   visible en el modo sin portal, prometiendo una sesión que no existe. Este archivo ya tuvo ese
+   bug exacto con un modal. Una línea de seguro. */
+.btn-salir[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- vistas */
 
@@ -627,7 +663,7 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
   cursor: pointer;
 }
 .chapa-sin-app:hover { background: rgba(139, 147, 163, 0.24); color: var(--text); }
-/* Mismo seguro que `.chapa-sombra[hidden]`: cualquier `display` propio le gana al atributo. */
+/* Mismo seguro que `.btn-salir[hidden]`: cualquier `display` propio le gana al atributo. */
 .chapa-sin-app[hidden] { display: none; }
 
 /* La columna de Ping se saca entera cuando ningún piloto tiene la app reportando: sin app no hay
@@ -1045,7 +1081,6 @@ ol.pasos > li::before {
 /* El párrafo aclaratorio de adentro de un paso: más chico que el paso y despegado de él, para que
    se lea como la letra chica que es y no compita con la instrucción. */
 ol.pasos .sub { font-size: 12px; margin: 6px 0 8px 0; }
-ol.pasos .campo-copiable { margin-top: 7px; }
 ol.pasos button { margin-top: 2px; }
 
 .btn-close {
@@ -1092,48 +1127,10 @@ pre.snippet {
   margin: 0 0 8px 0;
 }
 
-/* ------------------------------------------------- campo con el botón de copiar adentro */
-
-/*
-  El Send Address es un dato que solo existe para ser copiado. El botón va DENTRO del campo —y no
-  debajo— porque ahí es donde está mirando el ojo cuando lee la dirección.
-  El `padding-right` del input le reserva el lugar al botón: sin eso, una dirección larga pasa por
-  debajo del ícono y se lee la mitad.
-*/
-.campo-copiable {
-  position: relative;
-  display: block;
-  margin: 0 0 8px 0;
-}
-
-.campo-copiable input[type="text"] {
-  width: 100%;
-  padding: 9px 42px 9px 10px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 13px;
-  letter-spacing: 0.01em;
-}
-
-.icono-copiar {
-  position: absolute;
-  top: 50%;
-  right: 5px;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.icono-copiar:hover { background: #20242e; color: var(--text); }
-.icono-copiar svg { width: 17px; height: 17px; display: block; }
+/* Acá vivían `.campo-copiable` y `.icono-copiar`: el campo con el Send Address y el botón de
+   copiar adentro. Se fueron con el paso que los usaba. La dirección sigue a la vista —en la fila
+   "La dirección de tu liga" del Estado y en el `pre.snippet` del asistente—, pero ya no es algo
+   que el admin tenga que copiar: eso lo resuelve el mensaje para el soporte del hosting. */
 
 .muted { color: var(--muted); font-size: 12px; margin: 0 0 8px 0; }
 

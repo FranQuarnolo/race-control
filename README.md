@@ -17,18 +17,23 @@ una sola pantalla.
 
 ## 🚦 Cómo se usa
 
-**El admin no instala nada.** Entra a una dirección web con el usuario y la contraseña que le
-pasaron, pega **un renglón** en el panel de su hosting y ya está dirigiendo. Lo único que se
-descarga es la app de los pilotos.
+**El admin no instala nada ni configura nada.** Entra a una dirección web con el usuario y la
+contraseña que le pasaron, copia un mensaje, se lo manda al soporte de su hosting y ya está
+dirigiendo. Lo único que se descarga es la app de los pilotos.
 
 1. 🔑 Te pasan la **dirección, un usuario y una contraseña**. Entrás por **"Ingresar"**.
-2. 📋 La pantalla te muestra un renglón tipo `203.0.113.5:30000`. Lo pegás en el campo
-   **"Send Address"** del panel de tu hosting —está en **"Server Options"**, en la sección de
-   plugins UDP— y reiniciás el servidor de Assetto Corsa.
-3. ✅ La pantalla **se pone verde sola** cuando empieza a llegar la telemetría. No hay nada más
-   que configurar: el resto lo averigua solo.
+2. 📋 En **"Conexión"** apretás **"Copiar el mensaje para mi hosting"** y lo pegás en el ticket de
+   soporte. Es el pedido ya escrito en inglés, con la dirección de tu liga adentro: que apunten el
+   plugin UDP del servidor de Assetto Corsa a esa dirección.
+3. ✅ Cuando te confirmen, reiniciás el servidor y entrás una vez con el juego. La pantalla
+   **se pone verde sola** cuando empieza a llegar la telemetría. No hay nada más que configurar:
+   el resto lo averigua solo.
 4. 🎮 Le pasás `RaceControlClient.zip` a cada piloto, una sola vez para toda la temporada.
 5. 🏁 El día de carrera entrás al panel y apretás los botones de largada.
+
+> ¿Tu hosting muestra el campo **"Send Address"** en **"Server Options"**? Entonces podés saltearte
+> el ticket: pegá ahí la dirección que figura en **Conexión → Estado** y reiniciá. La mayoría no lo
+> muestra, porque vienen con los plugins UDP apagados de fábrica.
 
 ### 🎬 En video
 
@@ -70,7 +75,7 @@ y una credencial por el chat del juego apenas entrás. 🎮
   penalización de cada piloto y los incidentes revisados. 📊
 - **Reglas**: el tipo de torneo y qué se controla. Cada infracción puede solo registrarse, mandarse
   a revisar o sancionarse sola. 🏎️
-- **Conexión**: el renglón para pegar en el hosting, el estado de la señal y un diagnóstico para
-  cuando algo no cierra.
-- **Modo sombra**: 🛡️ **recomendado para las primeras carreras**. El sistema registra todo pero no
-  sanciona a nadie en serio, así podés chequear que funcione antes de confiar en él del todo.
+- **Conexión**: el mensaje para el soporte del hosting, el estado de la señal, un diagnóstico para
+  cuando algo no cierra, y el interruptor del **modo sombra**: 🛡️ **recomendado para las primeras
+  carreras**. En sombra el sistema registra todo pero no sanciona a nadie en serio, así podés
+  chequear que funcione antes de confiar en él del todo.

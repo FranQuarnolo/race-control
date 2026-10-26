@@ -18,6 +18,11 @@
 
     <span class="spacer"></span>
 
+    <!-- Las dos secciones del panel, no dos botones más.
+         Van en un control segmentado —un solo marco con la pestaña activa rellena— para que se
+         lean como "dónde estoy" y no como "qué hago". Reglas, Conexión y Salir son acciones:
+         abren algo y te devuelven acá. Estas dos cambian la pantalla entera, y antes se veían
+         casi igual que las otras tres. -->
     <nav class="views">
       <a href="/" id="nav-live">
         <!-- La bandera ondea solo con la carrera en curso. Ver `.flag-icon.racing` en styles.css. -->
@@ -34,6 +39,17 @@
         Control de carrera
       </a>
       <a href="/sanciones" id="nav-sanciones">
+        <!-- Mazo de juez: es la pestaña del comisario. No otra bandera, que se confundiría con
+             la de al lado a 15 px. -->
+        <span class="nav-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6.1 2.6 L10.4 6.9" />
+            <path d="M8.3 1.5 L11.5 4.7" />
+            <path d="M4.9 3.8 L8.1 7" />
+            <path d="M7.2 8 L2.6 12.6" />
+            <path d="M8.5 11.5 H14.5" />
+          </svg>
+        </span>
         Sanciones
         <span class="count-badge" id="nav-incident-count" hidden>0</span>
       </a>
@@ -46,23 +62,26 @@
       <span id="btn-network-label">Conexión</span>
     </button>
 
-    <!-- El interruptor del modo se mudó al cajón de Conexión. Lo que queda acá es un cartel que
-         aparece SOLO en modo sombra.
-
-         El interruptor estaba en la barra por un motivo real: se podía correr una carrera entera
-         sin notar que el motor estaba en sombra y no sancionaba nada. Ese motivo sigue siendo
-         válido, así que no se fue del todo: lo que se fue es el control —que ocupa lugar los siete
-         días de la semana para algo que se toca dos veces— y lo que se queda es el aviso, que solo
-         ocupa lugar cuando hay algo que avisar. En modo normal la barra queda limpia. -->
-    <button class="chapa-sombra" id="mode-chip" hidden aria-haspopup="dialog"
-            title="El motor está detectando y registrando, pero no sanciona ni kickea de verdad. Clickeá para cambiarlo.">
-      Modo sombra
-    </button>
+    <!-- El modo sombra vive entero adentro del cajón de Conexión: interruptor y aviso.
+         Antes había acá un cartel que aparecía solo en sombra. Se fue por pedido explícito.
+         Queda anotado el motivo por el que existía, porque el riesgo no desapareció con el
+         cartel: se puede correr una carrera entera en sombra sin notar que el motor registra
+         pero no sanciona. Si eso llega a pasar en una fecha real, el lugar para volver a poner
+         el aviso es el encabezado de la torre de tiempos —junto a `chip-sin-app`—, no la barra. -->
 
     <!-- Solo aparece cuando el panel se abrió desde el portal: ahí hay una sesión que cerrar.
          Abierto directo contra el puerto del worker (desarrollo) no hay sesión y el botón
-         mentiría. Lo muestra `app.js` mirando la URL. -->
-    <button class="status-button" id="btn-logout" hidden title="Cerrar la sesión y volver a la pantalla de ingreso.">Salir</button>
+         mentiría. Lo muestra `app.js` mirando la URL.
+         Es un ícono solo: la puerta con la flecha saliendo, en rojo. El nombre accesible va en
+         `aria-label` porque no hay texto que leer. -->
+    <button class="btn-salir" id="btn-logout" hidden aria-label="Salir"
+            title="Cerrar la sesión y volver a la pantalla de ingreso.">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9.5 2.5 H3.5 A1 1 0 0 0 2.5 3.5 V12.5 A1 1 0 0 0 3.5 13.5 H9.5" />
+        <path d="M11 5.5 L13.5 8 L11 10.5" />
+        <path d="M13.5 8 H6.5" />
+      </svg>
+    </button>
   </header>
 
   <!-- Contacto perdido con el motor. Va acá, debajo de la barra y encima de todo lo demás, porque
@@ -249,71 +268,54 @@
            saber qué hacer; las cuatro filas de estado le dicen "--" y no significan nada todavía.
            Quien ya lo conectó casi no vuelve a entrar acá.
 
-           Antes había un <details> con el caso "no encuentro el campo". Se sacó: el caso dejó de
-           ser una nota al pie cuando se confirmó que varios hostings vienen con los plugins
-           apagados de fábrica, así que ahora es el paso 2b, a la vista, con su propio botón. -->
+           Antes acá había tres pasos: copiar la dirección, pegarla en el campo "Send Address" del
+           panel del hosting, y reiniciar. Quedó uno solo —pedírselo al soporte— porque en los
+           hostings que usamos ese campo no existe: los plugins UDP vienen apagados de fábrica y la
+           sección directamente no se dibuja. El admin se pasaba el rato buscando algo que no estaba
+           y terminaba igual en el botón del final. Ahora empieza por ahí.
+
+           La dirección no se fue, se mudó: está completa abajo, en Estado. Ahí es un dato que se
+           consulta, no un paso que hay que hacer. Si alguna vez entra una liga con un hosting que
+           sí expone el campo, el camino para ella es copiar ese renglón de Estado y pegarlo; no
+           hace falta volver a poner el paso. -->
       <section>
         <h3>Cómo conectar tu servidor</h3>
-        <p class="muted">Se hace una sola vez. Tres pasos.</p>
+        <p class="muted">Se hace una sola vez, y lo hace el soporte de tu hosting. Un paso.</p>
 
         <ol class="pasos">
           <li>
-            <b>Copiá la dirección de tu liga.</b>
-            <!-- Campo y no un bloque de texto: lo que hay que hacer con esto es copiarlo, y un
-                 input se selecciona con un click. El botón va adentro para que el gesto de copiar
-                 esté donde está el dato. -->
-            <div class="campo-copiable">
-              <input type="text" id="net-send-address" value="--" readonly aria-label="La dirección de tu liga" />
-              <button type="button" class="icono-copiar" id="btn-copy-send-address" title="Copiar" aria-label="Copiar la dirección">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <rect x="9" y="9" width="11" height="11" rx="2" />
-                  <path d="M5 15V5a2 2 0 0 1 2-2h8" />
-                </svg>
-              </button>
-            </div>
-          </li>
-
-          <li>
-            <b>Pegala en el panel de tu hosting</b>, en el campo <b>Send Address</b>. Está en
-            <b>Server Options</b>, en la sección de plugins UDP.
+            <b>Copiá el mensaje y mandáselo al soporte de tu hosting.</b>
             <p class="muted sub">
-              <b>¿No aparece esa sección?</b> Es común y no es culpa tuya: varios hostings vienen
-              con los plugins apagados y entonces el campo directamente no se dibuja. En ese caso no
-              hay nada que buscar — se lo pedís al soporte de tu hosting con este botón, que arma el
-              mensaje en inglés y con tu dirección ya adentro.
+              Está escrito en inglés, con la dirección de tu liga ya adentro y con todo lo que
+              necesitan saber. No tenés que agregarle nada: pegalo tal cual en el ticket o en el
+              chat de soporte.
             </p>
             <button type="button" class="secondary" id="btn-copy-support">
               Copiar el mensaje para mi hosting
             </button>
           </li>
-
-          <li>
-            <b>Reiniciá el servidor de Assetto Corsa</b> y entrá una vez con el juego.
-            <p class="muted sub">
-              Lo de entrar no es un capricho: el servidor recién habla cuando pasa algo, y hasta que
-              no diga la primera palabra, Race Control no sabe a dónde contestarle.
-            </p>
-          </li>
         </ol>
 
         <p class="muted">
-          Listo. La luz de <b>Conexión</b> se pone verde sola y no hay que configurar nada más: el
-          resto lo averigua el sistema.
+          Cuando te confirmen que está hecho, <b>reiniciá el servidor de Assetto Corsa</b> y entrá
+          una vez con el juego —el servidor recién habla cuando pasa algo—. La luz de
+          <b>Conexión</b> se pone verde sola y no hay que configurar nada más.
           <a href="docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía completa</a>.
         </p>
       </section>
 
       <section>
         <h3>Estado</h3>
+        <!-- La dirección completa, con puerto: es lo que el soporte del hosting tiene que haber
+             cargado. Acá sirve para verificar, no para configurar. -->
         <div class="row"><span>La dirección de tu liga</span><span id="net-ip">--</span></div>
         <div class="row"><span>Señal del servidor de AC</span><span id="net-signal">--</span></div>
         <div class="row"><span>Comandos salen hacia</span><span id="net-acserver">--</span></div>
         <div class="row"><span>Pilotos con la app reportando</span><span id="net-drivers">--</span></div>
       </section>
 
-      <!-- El modo vivía en la barra de arriba. Se mudó acá porque se toca dos veces en la vida de
-           una liga y ocupaba lugar los siete días. Lo que quedó en la barra es el cartel de "modo
-           sombra", que aparece solo cuando el modo está activo. -->
+      <!-- El modo vive entero acá: el interruptor y el aviso. En la barra de arriba no queda nada,
+           ni el control ni el cartel. Ver el comentario del encabezado en este mismo archivo. -->
       <section>
         <h3>Modo de funcionamiento</h3>
         <label class="mode-switch" id="mode-switch" title="En modo sombra el motor detecta y registra, pero no sanciona ni kickea de verdad.">
@@ -475,19 +477,27 @@
         <div class="preset-list" id="wizard-presets"></div>
       </div>
 
-      <!-- Paso 3: conexión -->
+      <!-- Paso 3: conexión.
+           Mismo cambio que en el cajón de Conexión: el camino es pedírselo al soporte del hosting,
+           no buscar un campo que en la mayoría de los paneles no está dibujado. El renglón con la
+           dirección sigue a la vista porque acá sí es lo primero que el admin quiere ver —"¿esto
+           ya tiene una dirección de verdad?"—, pero dejó de ser una instrucción. -->
       <div class="wizard-step" data-step="3" hidden>
         <h2>Conectá tu servidor de Assetto Corsa</h2>
         <p class="muted">
-          Entrá al panel de tu hosting, abrí <b>Server Options</b> y en la sección de plugins UDP
-          buscá el campo <b>Send Address</b>. Pegale esto:
+          Lo hace el soporte de tu hosting: hay que decirles que apunten el servidor de Assetto
+          Corsa a la dirección de tu liga.
         </p>
         <pre class="snippet" id="wizard-snippet">--</pre>
-        <button class="secondary" id="wizard-copy">Copiar</button>
         <p class="muted">
-          Después reiniciá el servidor de Assetto Corsa. Es lo único que hace falta: el resto lo
-          averiguamos solos. ¿No encontrás ese campo?
-          <a href="docs/guia-conexion.html" target="_blank" rel="noopener">Abrí la guía</a>.
+          El botón copia el pedido completo, en inglés y con esa dirección ya adentro. Pegalo tal
+          cual en el ticket o el chat de soporte.
+        </p>
+        <button class="secondary" id="wizard-copy">Copiar el mensaje para mi hosting</button>
+        <p class="muted">
+          Cuando te confirmen, reiniciá el servidor de Assetto Corsa y entrá una vez. Es lo único
+          que hace falta: el resto lo averiguamos solos.
+          <a href="docs/guia-conexion.html" target="_blank" rel="noopener">Ver la guía completa</a>.
           Podés dejarlo para después: el botón "Conexión" del panel tiene lo mismo.
         </p>
       </div>
