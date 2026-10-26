@@ -199,6 +199,30 @@ La salida es un ticket al soporte pidiendo que habiliten los plugins UDP del Ser
 guía que está adentro del producto (**Conexión → "Ver la guía"**) trae el texto del ticket listo
 para copiar.
 
+**Y funciona: está confirmado con EmperorServers el 26/10/2026.** Conviene saber cómo contestan,
+porque la respuesta no es la que uno espera:
+
+- **No habilitan el campo: configuran el plugin ellos.** No te devuelven un panel con la sección
+  dibujada, te devuelven el plugin ya apuntando a donde les dijiste. El renglón del paso 3 va en el
+  ticket, no en ninguna pantalla.
+- **Te contestan con la dirección del plugin** (algo como `172.233.26.106:9811`) y con la línea del
+  log del servidor que lo confirma. **Esa dirección no se pega en ningún lado.** Es a dónde Race
+  Control manda sus comandos, y la deduce sola del primer paquete que recibe: en modo portal el
+  panel ni siquiera muestra un campo donde ponerla, a propósito.
+- **Dejan un allowlist de una sola IP.** El plugin acepta comandos únicamente desde la IP que
+  figura en el ticket, que es la IPv4 dedicada de la app. Esto importa para después: **si esa IP
+  alguna vez cambia, hay que volver a abrir un ticket**, porque el plugin va a seguir mandando
+  telemetría pero va a descartar en silencio todo lo que Race Control le conteste — chat,
+  credenciales de los pilotos, kicks y lastres. Es el modo de falla más engañoso de toda la cadena:
+  la pantalla se ve verde y nada de lo que el panel decide llega al juego.
+
+Una vez configurado el plugin, el arranque no es instantáneo y no es un problema: Race Control
+necesita **recibir** un paquete antes de poder **mandar** uno, porque hasta ese momento no sabe la
+dirección del servidor. Y el servidor de Assetto Corsa solo habla por su cuenta cuando pasa algo:
+cambia la sesión o entra alguien. Así que después del ticket hay que **entrar al servidor con el
+juego** —o reiniciarlo— para que salga el primer paquete. De ahí en más el keepalive pide la
+telemetría cada 20 segundos y la pantalla se pone verde sola.
+
 **Y editar el `server_cfg.ini` a mano no es una alternativa**, aunque el panel lo deje ver: el
 Server Manager regenera ese archivo desde su base en cada arranque, así que el cambio se pierde en
 el reinicio siguiente — que es el paso justo después. Por eso varios paneles lo muestran en solo

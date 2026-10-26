@@ -10,6 +10,25 @@ piloto, el GUID y los mensajes de chat se leían/escribían como UTF-16LE cuando
 UTF-32LE; ya está corregido en `protocol.ts`). Esto reemplaza la necesidad de confirmar esos
 puntos con Wireshark — quedan confirmados por código, no por captura.
 
+**Actualización del 26/10/2026 — el plugin ya está configurado del lado del hosting.** El soporte de
+EmperorServers configuró el plugin UDP a pedido, y la línea de log que mandaron resuelve dos cosas de
+esta lista sin necesidad de capturar nada:
+
+```
+UDP Plugin Started: Listening on: 0.0.0.0:9811, sending to: 137.66.7.90:30000
+```
+
+- **El relay de ACSM no es un problema.** El plugin escucha y manda desde el mismo proceso, en el
+  mismo host que el servidor de Assetto Corsa, así que la IP de origen que va a ver el worker es la
+  del servidor. La fila "Si ACSM relaya los datagramas" queda resuelta.
+- **El allowlist existe y ya está puesto**, con la IPv4 dedicada de la app como única IP autorizada
+  a mandarle comandos al plugin. La fila "Lista de IPs permitidas" deja de ser un riesgo de arranque
+  y pasa a ser un riesgo de mantenimiento: si esa IP cambia, hay que volver a pedir el cambio por
+  ticket.
+- **El puerto de origen sigue sin confirmarse.** Que escuche en `9811` hace *probable* que mande
+  desde `9811` —es un solo socket— pero probable no es confirmado, y es justo el supuesto que la
+  fila de abajo marca como el más importante. Se sabe en el primer paquete real.
+
 **Lo que SIGUE pendiente** (esto sí depende de observar un servidor real en funcionamiento, no de
 leer código — ningún agente de IA puede resolverlo):
 
