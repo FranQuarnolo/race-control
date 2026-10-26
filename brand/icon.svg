@@ -15,8 +15,13 @@
     Cuatro lámparas y no diez por lo mismo: a ese tamaño, cinco luces en fila o un damero de 4x4
     se vuelven un gris sin forma. Rojo arriba, verde abajo.
 
-    La paleta no se inventa: son las mismas variables CSS del panel (--red, --green), así que el
-    ícono y la interfaz quedan coherentes sin trabajo extra.
+    La paleta no se inventa: son las mismas variables CSS del panel (las de rojo y verde), así
+    que el ícono y la interfaz quedan coherentes sin trabajo extra.
+
+    OJO al editar este comentario: un comentario XML no puede contener dos guiones seguidos. Acá
+    estaban escritos los nombres de las variables CSS tal cual, con su prefijo, y eso bastó para
+    que el SVG dejara de parsear entero. El navegador no avisa: dibuja el ícono de imagen rota,
+    que es indistinguible de un 404. Si lo tocás, validalo.
   -->
   <defs>
     <!-- El degradado descentrado hace que la lámpara se lea como una esfera encendida y no como

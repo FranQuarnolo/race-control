@@ -138,8 +138,22 @@ cada una mide menos de 4 px, y lo único que sobrevive a ese tamaño son las dos
 —rojo arriba, verde abajo—. Cinco luces en fila, o un damero de 4x4, se vuelven un gris sin forma.
 
 El primer intento tenía las lámparas chicas sobre un panel oscuro. En la barra del panel —que ya
-es oscura— el ícono se fundía con el fondo y parecía una imagen rota. Ahora las lámparas ocupan
-casi todo el cuadro y lo que queda del cuerpo del semáforo es apenas la junta entre ellas.
+es oscura— el ícono se perdía contra el fondo. Ahora las lámparas ocupan casi todo el cuadro y lo
+que queda del cuerpo del semáforo es apenas la junta entre ellas.
+
+**Y el ícono además estaba roto de verdad, por otra razón.** Uno de sus comentarios citaba dos
+variables CSS escribiéndolas con su prefijo de dos guiones. Un comentario XML **no puede contener
+dos guiones seguidos**: el archivo dejaba de ser XML bien formado y el navegador no dibujaba nada,
+el ícono de imagen rota.
+
+Lo que lo hace valer una entrada propia es lo bien que se esconde. El archivo existe, el servidor
+contesta 200 con el `content-type` correcto, el contenido se ve perfecto en el editor y el único
+síntoma es un dibujito roto indistinguible de un 404. Se diagnosticó mal dos veces —primero como
+problema de ruta, después como problema de contraste— antes de pensar en el parser.
+
+Queda cubierto: `test/assets.test.ts` valida **todos** los SVG que se sirven, los dos del ícono y
+los ~130 logos de marca. Ahí el mismo error sería aún más invisible, porque un logo roto en la
+tabla de pilotos no lo reporta nadie.
 
 ### El operador edita la liga y la cuenta desde la tabla
 
