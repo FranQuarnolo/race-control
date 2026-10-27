@@ -247,14 +247,21 @@ Una vez por temporada, por piloto:
 2. Arrastrar `RaceControlClient.zip` a la ventana, como cualquier mod.
 3. Activar las ventanas en el juego: menú de Apps → **RC Mensajes**, **RC Banderas** y **RC
    Largada**.
+4. Acomodarlas en pantalla. Esto hay que hacerlo **una sola vez** y conviene hacerlo antes de la
+   primera carrera, no durante.
 
 Son tres entradas desde la **0.8** y cada piloto activa las que quiera:
 
 | Ventana | Qué muestra |
 |---|---|
-| **RC Mensajes** | Sanciones, vueltas invalidadas por irse de pista, sanciones anuladas. Y si la app está conectada. |
-| **RC Banderas** | La bandera de pista vigente. |
-| **RC Largada** | El semáforo de la largada en movimiento, con el aviso sonoro al verde. |
+| **RC Mensajes** | Sanciones, vueltas invalidadas, sanciones anuladas. En rojo y en letra grande. Arriba, en gris chiquito, el estado de la conexión. |
+| **RC Banderas** | Un cuadro de color con la bandera vigente: verde si no hay ninguna, amarillo, azul, negro, blanco, el tablero de cuadros o el círculo naranja de la de penalidad. |
+| **RC Largada** | Cinco luces. Rojas parpadeando durante la formación, verdes con el aviso sonoro al verde, y después nada. |
+
+**Desde la 1.1 las tres son transparentes y no tienen barra de título.** En reposo no se ven: RC
+Largada desaparece del todo y RC Mensajes queda vacía. La única que muestra algo siempre es RC
+Banderas, porque "pista despejada" también es información. Para moverlas o redimensionarlas,
+pasales el mouse por encima y el marco vuelve a aparecer.
 
 **No hace falta tener ninguna abierta para que Race Control funcione.** Alcanza con que la app esté
 instalada y activada: el reporte de telemetría y la señal de presencia salen igual. Cerrar una
@@ -277,13 +284,16 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   aviso sonoro para todos los pilotos que tengan la app. Desde la **0.8** se atenúa y se
   deshabilita en práctica y clasificación, porque la largada es cosa de la carrera. "Reiniciar"
   queda siempre disponible: es la salida de emergencia.
-- **La torre de tiempos**: posición, auto, velocidad, vueltas (`L4`), **Fuera** (las vueltas que el
-  servidor le invalidó por irse de pista), sectores, última y mejor vuelta, paradas, compuesto,
-  combustible y ping. Un click en un piloto lo resalta en el mapa; los tres puntitos del final de
-  la fila abren el kick, que pide confirmación. En la columna de velocidad aparece **PIT** cuando
-  el auto está en el pit lane.
+- **La torre de tiempos**: posición, auto, velocidad, vueltas (`Laps`), última y mejor vuelta,
+  paradas, compuesto, combustible y ping. Un click en un piloto lo resalta en el mapa; los tres
+  puntitos del final de la fila abren el kick, que pide confirmación. **PIT** aparece tanto en la
+  columna de velocidad como en la de paradas cuando el auto está en el pit lane.
 
-  Cinco de esas columnas —Sectores, Box, Neum., Comb. y Ping— **solo las puede llenar la app del
+  Desde la **1.1** no están las columnas **Fuera** ni **Sectores**: los cortes se cuentan por
+  piloto en la bandeja de incidentes, que es donde se los juzga, y los sectores no estaban
+  llegando bien —una columna que muestra guiones es peor que no tenerla—.
+
+  Tres de esas columnas —Box, Neum. y Comb.— y el ping **solo las puede llenar la app del
   piloto**: son datos de la Shared Memory del juego y el protocolo UDP del servidor no los
   transporta. Si ningún piloto la tiene, la columna de Ping no se muestra y al lado del título
   aparece una chapa gris que dice **"ningún piloto con la app"**; clickearla abre el diagnóstico.

@@ -675,11 +675,6 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 /* "PIT" en la columna de velocidad. Mismo ámbar que la fila en boxes, para que se lean juntos. */
 #timing-table td .en-pit { color: var(--yellow); font-weight: 700; letter-spacing: 0.04em; }
 
-/* "Fuera": las vueltas invalidadas. Angosta a propósito —casi siempre dice "--"— y en ámbar
-   cuando tiene algo que decir, que es el mismo color con el que el panel marca todo lo que es
-   una decisión a tomar y no una falla. */
-#timing-table th.c-cuts, #timing-table td.c-cuts { width: 5ch; }
-#timing-table td.c-cuts.tiene { color: var(--yellow); font-weight: 600; }
 #timing-table td.c-driver { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .c-pos {
@@ -729,9 +724,8 @@ tbody tr.selected .c-pos { color: var(--yellow); }
 .brand-shield.empty { clip-path: none; background: none; color: var(--muted); font-size: 11px; }
 td.c-car { width: 1%; }
 
-.sectors { display: flex; gap: 7px; font-variant-numeric: tabular-nums; }
-.sectors span { min-width: 5.2ch; text-align: right; color: var(--muted); font-size: 11.5px; }
-td.c-sectors { width: 1%; }
+/* Acá estaban `.sectors` y `.c-cuts`. Las dos columnas se sacaron de la torre en la 1.1: ver el
+   comentario del `<thead>` en index.html. */
 
 /* Columna de intervalo. El ancho fijo es lo que la hace legible: con celdas que se encogen según
    el contenido, "+0.412" y "+12.8" no arrancan en la misma columna y la pregunta que se contesta
@@ -961,7 +955,72 @@ tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
 }
 #map-progress > div { height: 100%; background: var(--accent); width: 0; transition: width 0.4s; }
 
-/* ---------------------------------------------------------------- incidentes */
+/* ---------------------------------------------------------------- incidentes
+
+   Agrupados por piloto, con el resumen siempre a la vista y el detalle plegado.
+
+   Antes era una tarjeta por hecho, en una sola lista plana. Un trompo en una práctica genera
+   diez cuts y nueve choques, así que la bandeja se llenaba de diecinueve tarjetas iguales de un
+   solo piloto y había que contarlas a ojo para saber qué había pasado. Ahora el encabezado
+   contesta eso de una ("Cuts: 10 · Incidentes: 9") y las tarjetas están abajo, para cuando haya
+   que sancionar una.
+
+   Es `<details>` nativo y no un acordeón a mano: entra con teclado, lo anuncia el lector de
+   pantalla y no hay estado que mantener. Cuál quedó abierto sí lo recuerda el JS, porque la
+   lista se repinta sola cada vez que entra un incidente nuevo. */
+
+.grupo-incidentes {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  margin-bottom: 9px;
+  background: var(--panel);
+}
+.grupo-incidentes > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 8px;
+}
+/* El triángulo de WebKit se dibuja aparte del `list-style` y hay que sacarlo por separado, o
+   queda un marcador suelto a la izquierda del nombre. */
+.grupo-incidentes > summary::-webkit-details-marker { display: none; }
+.grupo-incidentes > summary:hover { background: #1b1d25; }
+.grupo-incidentes > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.grupo-incidentes > summary .piloto { font-weight: 600; flex: 1 1 auto; }
+/* Flecha propia: gira al abrir y deja claro que el grupo se despliega. */
+.grupo-incidentes > summary::after {
+  content: "›";
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+.grupo-incidentes[open] > summary::after { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .grupo-incidentes > summary::after { transition: none; }
+}
+/* Las tarjetas de adentro, despegadas del borde del grupo. */
+.grupo-incidentes > .incident { margin: 0 10px 9px 10px; }
+
+/* Las cuentas del encabezado. Cada una con su color: ámbar lo que es una decisión a tomar
+   —irse de pista es la infracción más común y la menos grave—, rojo lo que es contacto. */
+.chip-cuenta {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.chip-cuenta.cuts { background: rgba(239, 142, 60, 0.16); color: var(--yellow); }
+.chip-cuenta.choques { background: rgba(224, 85, 85, 0.16); color: var(--red); }
+.chip-cuenta.otros { background: rgba(139, 147, 163, 0.16); color: var(--muted); }
+.chip-cuenta.pendiente { background: rgba(240, 180, 41, 0.16); color: var(--accent); }
 
 .incident {
   border: 1px solid var(--panel-border);

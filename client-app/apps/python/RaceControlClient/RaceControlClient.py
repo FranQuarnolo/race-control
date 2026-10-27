@@ -32,6 +32,27 @@ o el watchdog de presencia lo daria por desconectado.
 
 ---
 
+SIN CHROME, Y DIBUJADAS A MANO (desde la 1.1)
+
+La 1.0 se probo en pista y la conclusion fue una sola: tres recuadros negros con titulo tapando
+el parabrisas es peor que no tener nada. Un overlay de carrera no es una ventana, es informacion
+flotando sobre la pista -- y lo que no esta pasando ahora mismo no tiene que ocupar un pixel.
+
+De ahi los dos cambios de esta version:
+
+  - Las tres ventanas van sin fondo, sin borde, sin titulo y sin icono (ver `ocultarChrome`). El
+    juego igual las deja mover y redimensionar; el chrome reaparece solo mientras el mouse esta
+    encima, que es justo cuando hace falta.
+  - Banderas y Largada dejaron de ser texto. Una bandera es un color y un semaforo son cinco
+    luces: leerlos como palabra obliga a decodificar algo que el ojo ya sabe reconocer, y a 200
+    km/h eso es tiempo que no hay. Se dibujan con `ac.glQuad` en un render callback, sin assets.
+
+El corolario de no tener fondo es que en reposo no se ve NADA: sin bandera no hay bandera (el
+verde del cuadro es la unica excepcion, porque "todo despejado" tambien es informacion), y el
+semaforo en idle es literalmente transparente.
+
+---
+
 Nota: corre dentro del interprete Python embebido de Assetto Corsa, que es Python 3.3 -- NO
 soporta f-strings (son de Python 3.6+). Por eso todo el formateo de texto usa .format()/% .
 Solo se usa stdlib (urllib, winsound, threading, mmap, ctypes), sin dependencias externas.
@@ -39,6 +60,7 @@ Solo se usa stdlib (urllib, winsound, threading, mmap, ctypes), sin dependencias
 
 import ctypes
 import json
+import math
 import mmap
 import os
 import threading
@@ -67,12 +89,34 @@ BACKEND_ANNOUNCE_SEPARATOR = "|"
 
 # Cuantas lineas de aviso entran en la ventana de mensajes, y cuanto se quedan en pantalla.
 #
-# Cuatro y 25 segundos no son numeros redondos por casualidad: un aviso tiene que seguir visible
-# despues de la curva en la que uno estaba cuando aparecio, y cuatro lineas es lo que entra sin
-# tapar el espejo. Pasado ese tiempo se va solo -- un aviso viejo que no se borra nunca termina
-# siendo indistinguible de uno nuevo, que es el modo de fallo que tiene este tipo de overlay.
-MESSAGE_LINES = 4
+# Eran cuatro hasta la 1.0 y ahora son tres: la letra paso de 14 a 20 px porque a cuatro lineas
+# chiquitas no las lee nadie en movimiento, y sin bajar una linea la ventana quedaba mas alta que
+# antes en vez de mas finita. Tres avisos simultaneos en pista son muchisimos -- lo normal es uno.
+#
+# Los 25 segundos siguen igual: un aviso tiene que seguir visible despues de la curva en la que uno
+# estaba cuando aparecio. Pasado ese tiempo se va solo -- un aviso viejo que no se borra nunca
+# termina siendo indistinguible de uno nuevo, que es el modo de fallo de este tipo de overlay.
+MESSAGE_LINES = 3
 MESSAGE_TTL_SECONDS = 25.0
+
+# Rojo de los avisos y gris del renglon de estado. El rojo es el mismo que usa el panel para las
+# sanciones; el gris del estado es deliberadamente apagado y en letra chica, porque "conectado" es
+# una tranquilidad y no una noticia: no tiene que competir con un aviso de direccion de carrera.
+MESSAGE_COLOR = (1.0, 0.18, 0.18, 1.0)
+STATUS_COLOR = (0.72, 0.74, 0.78, 1.0)
+MESSAGE_FONT_SIZE = 20
+STATUS_FONT_SIZE = 13
+
+# Cuanto dura en pantalla un estado que no es un problema (el "Conectado a Race Control").
+#
+# Antes se escribia una vez y no se borraba nunca, asi que quedaba toda la carrera ocupando el
+# renglon de arriba para informar algo que ya habia pasado. Los estados que SI son un problema
+# --que no aparezca el backend, que venza la credencial-- se ponen sin vencimiento y se quedan:
+# ahi el cartel es la unica pista que tiene el piloto de por que la app no hace nada.
+STATUS_TTL_SECONDS = 8.0
+
+# El aviso de vuelta invalidada lo arma la app, no el servidor. Ver `checkLapInvalidated`.
+LAP_INVALIDATED_TEXT = "VUELTA INVALIDADA"
 
 window_messages = None
 window_flags = None
@@ -80,8 +124,6 @@ window_lights = None
 
 label_backend_status = None
 label_messages = []
-label_light = None
-label_flag = None
 
 backend_url = None  # None hasta que llega el chat de auto-discovery.
 backend_token = None  # Credencial firmada que acredita a este piloto. Vence a las 24 h.
@@ -98,40 +140,61 @@ poll_thread_running = False
 telemetry_snapshot = None
 
 
+def ocultarChrome(window):
+    """Deja una ventana sin fondo, sin borde, sin titulo y sin icono.
+
+    Son cuatro llamadas y no una porque en Assetto Corsa el "chrome" de una app son cuatro cosas
+    separadas, y dejarse una afuera se nota: sin `drawBorder` queda el marco flotando alrededor de
+    la nada, y sin `setIconPosition` queda el iconito de la app colgado arriba a la izquierda sin
+    ventana que lo sostenga. El icono no se puede ocultar, solo mover -- de ahi el -10000, que es
+    el modismo que usa toda app de AC para sacarlo de pantalla.
+
+    Lo que esto NO hace es volver la ventana intangible: el juego la sigue dejando mover y
+    redimensionar, y le vuelve a dibujar el fondo mientras el mouse esta encima. Eso es a
+    proposito y es lo que permite acomodarlas la primera vez.
+    """
+    ac.setBackgroundOpacity(window, 0)
+    ac.drawBorder(window, 0)
+    ac.setTitle(window, "")
+    ac.setIconPosition(window, 0, -10000)
+
+
 def acMain(ac_version):
     global window_messages, window_flags, window_lights
-    global label_backend_status, label_messages, label_light, label_flag
+    global label_backend_status, label_messages
     global steam_guid, poll_thread_running
 
     # ---------------------------------------------------------------- RC Mensajes
     window_messages = ac.newApp("RC Mensajes")
-    ac.setSize(window_messages, 420, 150)
-    ac.setTitle(window_messages, "RC Mensajes")
+    ac.setSize(window_messages, 460, 104)
+    ocultarChrome(window_messages)
 
     label_backend_status = ac.addLabel(window_messages, "Buscando servidor de Race Control...")
-    ac.setPosition(label_backend_status, 10, 28)
+    ac.setPosition(label_backend_status, 6, 2)
+    ac.setFontSize(label_backend_status, STATUS_FONT_SIZE)
+    ac.setFontColor(label_backend_status, *STATUS_COLOR)
 
     label_messages = []
     for i in range(MESSAGE_LINES):
         label = ac.addLabel(window_messages, "")
-        ac.setPosition(label, 10, 52 + i * 22)
+        ac.setPosition(label, 6, 22 + i * 26)
+        ac.setFontSize(label, MESSAGE_FONT_SIZE)
+        ac.setFontColor(label, *MESSAGE_COLOR)
         label_messages.append(label)
 
     # ---------------------------------------------------------------- RC Banderas
+    # Cuadrada y chica: lo unico que tiene adentro es un cuadrado de color, asi que el tamano de la
+    # ventana ES el tamano del indicador. Sin etiquetas -- el dibujo entero lo hace renderFlag.
     window_flags = ac.newApp("RC Banderas")
-    ac.setSize(window_flags, 220, 70)
-    ac.setTitle(window_flags, "RC Banderas")
-
-    label_flag = ac.addLabel(window_flags, "Bandera: --")
-    ac.setPosition(label_flag, 10, 32)
+    ac.setSize(window_flags, FLAG_WINDOW_SIZE, FLAG_WINDOW_SIZE)
+    ocultarChrome(window_flags)
+    ac.addRenderCallback(window_flags, renderFlag)
 
     # ---------------------------------------------------------------- RC Largada
     window_lights = ac.newApp("RC Largada")
-    ac.setSize(window_lights, 220, 70)
-    ac.setTitle(window_lights, "RC Largada")
-
-    label_light = ac.addLabel(window_lights, "Semaforo: --")
-    ac.setPosition(label_light, 10, 32)
+    ac.setSize(window_lights, LIGHTS_WINDOW_WIDTH, LIGHTS_WINDOW_HEIGHT)
+    ocultarChrome(window_lights)
+    ac.addRenderCallback(window_lights, renderLights)
 
     # El listener del chat va en una sola ventana: el juego lo entrega una vez por listener
     # registrado, asi que ponerlo en las tres mostraria cada anuncio por triplicado.
@@ -152,6 +215,9 @@ def acUpdate(deltaT):
     # El vencimiento de los avisos se hace aca y no en el hilo del poll a proposito: un aviso tiene
     # que desaparecer a los 25 segundos aunque el backend se haya caido y el poll este fallando.
     expireMessages()
+    expireStatus()
+    # Y la invalidacion se mira aca porque `ac.getCarState` solo contesta en el hilo del juego.
+    checkLapInvalidated()
 
 
 def readSteamGuid():
@@ -190,9 +256,33 @@ def setBackendUrl(announce):
     if url == backend_url:
         return
     backend_url = url
-    ac.setText(label_backend_status, "Conectado a Race Control")
+    setStatus("Conectado a Race Control", STATUS_TTL_SECONDS)
     ac.log("[RaceControlClient] backend descubierto: {0}".format(backend_url))
     threading.Thread(target=pollLoop, daemon=True).start()
+
+
+# =============================================================================================
+# Renglon de estado
+#
+# Una sola linea arriba de los avisos, para lo que le pasa a la APP y no a la carrera. Son tres
+# textos en toda su vida: buscando, conectado, credencial vencida.
+# =============================================================================================
+
+status_until = None  # None = el estado actual no vence
+
+
+def setStatus(text, ttl=None):
+    """Escribe el renglon de estado. Con `ttl`, se borra solo a los tantos segundos."""
+    global status_until
+    ac.setText(label_backend_status, text)
+    status_until = (time.time() + ttl) if ttl else None
+
+
+def expireStatus():
+    global status_until
+    if status_until is not None and time.time() >= status_until:
+        status_until = None
+        ac.setText(label_backend_status, "")
 
 
 # =============================================================================================
@@ -245,6 +335,55 @@ def renderMessages():
         ac.setText(label_messages[i], textos[i] if i < len(textos) else "")
 
 
+# =============================================================================================
+# Vuelta invalidada
+#
+# Esto lo decide la app y no el servidor, y es un cambio de la 1.1 que vale la pena explicar.
+#
+# El backend se entera de que una vuelta fue invalidada cuando Assetto Corsa le manda el
+# LAP_COMPLETED, o sea al cruzar meta. Para el comisario eso esta perfecto -- lo que juzga es la
+# vuelta cerrada. Para el piloto no sirve: se entera de que la vuelta no valia un minuto y medio
+# despues de haberla arruinado, cuando ya la manejo entera apretando.
+#
+# El juego, en cambio, invalida la vuelta en el instante del corte, y lo publica en
+# `acsys.CS.LapInvalidated`. Como la app corre adentro del juego, puede leerlo y avisar ahi mismo.
+# Por eso el servidor ya no empuja ese aviso a la pizarra (ver raceControl.ts): llegaria tarde y
+# repetido. Lo que el servidor sigue haciendo igual es anotar el corte en la bandeja de incidentes,
+# que es lo unico para lo que importa su version.
+#
+# Dos sutilezas que cuestan un bug cada una si se omiten:
+#
+#   - Se avisa por FLANCO (0 -> 1), no por estado. Leido cada frame, el estado da sesenta avisos
+#     por segundo durante toda la vuelta.
+#   - En el pit lane no se avisa. La out lap nace invalidada siempre, asi que sin este filtro cada
+#     salida de boxes arrancaria con un cartel rojo que no corresponde a ningun error del piloto.
+#     El flanco igual se consume, para que el aviso no aparezca al pisar la pista.
+# =============================================================================================
+
+lap_invalidated = False
+lap_invalidated_supported = True
+
+
+def checkLapInvalidated():
+    global lap_invalidated, lap_invalidated_supported
+    if not lap_invalidated_supported:
+        return
+    try:
+        invalid = ac.getCarState(0, acsys.CS.LapInvalidated) != 0
+        in_pit_lane = ac.getCarState(0, acsys.CS.IsCarInPitline) != 0
+    except Exception as e:
+        # Se apaga en vez de reintentar: esto corre una vez por frame y un log por frame llena el
+        # archivo del juego en minutos. Si la constante no existiera en esta version de AC, el
+        # piloto pierde el aviso inmediato pero la app sigue funcionando entera.
+        lap_invalidated_supported = False
+        ac.log("[RaceControlClient] LapInvalidated no disponible, aviso inmediato apagado: {0}".format(e))
+        return
+
+    if invalid and not lap_invalidated and not in_pit_lane:
+        showMessage(LAP_INVALIDATED_TEXT)
+    lap_invalidated = invalid
+
+
 def authHeaders():
     """Cabeceras de autenticacion, vacias si todavia no hay credencial."""
     if backend_token:
@@ -278,7 +417,7 @@ def pollLoop():
             seq = light_event.get("seq", 0)
             state = light_event.get("type", "idle")
 
-            ac.setText(label_light, "Semaforo: {0}".format(state))
+            setLightState(state)
 
             for message in data.get("messages", []):
                 showMessage(message.get("text", ""))
@@ -295,7 +434,10 @@ def pollLoop():
             # decirle como: la credencial vence a las 24 h y se renueva al volver a entrar al
             # servidor. Sin esto, la app simplemente deja de funcionar sin explicar nada.
             if getattr(e, "code", None) == 401:
-                ac.setText(label_backend_status, "Credencial vencida: volve a entrar al servidor")
+                # Sin vencimiento a proposito: es un problema que sigue estando hasta que el
+                # piloto haga algo, y un cartel que se borra solo lo dejaria sin saber por que
+                # la app dejo de avisarle cosas.
+                setStatus("Credencial vencida: volve a entrar al servidor")
             ac.log("[RaceControlClient] poll error: {0}".format(e))
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -348,6 +490,154 @@ def playGreenGreenGreen():
             ac.log("[RaceControlClient] no se encontro {0}".format(SOUND_PATH))
     except Exception as e:
         ac.log("[RaceControlClient] error reproduciendo audio: {0}".format(e))
+
+
+# =============================================================================================
+# Lo que se dibuja: la bandera y el semaforo
+#
+# Las dos ventanas son graficas y no texto, y la razon es la misma para las dos: el piloto las mira
+# de reojo a doscientos por hora. "Semaforo: formation" obliga a leer una palabra en ingles y
+# traducirla; cinco luces rojas parpadeando no obligan a nada. Igual con la bandera.
+#
+# Se dibuja con `ac.glQuad`, que es lo unico que hay: rectangulos de un color plano. No hay
+# circulos ni texturas ni imagenes, asi que los discos del semaforo se arman por franjas (ver
+# `drawDisc`). La ventaja de no usar imagenes es que no hay un asset mas que empaquetar, que se
+# pueda perder al instalar, ni que haya que escalar a la resolucion de cada uno.
+#
+# Todo esto corre en el hilo del juego, una vez por frame y solo si la ventana esta abierta. Los
+# hilos de fondo nunca dibujan: dejan el dato en una variable y se van. De ahi que `current_flag`
+# y `light_state` sean globales sueltas y no haya lock -- en Python asignar un entero o un string
+# es atomico, y un frame tarde o temprano es irrelevante a 60 fps.
+# =============================================================================================
+
+FLAG_WINDOW_SIZE = 64
+LIGHTS_WINDOW_WIDTH = 170
+LIGHTS_WINDOW_HEIGHT = 46
+
+LIGHTS_COUNT = 5
+LIGHT_RADIUS = 13.0
+LIGHT_SPACING = 32.0
+# Medio segundo prendida, medio apagada. Es el ritmo del semaforo de verdad y, mas importante, es
+# lento como para que se note en vision periferica sin convertirse en un estrobo.
+LIGHTS_BLINK_SECONDS = 0.5
+# Cuanto se quedan las luces verdes antes de desaparecer. Pedido explicito: tres segundos y chau.
+LIGHTS_GREEN_HOLD_SECONDS = 3.0
+
+LIGHT_RED = (0.95, 0.12, 0.12, 1.0)
+LIGHT_GREEN = (0.10, 0.85, 0.25, 1.0)
+# Carcasa: el disco oscuro de atras. No es decoracion -- sin el, una luz roja sobre el rojo de un
+# auto adelante o el verde sobre el pasto de la escapatoria se pierden.
+LIGHT_HOUSING = (0.04, 0.04, 0.05, 0.85)
+
+# El color de cada bandera del juego. Las claves son los valores de `graphics.flag` de la Shared
+# Memory: 0 ninguna, 1 azul, 2 amarilla, 3 negra, 4 blanca, 5 a cuadros, 6 penalidad.
+#
+# El 0 es verde y no transparente, y es la unica ventana de las tres que muestra algo en reposo:
+# "pista despejada" tambien es informacion, y un cuadro que desaparece cuando no pasa nada deja al
+# piloto sin saber si no hay bandera o si la app se colgo.
+#
+# El 5 (a cuadros) y el 6 (penalidad) no son un color plano y se dibujan aparte.
+FLAG_COLORS = {
+    0: (0.10, 0.80, 0.25, 1.0),
+    1: (0.15, 0.45, 1.00, 1.0),
+    2: (1.00, 0.85, 0.05, 1.0),
+    3: (0.06, 0.06, 0.07, 1.0),
+    4: (0.95, 0.95, 0.95, 1.0),
+}
+FLAG_BORDER = (0.0, 0.0, 0.0, 0.70)
+FLAG_PENALTY_DOT = (1.00, 0.45, 0.00, 1.0)
+CHECKER_CELLS = 4
+
+current_flag = 0  # Lo escribe sharedMemoryLoop. 0 = sin bandera.
+
+light_state = "idle"
+light_green_at = None  # Cuando paso a verde, para apagarlo a los 3 segundos.
+
+
+def setLightState(state):
+    """Guarda el estado del semaforo que trajo el poll. No dibuja: de eso se ocupa renderLights."""
+    global light_state, light_green_at
+    if state == light_state:
+        return
+    light_state = state
+    light_green_at = time.time() if state == "green" else None
+
+
+def drawDisc(cx, cy, radius, color, strips=12):
+    """Dibuja un disco apilando franjas horizontales, porque `glQuad` es lo unico que hay.
+
+    El ancho de cada franja sale del circulo: media cuerda = sqrt(r^2 - dy^2). Con doce franjas y
+    un radio de trece pixeles el escalonado ya no se distingue del antialiasing del juego, y son
+    doce rectangulos por luz -- sesenta por frame con las cinco prendidas, que no es nada.
+    """
+    ac.glColor4f(*color)
+    height = (2.0 * radius) / strips
+    for i in range(strips):
+        dy = -radius + height * (i + 0.5)
+        half = math.sqrt(max(0.0, radius * radius - dy * dy))
+        if half <= 0.0:
+            continue
+        ac.glQuad(cx - half, cy - radius + height * i, half * 2.0, height)
+
+
+def renderFlag(deltaT):
+    size = FLAG_WINDOW_SIZE
+    inner = size - 12.0
+    x = 6.0
+    y = 6.0
+
+    # Marco oscuro primero: la bandera blanca sobre un cielo claro seria un cuadrado invisible.
+    ac.glColor4f(*FLAG_BORDER)
+    ac.glQuad(x - 2.0, y - 2.0, inner + 4.0, inner + 4.0)
+
+    flag = current_flag
+    if flag == 5:
+        drawChecker(x, y, inner)
+        return
+
+    color = FLAG_COLORS.get(flag if flag != 6 else 3, FLAG_COLORS[0])
+    ac.glColor4f(*color)
+    ac.glQuad(x, y, inner, inner)
+
+    if flag == 6:
+        # Bandera negra con circulo naranja: la de "pasa por boxes". Es negra igual que la 3, y lo
+        # unico que las distingue es el circulo -- sin el, dos sanciones muy distintas se verian
+        # identicas.
+        drawDisc(x + inner / 2.0, y + inner / 2.0, inner / 4.0, FLAG_PENALTY_DOT)
+
+
+def drawChecker(x, y, inner):
+    """El tablero de la bandera a cuadros. Un color plano no alcanza: es LA bandera reconocible."""
+    cell = inner / CHECKER_CELLS
+    for row in range(CHECKER_CELLS):
+        for col in range(CHECKER_CELLS):
+            if (row + col) % 2 == 0:
+                ac.glColor4f(0.95, 0.95, 0.95, 1.0)
+            else:
+                ac.glColor4f(0.06, 0.06, 0.07, 1.0)
+            ac.glQuad(x + col * cell, y + row * cell, cell, cell)
+
+
+def renderLights(deltaT):
+    if light_state == "formation":
+        if int(time.time() / LIGHTS_BLINK_SECONDS) % 2 != 0:
+            return  # Mitad del ciclo apagadas: eso es el parpadeo.
+        color = LIGHT_RED
+    elif light_state == "green":
+        # El apagado lo decide el render y no un timer: un timer mas es un hilo mas que sincronizar
+        # con el poll, y aca alcanza con mirar el reloj una vez por frame.
+        if light_green_at is None or (time.time() - light_green_at) > LIGHTS_GREEN_HOLD_SECONDS:
+            return
+        color = LIGHT_GREEN
+    else:
+        return  # idle: no se dibuja nada, la ventana es un vidrio.
+
+    cy = LIGHTS_WINDOW_HEIGHT / 2.0
+    first = (LIGHTS_WINDOW_WIDTH - (LIGHTS_COUNT - 1) * LIGHT_SPACING) / 2.0
+    for i in range(LIGHTS_COUNT):
+        cx = first + i * LIGHT_SPACING
+        drawDisc(cx, cy, LIGHT_RADIUS + 2.0, LIGHT_HOUSING)
+        drawDisc(cx, cy, LIGHT_RADIUS, color)
 
 
 # =============================================================================================
@@ -439,16 +729,6 @@ class SPageFileGraphic(ctypes.Structure):
         ("mandatoryPitDone", ctypes.c_int32),
     ]
 
-
-FLAG_NAMES = {
-    0: "Ninguna",
-    1: "Azul",
-    2: "Amarilla",
-    3: "Negra",
-    4: "Blanca",
-    5: "A cuadros",
-    6: "Penalidad",
-}
 
 MAX_PLAUSIBLE_SECTOR_MS = 600000
 
@@ -611,7 +891,7 @@ excursions = ExcursionTracker()
 
 def sharedMemoryLoop():
     """Lee las dos paginas de Shared Memory y arma el snapshot que viaja en el heartbeat."""
-    global telemetry_snapshot
+    global telemetry_snapshot, current_flag
 
     physics_shm = None
     graphics_shm = None
@@ -634,7 +914,8 @@ def sharedMemoryLoop():
             graphics_shm.seek(0)
             graphics = SPageFileGraphic.from_buffer_copy(graphics_shm.read(graphics_size))
 
-            ac.setText(label_flag, "Bandera: {0}".format(FLAG_NAMES.get(graphics.flag, "?")))
+            # Solo se deja el dato: el cuadro lo dibuja renderFlag en el hilo del juego.
+            current_flag = graphics.flag
 
             sectors.update(graphics)
             excursions.update(physics, graphics)
@@ -666,6 +947,9 @@ def sharedMemoryLoop():
             physics_shm = None
             graphics_shm = None
             telemetry_snapshot = None
+            # Vuelve a "sin bandera" en vez de quedarse con la ultima leida: si el juego dejo de
+            # publicar, un cuadro amarillo congelado estaria afirmando algo que ya no sabemos.
+            current_flag = 0
             sectors.reset()
             # Solo se descarta la salida en curso, no la cola: lo ya detectado sigue siendo
             # valido y se manda igual cuando el backend vuelva.

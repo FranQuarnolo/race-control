@@ -148,12 +148,13 @@
                 <button type="button" id="btn-gap-mode">Int.</button>
               </th>
               <th class="num">Vel.</th>
-              <th class="num" title="Vueltas completadas">Vts.</th>
-              <!-- Las vueltas que el servidor le invalidó por irse de pista. Va pegada a "Vts."
-                   porque la pregunta es la misma leída al revés: cuántas dio y cuántas le contaron.
-                   No necesita la app del piloto — sale del propio servidor de Assetto Corsa. -->
-              <th class="num c-cuts" title="Vueltas que el servidor invalidó por irse de pista, en esta sesión">Fuera</th>
-              <th title="Tiempos por sector de la última vuelta. Requiere la app del piloto.">Sectores</th>
+              <th class="num" title="Vueltas completadas">Laps</th>
+              <!-- Acá estaban "Fuera" y "Sectores".
+                   "Sectores" se sacó porque no funcionaba: los tiempos por sector solo existen en
+                   la Shared Memory del juego, los manda la app del piloto, y en pista nunca
+                   llegaron — una columna de veinte guiones que no explica nada.
+                   "Fuera" se sacó porque el número está mejor donde se usa: el resumen por piloto
+                   de la bandeja de incidentes lo muestra como "Cuts: 10", junto a los choques. -->
               <th class="num">Última</th>
               <th class="num">Mejor</th>
               <th class="num" title="Paradas en boxes completadas. Requiere la app del piloto.">Box</th>

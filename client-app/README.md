@@ -7,27 +7,64 @@
    ventana de Content Manager, como se instala cualquier mod de auto/pista.
 3. Activar las ventanas dentro del juego: menú de Apps (AC Apps) → **RC Mensajes**, **RC Banderas**
    y **RC Largada**. Son tres entradas separadas y se activan las que uno quiera.
+4. Acomodarlas en pantalla. Una sola vez, y mejor antes de la primera carrera.
 
 No hay ningún archivo que editar ni ninguna IP que tipear: la app descubre sola a qué backend
 reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
+
+> **Si ya la tenías instalada de una versión anterior a la 1.1, hay que reinstalarla.** Arrastrá el
+> `.zip` nuevo igual que la primera vez: pisa lo que había sin dejar restos. El `ui.json` dice la
+> versión instalada, así que se puede verificar desde el listado de apps del juego.
 
 ## Las tres ventanas
 
 | Ventana | Qué muestra |
 |---|---|
-| **RC Mensajes** | Los avisos de dirección de carrera: sanciones, vueltas invalidadas por irse de pista, sanciones anuladas. Y el estado de la conexión con Race Control. |
-| **RC Banderas** | La bandera de pista vigente, leída de la memoria del propio juego. |
-| **RC Largada** | El semáforo de la largada en movimiento, con el audio al verde. |
+| **RC Mensajes** | Los avisos de dirección de carrera —sanciones, vueltas invalidadas, sanciones anuladas— en rojo y en letra grande. Arriba, en gris chiquito, el estado de la conexión con Race Control. |
+| **RC Banderas** | Un cuadro con el color de la bandera vigente, leída de la memoria del propio juego. |
+| **RC Largada** | Cinco luces: rojas parpadeando en la formación, verdes con el audio al verde. |
 
 Son tres apps independientes a propósito: hasta la 0.7 era una sola ventana con todo apilado, así
 que el piloto que solo quería ver las banderas tenía que aguantar el resto ocupando pantalla.
+
+### Desde la 1.1 son overlays, no ventanas
+
+No tienen fondo, ni borde, ni barra de título, ni ícono. En reposo **RC Largada** no se ve en
+absoluto y **RC Mensajes** queda vacía: lo que no está pasando no ocupa un pixel. Para moverlas o
+redimensionarlas, pasales el mouse por encima y el marco reaparece.
+
+La excepción es **RC Banderas**, que siempre muestra algo —verde cuando no hay bandera—. Es
+deliberado: "pista despejada" también es información, y un cuadro que desaparece cuando no pasa
+nada dejaría sin saber si no hay bandera o si la app se colgó.
+
+Los colores son los del juego: verde (ninguna), amarillo, azul, negro, blanco, el tablero de
+cuadros de la final y un círculo naranja sobre negro para la de penalidad. Las dos últimas se
+dibujan distinto porque un color plano no alcanza: la de penalidad es negra igual que la negra a
+secas, y sin el círculo serían indistinguibles.
+
+**El semáforo** arranca invisible. Cuando el admin aprieta "Iniciar formación" aparecen las cinco
+luces parpadeando en rojo; al "Verde" pasan a verde y suena el audio; tres segundos después
+desaparecen.
 
 **Las tres comparten los mismos hilos de fondo.** Cerrar una ventana —o no abrir ninguna— no apaga
 el heartbeat ni el reporte de telemetría: solo deja de dibujar. Alcanza con tener la app instalada
 y activada en Content Manager.
 
-Los avisos de **RC Mensajes** se borran solos a los 25 segundos y se muestran como máximo cuatro a
+Los avisos de **RC Mensajes** se borran solos a los 25 segundos y se muestran como máximo tres a
 la vez, los más nuevos abajo.
+
+### La vuelta invalidada la avisa la app, no el servidor
+
+Desde la 1.1, `VUELTA INVALIDADA` aparece **en el instante del corte**. Antes lo mandaba el
+backend, que se entera recién cuando el piloto cruza meta: el aviso llegaba una vuelta tarde,
+cuando ya la había manejado entera apretando para nada.
+
+La app lo lee de `acsys.CS.LapInvalidated`, que es el propio juego diciendo que la vuelta en curso
+ya no vale. No dice el número de vuelta —uno sabe en cuál está— y no aparece al salir de boxes,
+aunque la out lap nazca invalidada.
+
+Esto es **solo el aviso al piloto**. El corte se sigue registrando en la bandeja de incidentes del
+comisario exactamente igual que antes.
 
 ## Qué hace
 
@@ -35,10 +72,10 @@ la vez, los más nuevos abajo.
   conectarse, invisible para el uso normal del piloto).
 - Muestra el estado del semáforo y reproduce el audio cuando se pone en verde.
 - Muestra los avisos de dirección de carrera. Llegan por **dos** canales: la pizarra del servidor
-  (`/api/client/poll`, que es la que trae las vueltas invalidadas) y el chat del juego. Los dos y
-  no uno porque el chat le llega al piloto aunque el token esté vencido o el backend caído, y es
-  además lo único que ve quien no tiene la app. Un aviso que llega por los dos lados se muestra
-  una sola vez.
+  (`/api/client/poll`) y el chat del juego. Los dos y no uno porque el chat le llega al piloto
+  aunque el token esté vencido o el backend caído, y es además lo único que ve quien no tiene la
+  app. Un aviso que llega por los dos lados se muestra una sola vez.
+- Avisa la vuelta invalidada por su cuenta, sin pasar por el servidor, en el momento del corte.
 - Muestra la bandera de pista actual (leída directo de la Shared Memory del juego, no depende del
   servidor).
 - Manda un heartbeat al backend cada 2 segundos. Si el admin dejó activado "Exigir que todos la
@@ -49,7 +86,19 @@ la vez, los más nuevos abajo.
   paradas en boxes y salidas de pista. Es lo que llena la torre de tiempos del panel; un piloto
   sin la app aparece ahí con guiones en esas columnas.
 - Las ventanas son apps normales de Content Manager: el piloto las puede mover y redimensionar
-  como cualquier otra.
+  como cualquier otra, aunque desde la 1.1 el marco solo aparezca al pasarles el mouse por encima.
+
+## Qué protege el test `server/src/test/clientApp.test.ts`
+
+Este archivo no lo compila nadie: corre dentro del Python **3.3** embebido de Assetto Corsa y la
+primera vez que se ejecuta es en la PC de un piloto. Un error de sintaxis no da error — la app
+simplemente no aparece en el menú del juego.
+
+Por eso hay un test del lado del servidor que lee este `.py` y verifica tres cosas: que no use
+sintaxis posterior a 3.3 (f-strings, `:=`, `async`), que no importe nada fuera de la stdlib que
+ese intérprete tiene, y que **toda** ventana creada con `ac.newApp` pase por `ocultarChrome`. Lo
+último es para que una ventana agregada el año que viene no vuelva a salir como un recuadro negro
+tapando el parabrisas.
 
 ## Empaquetado (lo hace quien publica Race Control, una vez por versión)
 

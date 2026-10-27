@@ -3,6 +3,161 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.1] — 2026-10-26
+
+**La primera versión probada en pista.** La 1.0 se corrió en Spa con gente adentro y volvió con
+dieciséis observaciones. Una era un bug que dejaba el producto sin su pantalla principal; el resto
+son todas de la misma familia: cosas que en el escritorio se ven bien y arriba del auto no sirven.
+Eso es lo que no se puede deducir desde acá, y por eso esta entrada es larga.
+
+### El mapa no se dibujaba nunca (y los autos tampoco)
+
+**Síntoma:** en Spa el circuito no apareció y el piloto no se vio a sí mismo en el mapa en vivo.
+Parecían dos problemas —uno de trazado y otro de posiciones— y eran el mismo.
+
+**Causa:** `trackLearner.setTrack()` se llamaba en un solo lugar, el handler de `NEW_SESSION`. Ese
+evento llega cuando la sesión **arranca**, y el caso normal del producto es el contrario: el admin
+conecta Race Control a un servidor que ya viene corriendo hace rato. Ahí `NEW_SESSION` no llega
+nunca. Con `track` vacío pasan dos cosas, las dos en silencio: `loadFromCatalog()` no corre, así
+que el trazado de Spa —que está en el catálogo, entre los 199 circuitos— no se carga; y
+`onCarUpdate()` arranca con `if (!this.track) return`, así que tampoco se aprende nada de la
+telemetría. Sin trazado no hay límites del mapa, y sin límites no se puede ubicar un auto. De ahí
+que fallaran las dos cosas juntas.
+
+**Arreglo:** el circuito también se toma del `SESSION_INFO`, que es la respuesta a nuestro propio
+`GET_SESSION_INFO` y que el latido de `ConnectivityManager` dispara cada 5 segundos desde la 0.9.
+Trae los mismos campos. Así el mapa aparece a los cinco segundos de conectar, venga o no un
+`NEW_SESSION`. `setTrack` compara la clave y sale enseguida si no cambió, así que llamarlo doce
+veces por minuto no cuesta nada.
+
+**Test:** `core.test.ts` levanta un Race Control, le manda un único `SESSION_INFO` de Spa y exige
+que el outline exista y tenga más de 100 puntos. Se verificó que falla sin el arreglo.
+
+### Torre de tiempos
+
+**El compuesto ahora dice `S8M` y no `Michellin S8M`.** El juego devuelve el nombre comercial
+completo y lo único que distingue un compuesto de otro es la sigla entre paréntesis. El nombre
+largo queda en el `title` de la celda para quien lo necesite.
+
+**`PIT` quiere decir lo mismo en las dos columnas.** La de velocidad decía `PIT` y la de paradas
+decía `En box`: dos palabras para el mismo estado, en la misma fila, a tres centímetros una de
+otra. Ahora las dos dicen `PIT`.
+
+**Se fueron las columnas "Fuera" y "Sectores".** La de sectores porque no funciona —el reparto por
+sector que manda la app no estaba llegando bien— y una columna que muestra guiones es peor que no
+tenerla. La de cortes porque la cuenta real ahora vive en la bandeja de incidentes, agrupada por
+piloto, que es donde se la mira. El código de `renderSectors` se borró en vez de dejarlo
+comentado: si vuelve, vuelve con el dato andando.
+
+**`Vts.` ahora dice `Laps`.** Era la única abreviatura de la tabla que necesitaba explicación.
+
+### La bandeja de incidentes se agrupa por piloto
+
+**El problema, textual:** "giré yo solo y me anotó 10 incidentes". Y es correcto —hubo diez
+eventos— pero la bandeja los mostraba como diez tarjetas sueltas en orden cronológico. Para saber
+qué hizo un piloto había que recorrer la lista entera contando a ojo.
+
+**Ahora cada piloto es un bloque plegable** con su nombre y dos cuentas: **Cuts** (irse de pista) y
+**Choques** (pegarle a algo, solo o contra otro). Son dos cosas que se juzgan distinto: diez cuts
+es alguien usando de más el pianito, diez choques es alguien peligroso. Lo que no cae en ninguna
+de las dos —contramano, desconexión, telemetría inconsistente— se cuenta aparte en "Otros", en vez
+de forzarlo adentro de una: meter una desconexión en "choques" sería inventar un dato. Hay además
+un chip de "N sin revisar", para que no haya que abrir el bloque para saber si queda algo
+pendiente.
+
+**Los toques ahora dicen contra quién fueron.** El dato ya estaba —`Incident.parties` guarda los
+dos pilotos desde siempre— y no lo mostraba nadie. El título pasó de "Toque entre autos" a "Toque
+con Fulano".
+
+**Un toque aparece en los dos bloques, a propósito.** Es el mismo incidente (mismo id: resolverlo
+de un lado lo resuelve de los dos), pero cada piloto tiene que ver su propia cuenta completa, y el
+título se da vuelta según de qué lado se lo esté leyendo.
+
+**Test nuevo:** `panel.test.ts` lee el union `IncidentKind` del motor y exige que cada miembro esté
+clasificado en el panel. Sin eso, el día que se agregue un tipo nuevo de infracción el panel lo va
+a contar como "otro" y titularlo "incidente", sin romperse y sin avisar.
+
+### La app del piloto dejó de ser tres recuadros negros
+
+Esta es la mitad del release y es toda la misma idea: **un overlay de carrera no es una ventana**.
+Lo que no está pasando ahora mismo no tiene que ocupar un pixel.
+
+**Las tres ventanas van sin fondo, sin borde, sin título y sin ícono.** Son cuatro llamadas
+distintas (`setBackgroundOpacity`, `drawBorder`, `setTitle`, `setIconPosition`) y dejarse una
+afuera se nota: sin la segunda queda el marco flotando alrededor de la nada, sin la cuarta queda
+el iconito colgado sin ventana que lo sostenga. El juego igual las deja mover y redimensionar, y
+les vuelve a dibujar el fondo mientras el mouse está encima —que es justo cuando hace falta—.
+
+**RC Mensajes: más finita, más grande y en rojo.** La letra pasó de 14 a 20 px y las líneas de
+cuatro a tres: a cuatro líneas chiquitas no las lee nadie en movimiento, y sin bajar una la
+ventana quedaba más alta que antes en vez de más finita. Tres avisos simultáneos en pista son
+muchísimos; lo normal es uno.
+
+**"Conectado a Race Control" ahora se borra a los 8 segundos.** Se escribía una vez y se quedaba
+toda la carrera informando algo que ya había pasado. Los estados que sí son un problema —que no
+aparezca el backend, que venza la credencial— no vencen y se quedan: ahí el cartel es la única
+pista que tiene el piloto de por qué la app no hace nada.
+
+**La vuelta invalidada se avisa en el momento del corte, no al cruzar meta.** Era el pedido más
+importante de la lista y obligó a cambiar de fuente. El backend se entera por el `LAP_COMPLETED`,
+o sea al cerrar la vuelta: para el comisario está perfecto —lo que juzga es la vuelta cerrada—
+pero el piloto se enteraba un minuto y medio después de haberla arruinado, cuando ya la manejó
+entera apretando. El juego, en cambio, la invalida en el instante del corte y lo publica en
+`acsys.CS.LapInvalidated`; como la app corre adentro del juego, lo lee y avisa ahí mismo. **El
+servidor dejó de empujar ese aviso a la pizarra**, porque llegaría tarde y repetido. El incidente
+se sigue registrando igual.
+
+Dos sutilezas que costaron un bug cada una: se avisa por **flanco** y no por estado (leído cada
+frame, el estado da sesenta avisos por segundo), y **en el pit lane no se avisa** (la out lap nace
+invalidada siempre, así que sin el filtro cada salida de boxes arrancaría con un cartel rojo que
+no corresponde a ningún error).
+
+**El aviso ya no dice el número de vuelta.** Dice `VUELTA INVALIDADA` y nada más. El número era
+información del servidor, no del piloto: uno sabe perfectamente en qué vuelta está.
+
+**RC Banderas es un cuadro de color, sin una sola palabra.** Verde cuando no hay bandera, amarillo
+cuando hay amarilla, azul, negra, blanca, el tablero de cuadros para la final y el círculo naranja
+sobre negro para la de penalidad —que es negra igual que la otra y sin el círculo serían
+indistinguibles—. Es la única de las tres que muestra algo en reposo, y es deliberado: "pista
+despejada" también es información, y un cuadro que desaparece cuando no pasa nada dejaría al
+piloto sin saber si no hay bandera o si la app se colgó.
+
+**RC Largada son cinco luces y antes era la palabra "idle".** En reposo no se dibuja nada: la
+ventana es un vidrio. Al apretar "Iniciar formación" aparecen cinco discos rojos parpadeando a
+medio segundo —el ritmo del semáforo de verdad, lento como para que se note de reojo sin
+convertirse en un estrobo—. Al apretar "Verde" pasan a verde y suena el `green green green`, y a
+los tres segundos desaparecen.
+
+Todo esto se dibuja con `ac.glQuad`, que es lo único que hay: rectángulos de un color plano. Los
+discos se arman apilando doce franjas horizontales cuyo ancho sale del círculo. No hay imágenes,
+así que no hay un asset más que empaquetar, que se pueda perder al instalar, ni que haya que
+escalar a la resolución de cada uno.
+
+**La geometría se verificó fuera del juego**, con un stub de la API de AC: las siete banderas caen
+dentro de la ventana, el tablero alterna dos colores, el idle no dibuja nada, la formación
+parpadea mitad y mitad, son diez discos (cinco luces con su carcasa) y el verde se apaga a los
+3,0 s exactos.
+
+### El archivo que nunca corre en CI ahora tiene tests
+
+`RaceControlClient.py` vive dentro del intérprete Python embebido de Assetto Corsa. No lo compila
+nadie, no lo importa ningún test, y la primera vez que se ejecuta es en la PC de un piloto a punto
+de largar. Si tiene un error de sintaxis el juego no avisa: la app **no aparece** en el menú, y el
+reporte que llega es "no me anda", sin línea y sin excepción.
+
+El riesgo concreto es la versión: AC trae **Python 3.3**. Un f-string, un walrus o un `async` son
+sintaxis que ese intérprete no conoce, y el editor no los marca porque el archivo es Python
+perfectamente válido en cualquier versión moderna. `clientApp.test.ts` los busca, verifica que no
+se importe nada que no exista en 3.3, y exige que **toda** ventana creada pase por
+`ocultarChrome` —una ventana nueva agregada dentro de seis meses aparecería con el fondo negro
+puesto y volvería el problema que esta versión acaba de arreglar—.
+
+### Hay que reinstalar la app
+
+La app cambió entera, así que **todos los pilotos tienen que volver a bajar el `.zip` y arrastrarlo
+a Content Manager**. Pisa la instalación anterior sin dejar restos. El `ui.json` pasó a `1.2` para
+que se note en el listado de apps del juego cuál está instalada.
+
 ## [1.0] — 2026-10-26
 
 **Primer release público.** El repositorio pasa a ser público y el `.zip` de la app de los pilotos

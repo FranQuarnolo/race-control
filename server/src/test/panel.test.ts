@@ -328,3 +328,62 @@ test("las pestañas de sección se dibujan distinto de los botones de acción", 
     "la pestaña activa no se distingue de la inactiva"
   );
 });
+
+/**
+ * Cada tipo de incidente del motor tiene que estar clasificado en el panel.
+ *
+ * La bandeja agrupa por piloto y lleva dos cuentas, "Cuts" y "Choques". Esa división no está en el
+ * backend: vive en dos arreglos de `app.js` que listan tipos a mano. Entonces el día que alguien
+ * agregue un `IncidentKind` nuevo —que es exactamente lo que va a pasar, el union ya creció tres
+ * veces— el panel lo va a mandar a "Otros" y le va a poner de título la palabra "incidente",
+ * sin romperse y sin avisar. Un tipo nuevo de infracción grave contándose como "otro" es un
+ * comisario mirando la cifra equivocada.
+ *
+ * Por eso el test lee el union de TypeScript del motor, que es la única lista verdadera, y exige
+ * que cada miembro aparezca o en una de las dos cuentas o en la tabla de títulos. Es la misma idea
+ * que los otros tests de este archivo: ir a buscar lo que no falla ruidosamente.
+ */
+test("el panel clasifica todos los tipos de incidente del motor", () => {
+  const motor = leer(DIST, "..", "src", "incident", "incidentEngine.ts");
+  const union = /export type IncidentKind =([\s\S]*?);/.exec(motor);
+  assert.ok(union, "no se encontró el union `IncidentKind` en incidentEngine.ts");
+  const tipos = (union![1].match(/"([^"]+)"/g) || []).map((t) => t.slice(1, -1));
+  assert.ok(tipos.length >= 7, `se leyeron ${tipos.length} tipos del motor, algo falló al parsear`);
+
+  const app = leer(PANEL, "app.js");
+  const listado = (nombre: string): string[] => {
+    const bloque = new RegExp("const " + nombre + "\\s*=\\s*\\[([^\\]]*)\\]").exec(app);
+    assert.ok(bloque, "falta la constante `" + nombre + "` en app.js");
+    return (bloque![1].match(/"([^"]+)"/g) || []).map((t) => t.slice(1, -1));
+  };
+  const etiquetas = /const INCIDENT_KIND_LABELS\s*=\s*{([\s\S]*?)};/.exec(app);
+  assert.ok(etiquetas, "falta `INCIDENT_KIND_LABELS` en app.js");
+
+  const cuts = listado("CUT_KINDS");
+  const choques = listado("CHOQUE_KINDS");
+
+  for (const tipo of tipos) {
+    const contado = cuts.indexOf(tipo) !== -1 || choques.indexOf(tipo) !== -1;
+    const titulado =
+      tipo === "car-contact" || new RegExp('(^|[{,\\s])"?' + tipo + '"?\\s*:').test(etiquetas![1]);
+    assert.ok(
+      contado || titulado,
+      "`" + tipo + "` no está ni en las cuentas ni en los títulos: la bandeja lo va a mostrar como " +
+        "\"incidente\" dentro de \"Otros\""
+    );
+    assert.ok(
+      titulado,
+      "`" + tipo + "` se cuenta pero no tiene título propio en `INCIDENT_KIND_LABELS`"
+    );
+  }
+
+  for (const tipo of cuts.concat(choques)) {
+    assert.ok(
+      tipos.indexOf(tipo) !== -1,
+      "`" + tipo + "` está clasificado en el panel pero el motor ya no lo emite"
+    );
+  }
+
+  const cruce = cuts.filter((t) => choques.indexOf(t) !== -1);
+  assert.equal(cruce.length, 0, "estos tipos suman en las dos cuentas: " + cruce.join(", "));
+});

@@ -672,8 +672,10 @@ function createCarRow(carId) {
     gap: cell("num c-gap"),
     speed: cell("num"),
     laps: cell("num"),
-    cuts: cell("num c-cuts"),
-    sectors: cell("c-sectors"),
+    // Acá estaban "Fuera" (las vueltas invalidadas) y "Sectores". Las dos se sacaron en la 1.1:
+    // los sectores porque no funcionaban —solo los tiene la app del piloto y no llegaban—, y
+    // "Fuera" porque ese número ahora vive donde se usa, en el resumen por piloto de la bandeja
+    // de incidentes ("Cuts: 10"). El `cuts` del backend sigue viajando en `/api/state`.
     last: cell("num lap-time"),
     best: cell("num lap-time"),
     pits: cell("num"),
@@ -683,7 +685,7 @@ function createCarRow(carId) {
     actions: cell("actions"),
   };
 
-  for (const key of ["sectors", "pits", "tyre", "fuel"]) cells[key].title = NO_APP_TITLE;
+  for (const key of ["pits", "tyre", "fuel"]) cells[key].title = NO_APP_TITLE;
 
   // Las acciones destructivas viven detrás de los tres puntitos, no sueltas en la fila. Un botón
   // "Kick" visible en veinte filas de una tabla que se reordena sola es un accidente esperando
@@ -748,15 +750,6 @@ function updateCarRow(row, car, sessionBest) {
   // se lee como vueltas hasta que uno mira el encabezado.
   row.laps.textContent = "L" + car.lapCount;
 
-  // Cero se dibuja como raya y no como "0": en una tabla de 20 filas, veinte ceros en columna son
-  // ruido, y lo único que hay que poder encontrar de un vistazo es a quién le tacharon vueltas.
-  const cuts = car.cuts || 0;
-  setText(row.cuts, cuts > 0 ? String(cuts) : null);
-  row.cuts.classList.toggle("tiene", cuts > 0);
-  row.cuts.title = cuts > 0 ? cuts + " vuelta(s) invalidada(s) por irse de pista" : "";
-
-  renderSectors(row.sectors, telemetry);
-
   setText(row.last, formatLapTime(car.lastLapMs));
   setText(row.best, formatLapTime(car.bestLapMs));
   // Morado la mejor de todos, verde la mejor propia: es el código de color de cualquier torre de
@@ -766,7 +759,10 @@ function updateCarRow(row, car, sessionBest) {
   row.last.classList.toggle("personal-best", car.lastLapMs !== null && car.lastLapMs === car.bestLapMs);
 
   renderPits(row.pits, telemetry);
-  setText(row.tyre, telemetry ? telemetry.tyreCompound : null, NO_APP_TITLE);
+  setText(row.tyre, telemetry ? tyreLabel(telemetry.tyreCompound) : null, NO_APP_TITLE);
+  // El nombre completo no se pierde: va al tooltip, por si alguna vez hace falta el compuesto
+  // exacto y no solo el código.
+  row.tyre.title = telemetry && telemetry.tyreCompound ? telemetry.tyreCompound : NO_APP_TITLE;
   setText(row.fuel, telemetry && telemetry.fuelLiters !== null ? telemetry.fuelLiters.toFixed(1) + " L" : null, NO_APP_TITLE);
 
   clearChildren(row.ping);
@@ -870,42 +866,35 @@ function formatLapTime(ms) {
   return minutes + ":" + (seconds < 10 ? "0" : "") + seconds.toFixed(3);
 }
 
-function renderSectors(td, telemetry) {
-  const sectors = telemetry && telemetry.sectors ? telemetry.sectors : [];
-  const signature = sectors.join(",");
-  if (td.dataset.signature === signature) return;
-  td.dataset.signature = signature;
-
-  clearChildren(td);
-  if (sectors.length === 0) {
-    const span = document.createElement("span");
-    span.className = "nodata";
-    span.textContent = "--";
-    td.appendChild(span);
-    return;
-  }
-  const wrap = document.createElement("div");
-  wrap.className = "sectors";
-  for (const sector of sectors) {
-    const span = document.createElement("span");
-    if (sector === null) {
-      span.className = "nodata";
-      span.textContent = "--";
-    } else {
-      span.textContent = (sector / 1000).toFixed(3);
-    }
-    wrap.appendChild(span);
-  }
-  td.appendChild(wrap);
-}
+// Acá vivía `renderSectors`. La columna de sectores se sacó de la torre en la 1.1 porque en pista
+// nunca mostró un número: los tiempos por sector solo existen en la Shared Memory del juego y los
+// reporta la app del piloto, así que eran veinte guiones permanentes. El backend los sigue
+// mandando en `telemetry.sectors` —no se tocó nada del lado del servidor—, de modo que reponer la
+// columna el día que el reporte funcione es volver a escribir esta función y el `<th>`.
 
 function renderPits(td, telemetry) {
   if (!telemetry || telemetry.pitStops === null) {
     setText(td, null, NO_APP_TITLE);
     return;
   }
-  const label = telemetry.inPitLane ? telemetry.pitStops + " · en box" : String(telemetry.pitStops);
+  // "PIT" y no "en box": la columna de velocidad ya dice PIT para lo mismo, y dos palabras
+  // distintas para un solo estado hacen dudar de si son dos estados.
+  const label = telemetry.inPitLane ? telemetry.pitStops + " · PIT" : String(telemetry.pitStops);
   if (td.textContent !== label) td.textContent = label;
+}
+
+/**
+ * El compuesto, corto.
+ *
+ * El juego manda el nombre comercial completo —"Michelin S8M"— y en una columna de tabla eso entra
+ * cortado o estira la fila. Lo único que el comisario mira es el código, que es justo lo que los
+ * mods ponen entre paréntesis: "Michelin S8M (S8M)" → "S8M". Sin paréntesis se deja tal cual, que
+ * es el caso de los autos de fábrica ("Street", "Semislick"), donde el nombre YA es corto.
+ */
+function tyreLabel(compound) {
+  if (!compound) return null;
+  const m = /\(([^)]+)\)/.exec(compound);
+  return m ? m[1].trim() : compound;
 }
 
 /**
@@ -1758,13 +1747,31 @@ const GEOMETRY_LABELS = {
 };
 
 /** Título de los incidentes de un solo piloto. Los toques entre autos no están acá: su título es
- * "Fulano vs Mengano", que se arma aparte. */
+ * "Toque con Fulano", que se arma aparte porque necesita saber desde qué lado se está mirando. */
 const INCIDENT_KIND_LABELS = {
   "env-collision": "choque en solitario",
   "track-limits": "límites de pista",
   "cut-lap": "se fue de pista",
   "telemetry-mismatch": "telemetría inconsistente",
+  "wrong-way": "contramano",
+  disconnect: "se desconectó en carrera",
 };
+
+/**
+ * Las dos cuentas que el comisario lleva de cada piloto.
+ *
+ * **Cuts** es irse de pista; **choques** es pegarle a algo, solo o contra otro. Son dos cosas
+ * distintas y se juzgan distinto: diez cuts es alguien que está usando de más el pianito, diez
+ * choques es alguien peligroso. Antes la bandeja no las separaba —ni las sumaba—, así que un
+ * trompo solo en una práctica llenaba la pantalla de diecinueve tarjetas sueltas y había que
+ * contarlas a ojo para saber cuál de las dos cosas había pasado.
+ *
+ * Lo que no cae en ninguna de las dos (contramano, desconexión, telemetría inconsistente) se
+ * cuenta aparte en vez de forzarlo a una de estas: meter una desconexión adentro de "choques"
+ * sería inventar un dato.
+ */
+const CUT_KINDS = ["track-limits", "cut-lap"];
+const CHOQUE_KINDS = ["car-contact", "env-collision"];
 
 const INCIDENT_STATUS = {
   dismissed: ["neutral", "descartado"],
@@ -1775,6 +1782,14 @@ const INCIDENT_STATUS = {
 /** Firma de lo renderizado, para no reconstruir la lista entera una vez por segundo mientras el
  * admin está leyendo un incidente. */
 let incidentsSignature = "";
+
+/**
+ * Qué grupos dejó abiertos el admin, por piloto.
+ *
+ * La lista se repinta sola cuando llega un incidente nuevo, y sin esto cada repintado cerraría el
+ * grupo que estaba leyendo — justo en el momento en que más incidentes están entrando.
+ */
+const gruposAbiertos = new Set();
 
 function renderIncidents(incidents) {
   const signature = incidents.map((i) => i.id + i.status + i.impactCount).join("|");
@@ -1792,10 +1807,94 @@ function renderIncidents(incidents) {
     return;
   }
 
-  for (const incident of incidents) list.appendChild(incidentCard(incident));
+  for (const grupo of agruparPorPiloto(incidents)) list.appendChild(grupoCard(grupo));
 }
 
-function incidentCard(incident) {
+/**
+ * Un grupo por piloto, no una tarjeta por hecho.
+ *
+ * **Un toque entre dos autos entra en los dos grupos**, a propósito. Es un solo incidente con un
+ * solo id —resolverlo de un lado lo resuelve del otro, porque es el mismo— pero cuenta para los
+ * dos pilotos: si el de Fulano no lo contara, su resumen diría que no tuvo ningún choque. Desde
+ * cada grupo la tarjeta se titula "Toque con <el otro>", que es como se lee desde ese lado.
+ */
+function agruparPorPiloto(incidents) {
+  const porPiloto = new Map();
+
+  for (const incident of incidents) {
+    for (const party of incident.parties) {
+      // El guid es la identidad real; el carId es el respaldo para un auto que entró sin guid.
+      const clave = party.driverGuid || "car-" + party.carId;
+      let grupo = porPiloto.get(clave);
+      if (!grupo) {
+        grupo = { clave, nombre: party.driverName, cuts: 0, choques: 0, otros: 0, pendientes: 0, ultimo: 0, filas: [] };
+        porPiloto.set(clave, grupo);
+      }
+      if (party.driverName) grupo.nombre = party.driverName;
+      grupo.filas.push({ incident, propio: party });
+      if (CUT_KINDS.indexOf(incident.kind) !== -1) grupo.cuts++;
+      else if (CHOQUE_KINDS.indexOf(incident.kind) !== -1) grupo.choques++;
+      else grupo.otros++;
+      if (incident.status === "pending") grupo.pendientes++;
+      if (incident.createdAt > grupo.ultimo) grupo.ultimo = incident.createdAt;
+    }
+  }
+
+  // Lo que pasó hace un minuto arriba. En una carrera el comisario revisa hacia atrás desde lo
+  // último, no busca un nombre en una lista alfabética.
+  return Array.from(porPiloto.values()).sort((a, b) => b.ultimo - a.ultimo);
+}
+
+/** El grupo de un piloto: el resumen siempre a la vista, el detalle a un click. */
+function grupoCard(grupo) {
+  const det = document.createElement("details");
+  det.className = "grupo-incidentes";
+  det.open = gruposAbiertos.has(grupo.clave);
+  det.addEventListener("toggle", () => {
+    if (det.open) gruposAbiertos.add(grupo.clave);
+    else gruposAbiertos.delete(grupo.clave);
+  });
+
+  const sum = document.createElement("summary");
+
+  const nombre = document.createElement("span");
+  nombre.className = "piloto";
+  nombre.textContent = grupo.nombre;
+  sum.appendChild(nombre);
+
+  // Las dos cuentas que importan, cada una con su color. Un cero no se dibuja: en una fila de
+  // chapas, "Choques: 0" ocupa tanto como "Choques: 9" y no dice nada.
+  if (grupo.cuts > 0) sum.appendChild(cuentaChip("Cuts", grupo.cuts, "cuts"));
+  if (grupo.choques > 0) sum.appendChild(cuentaChip("Incidentes", grupo.choques, "choques"));
+  if (grupo.otros > 0) sum.appendChild(cuentaChip("Otros", grupo.otros, "otros"));
+
+  if (grupo.pendientes > 0) {
+    const pend = document.createElement("span");
+    pend.className = "chip-cuenta pendiente";
+    pend.textContent = grupo.pendientes + " sin revisar";
+    sum.appendChild(pend);
+  }
+
+  det.appendChild(sum);
+  for (const fila of grupo.filas) det.appendChild(incidentCard(fila.incident, fila.propio));
+  return det;
+}
+
+function cuentaChip(etiqueta, n, clase) {
+  const span = document.createElement("span");
+  span.className = "chip-cuenta " + clase;
+  span.textContent = etiqueta + ": " + n;
+  return span;
+}
+
+/**
+ * Una tarjeta de incidente.
+ *
+ * `propio` es el piloto desde cuyo grupo se la está mirando, y cambia el título: adentro del grupo
+ * de Fulano un toque se lee "Toque con Mengano", que es el dato que el comisario está buscando
+ * —contra quién fue—, y no "Fulano vs Mengano", que repite el nombre del encabezado del grupo.
+ */
+function incidentCard(incident, propio) {
   const card = document.createElement("div");
   card.className = "incident" + (incident.status === "pending" ? "" : " resolved");
 
@@ -1804,10 +1903,7 @@ function incidentCard(incident) {
 
   const who = document.createElement("span");
   who.className = "who";
-  who.textContent =
-    incident.kind === "car-contact"
-      ? incident.parties.map((p) => p.driverName).join("  vs  ")
-      : incident.parties[0].driverName + " — " + (INCIDENT_KIND_LABELS[incident.kind] || "incidente");
+  who.textContent = tituloIncidente(incident, propio);
   head.appendChild(who);
 
   if (incident.status !== "pending") {
@@ -1865,6 +1961,17 @@ function incidentCard(incident) {
   }
 
   return card;
+}
+
+function tituloIncidente(incident, propio) {
+  if (incident.kind !== "car-contact") {
+    return INCIDENT_KIND_LABELS[incident.kind] || "incidente";
+  }
+  // Contra quién fue. El backend guarda a los dos en `parties` desde que existe el pareo de
+  // paquetes, así que esto no adivina nada: es el otro auto del mismo toque.
+  const otros = incident.parties.filter((p) => !propio || p.carId !== propio.carId);
+  if (otros.length === 0) return "Toque entre autos";
+  return "Toque con " + otros.map((p) => p.driverName).join(" y ");
 }
 
 const MANUAL_PENALTIES = [
@@ -2032,13 +2139,13 @@ function renderNetwork(network) {
   driversEl.textContent = d.connected === 0 ? "nadie conectado todavía" : d.reporting + " de " + d.connected;
   driversEl.className = d.connected > 0 && d.reporting === 0 ? "bad" : "";
 
-  // Lo mismo, pero arriba de la torre de tiempos, que es donde se nota: Sectores, Box, Neum. y
-  // Comb. salen de la app del piloto y sin ella quedan en guiones. El cajón de conexión lo decía
-  // bien y nadie lo abre, así que "no me aparecen los neumáticos" se leía como un producto roto.
+  // Lo mismo, pero arriba de la torre de tiempos, que es donde se nota: Box, Neum. y Comb. salen
+  // de la app del piloto y sin ella quedan en guiones. El cajón de conexión lo decía bien y nadie
+  // lo abre, así que "no me aparecen los neumáticos" se leía como un producto roto.
   const chip = $("chip-sin-app");
   chip.hidden = !(d.connected > 0 && d.reporting === 0);
   chip.title =
-    "Sectores, Box, Neum. y Comb. solo existen en la Shared Memory del juego: los manda la app de " +
+    "Box, Neum. y Comb. solo existen en la Shared Memory del juego: los manda la app de " +
     "Race Control que instala cada piloto, no el servidor de carrera. Clickeá para revisar la conexión.";
 
   // Si los comandos todavía salen a loopback con telemetría entrando, el servidor no se identificó

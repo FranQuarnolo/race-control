@@ -141,3 +141,51 @@ test("stop() deja de escuchar: lo que llegue después no se procesa", async () =
   assert.equal(rc.udpClient.getStats().packetsReceived, 0);
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
+
+/**
+ * El circuito se toma del `SESSION_INFO`, no solo del `NEW_SESSION`.
+ *
+ * El caso real del producto es conectar Race Control a un servidor de Assetto Corsa que ya viene
+ * corriendo hace rato. Ahí `NEW_SESSION` no llega nunca —ese evento marca el ARRANQUE de una
+ * sesión—, y hasta la 1.0 eso dejaba al `trackLearner` sin circuito para siempre. El síntoma en
+ * pista fue Spa: el mapa vacío y, como `onCarUpdate` arranca con `if (!this.track) return`, los
+ * autos tampoco aparecían. Dos bugs que parecían distintos y eran este.
+ *
+ * `SESSION_INFO` es la respuesta al `GET_SESSION_INFO` que el latido manda cada 5 segundos, así
+ * que con esto el mapa sale a los 5 segundos de conectar, pase lo que pase.
+ */
+test("el circuito se carga aunque el servidor ya estuviera corriendo (sin NEW_SESSION)", async () => {
+  const { rc, dataDir } = await levantar("pista", 12650, 13650);
+  try {
+    assert.equal(rc.trackLearner.isCatalogued(), false, "no debería haber circuito antes del primer paquete");
+
+    // Lo que llega de un servidor que ya estaba en pista: la respuesta a nuestro propio pedido.
+    rc.udpClient.emit("SESSION_INFO", {
+      protocolVersion: 4,
+      sessionIndex: 0,
+      currentSessionIndex: 0,
+      sessionCount: 1,
+      serverName: "Liga de prueba",
+      track: "spa",
+      trackConfig: "",
+      name: "Race",
+      sessionType: 3,
+      timeMinutes: 20,
+      laps: 0,
+      waitTimeSeconds: 0,
+      ambientTemp: 20,
+      roadTemp: 28,
+      weatherGraphics: "3_clear",
+      elapsedMs: 0,
+    });
+
+    assert.equal(rc.trackLearner.isCatalogued(), true, "spa está en el catálogo y tendría que haberse cargado");
+
+    const outline = rc.trackLearner.getOutline();
+    assert.ok(outline, "sin outline el panel recibe 204 y el mapa queda vacío");
+    assert.ok(outline!.points.length > 100, `el trazado de Spa vino con ${outline!.points.length} puntos`);
+    assert.equal(outline!.track, "spa");
+  } finally {
+    limpiar(rc, dataDir);
+  }
+});

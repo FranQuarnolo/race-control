@@ -60,10 +60,18 @@ dirigiendo. Lo único que se descarga es la app de los pilotos.
 1. Abrí Content Manager.
 2. Arrastrá `RaceControlClient.zip` a la ventana, como instalarías un mod de auto o pista. 📦
 3. Activá en el juego, en el menú de Apps, las ventanas que quieras: **RC Mensajes** (sanciones y
-   vueltas invalidadas), **RC Banderas** y **RC Largada**. ✅
+   vueltas invalidadas, en rojo), **RC Banderas** (un cuadro de color) y **RC Largada** (cinco
+   luces). ✅
+4. Acomodalas en pantalla. Una sola vez, y mejor antes de largar. 🖱️
 
 Nada más — ni una IP que tipear, ni un archivo que editar. El servidor le manda sola la dirección
 y una credencial por el chat del juego apenas entrás. 🎮
+
+Son transparentes y sin barra de título: en reposo casi no se ven. Para volver a agarrarlas,
+pasales el mouse por encima.
+
+> ⚠️ **Si la instalaste antes de la 1.1, reinstalala.** La app cambió entera. Arrastrá el `.zip`
+> nuevo igual que la primera vez: pisa lo anterior sin dejar restos.
 
 ## 🖥️ Para el admin: qué hay adentro del panel
 

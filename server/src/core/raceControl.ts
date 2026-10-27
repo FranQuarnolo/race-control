@@ -244,7 +244,23 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // Las condiciones de la sesión que muestra el mapa: circuito, clima, temperaturas y cuánto
   // falta. `SESSION_INFO` es la respuesta a una consulta nuestra; `NEW_SESSION` llega solo.
   const sessionTracker = new SessionTracker();
-  udpClient.on("SESSION_INFO", (data: SessionInfo) => sessionTracker.onSessionInfo(data));
+  udpClient.on("SESSION_INFO", (data: SessionInfo) => {
+    sessionTracker.onSessionInfo(data);
+    // El circuito también se toma de acá, y no solo del `NEW_SESSION` de más abajo.
+    //
+    // `NEW_SESSION` llega cuando la sesión ARRANCA. El caso normal del producto es el contrario:
+    // el admin conecta Race Control a un servidor que ya viene corriendo hace rato. Ahí ese evento
+    // no llega nunca, y hasta la 1.0 eso dejaba al `trackLearner` sin circuito para siempre —con
+    // dos efectos que parecían bugs distintos y eran el mismo—: el catálogo no se cargaba, así que
+    // el mapa salía vacío; y `onCarUpdate` arranca con `if (!this.track) return`, así que tampoco
+    // se aprendía nada de la telemetría. El panel quedaba sin trazado y sin autos, sin un error.
+    //
+    // `SESSION_INFO` es la respuesta a nuestro `GET_SESSION_INFO`, que el latido de
+    // `ConnectivityManager` manda cada 5 segundos, y trae los mismos campos. Así el mapa aparece a
+    // los 5 segundos de conectar, venga o no un `NEW_SESSION`. `setTrack` compara la clave y sale
+    // enseguida si no cambió, así que llamarlo doce veces por minuto no cuesta nada.
+    trackLearner.setTrack(data.track, data.trackConfig);
+  });
   // Acá vivía un `setInterval` propio que pedía `SESSION_INFO` cada 30 segundos, porque el
   // servidor no reenvía las condiciones solo y el tiempo corrido se desfasa si no se pregunta.
   // Eso ahora lo hace el latido de `ConnectivityManager`, cada 5 segundos y en el mismo tick que
@@ -336,12 +352,20 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // bandeja, incluido el `detail`. Duplicarlo solo haría que el admin los cuente dos veces.
   trackLimits.on("incident", (data: TrackLimitsIncident) => {
     incidentEngine.reportObserved(data);
-    // El corte se le avisa al piloto; el desfasaje de telemetría no. Ese último es una sospecha
-    // sobre su propia app y es asunto del comisario: decírselo al sospechoso solo le avisaría que
-    // lo están mirando.
-    if (data.kind === "cut-lap") {
-      messageBoard.push(data.driverGuid, "warning", `Vuelta ${data.lap} invalidada: te fuiste de pista`);
-    }
+    // Acá vivía el aviso "Vuelta N invalidada" que se le empujaba al piloto por la pizarra. Se
+    // sacó en la 1.1 y no porque sobrara, sino porque llegaba tarde: esto se dispara con el
+    // `LAP_COMPLETED` del servidor, o sea al cruzar meta, cuando el piloto ya manejó la vuelta
+    // entera apretando sin saber que no valía. Ahora lo avisa la app en el instante del corte,
+    // leyendo `LapInvalidated` del propio juego (ver `checkLapInvalidated` en
+    // RaceControlClient.py). Mandar los dos dejaría el mismo aviso dos veces, el segundo a
+    // destiempo.
+    //
+    // El incidente sí se sigue registrando acá arriba: para el comisario la unidad de juicio es
+    // la vuelta cerrada, y eso no cambió.
+    //
+    // El desfasaje de telemetría nunca se avisó y sigue sin avisarse: es una sospecha sobre la
+    // app del propio piloto y es asunto del comisario. Decírselo al sospechoso solo le avisaría
+    // que lo están mirando.
   });
   // Única infracción con sanción automática habilitable: contar ruedas afuera es objetivo. Reusa
   // el motor de pit porque la sanción se cumple igual, pasando por el pit lane.
