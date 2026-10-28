@@ -1032,13 +1032,13 @@ function renderCarBadge(td, car) {
 }
 
 /**
- * Escudo con monograma: el reemplazo del logo cuando Assetto Corsa no está instalado en la PC del
- * admin o el auto es un mod sin `badge.png`.
+ * Escudo con monograma: el reemplazo del logo cuando `brandLogo` viene `null` —la marca del auto
+ * no está en la biblioteca `brands/`, o el archivo no cargó.
  *
  * Por qué un escudo y no el nombre de la marca en texto: la columna de auto se lee de reojo a
  * media carrera, y una palabra obliga a leerla. Una forma de color constante por marca se
- * reconoce sin leer, que es exactamente lo que hace el logo real. No se empaquetan archivos de
- * logos de terceros en el repo —son marcas registradas—; esto se dibuja con CSS.
+ * reconoce sin leer, que es exactamente lo que hace el logo real. Se dibuja con CSS en vez de
+ * pedir un archivo, así no hay 404 ni parpadeo mientras se resuelve.
  */
 function brandShield(car) {
   const brand = car.brand || car.carModel || "";

@@ -427,25 +427,12 @@ input[type="date"] {
 
 /* --------------------------------------------------------- acciones de una fila del historial */
 
-.btn-icono {
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  color: var(--muted);
-  border-radius: 6px;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  margin-top: 0;
-  margin-right: 6px;
-  font-size: 13px;
-}
-.btn-icono:hover { border-color: var(--accent); color: var(--text); }
-.btn-icono.peligro { color: #ffb4b4; border-color: rgba(224, 85, 85, 0.4); }
-.btn-icono.peligro:hover { border-color: var(--red); background: rgba(224, 85, 85, 0.1); }
-/* Segundo paso de un borrado, igual criterio que el kick del panel: primer click arma, segundo
+/* Antes eran 👁 y 🗑 como único par de emoji de toda la interfaz del operador: quedaban de otro
+   estilo al lado de un kebab de texto (⋮) y de las filas de admins, que siempre usaron botones de
+   palabra. Pasan a ser botones de texto, `.compacto` como el resto de la tabla.
+   Segundo paso de un borrado, igual criterio que el kick del panel: primer click arma, segundo
    ejecuta, y se desarma solo a los 4 s. Así una tabla no puede perder un evento de un click solo. */
-.btn-icono.arming { background: var(--red); color: #1a0505; border-color: var(--red); }
-.btn-icono:disabled { opacity: 0.4; cursor: not-allowed; }
+.arming { background: var(--red); color: #1a0505; border-color: var(--red); }
 
 /* ---------------------------------------------------------------------- modal de detalle */
 

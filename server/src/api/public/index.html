@@ -177,7 +177,16 @@
           </thead>
           <tbody id="cars-body"></tbody>
         </table>
-        <p class="empty" id="cars-empty">Todavía no hay nadie en pista.</p>
+        <div class="empty" id="cars-empty">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" />
+            <circle cx="12" cy="12" r="1.6" />
+            <path d="M12 6v2" />
+            <path d="M7.8 15.8 9.2 14.4" />
+            <path d="M16.2 15.8 14.8 14.4" />
+          </svg>
+          <span>Esperando el primer auto en pista.</span>
+        </div>
       </div>
     </section>
 
@@ -238,7 +247,7 @@
     <section class="card">
       <h2>
         Incidentes a revisar
-        <span class="hint">Acá se registra lo que pasó, no quién tuvo la culpa. Eso lo decidís vos.</span>
+        <span class="hint">El motor los detecta; la sanción la aplicás vos.</span>
       </h2>
       <div class="table-wrap" id="incidents-list"></div>
     </section>
@@ -287,7 +296,7 @@
            hace falta volver a poner el paso. -->
       <section>
         <h3>Cómo conectar tu servidor</h3>
-        <p class="muted">Se hace una sola vez, y lo hace el soporte de tu hosting. Un paso.</p>
+        <p class="muted">Se hace una sola vez, y lo hace el soporte de tu hosting.</p>
 
         <ol class="pasos">
           <li>

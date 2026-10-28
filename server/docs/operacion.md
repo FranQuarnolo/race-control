@@ -126,10 +126,10 @@ estaba corriendo.
 ## Ver el historial de una liga
 
 "Ver historial", en el menú ⋮, abre una fila por sesión de esa liga —práctica, clasificación o
-carrera—, con fecha, circuito y estado. El ojito 👁 abre el mismo informe que ya baja
-`/api/report.csv`: clasificación, sanciones e incidentes. La basurita 🗑 borra una sesión, con doble
-confirmación —primer click arma, segundo ejecuta—; una sesión en curso no se puede borrar, porque
-el worker la sigue escribiendo.
+carrera—, con fecha, circuito y estado. El botón **Ver** abre el mismo informe que ya baja
+`/api/report.csv`: clasificación, sanciones e incidentes. El botón **Borrar** borra una sesión, con
+doble confirmación —primer click arma, segundo ejecuta—; una sesión en curso no se puede borrar,
+porque el worker la sigue escribiendo.
 
 El historial vive en disco, en la carpeta de datos de la liga, igual que `config.json`: sigue
 visible aunque el worker esté parado o la cuenta desactivada. Cada fila sale del UDP del propio

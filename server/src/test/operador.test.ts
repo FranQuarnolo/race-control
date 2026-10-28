@@ -46,9 +46,9 @@ test("todo id que operador.js busca con $() existe en operador.html", () => {
 
 /**
  * El menú de tres puntitos y las acciones de la fila del historial se dibujan en JS, con clases
- * escritas a mano (`btn-kebab`, `menu-fila`, `menu-item`, `btn-icono`, `pastilla`). Una errata en
- * alguna de esas no rompe nada: el elemento se dibuja igual, sin formato, en medio de una tabla
- * formateada — el mismo riesgo que `panel.test.ts` ya cubre del lado del panel de carrera.
+ * escritas a mano (`btn-kebab`, `menu-fila`, `menu-item`, `pastilla`). Una errata en alguna de esas
+ * no rompe nada: el elemento se dibuja igual, sin formato, en medio de una tabla formateada — el
+ * mismo riesgo que `panel.test.ts` ya cubre del lado del panel de carrera.
  */
 test("las clases que arma operador.js para el kebab y el historial tienen regla en portal.css", () => {
   const css = sinComentarios(leer(PORTAL, "portal.css"));
@@ -60,7 +60,7 @@ test("las clases que arma operador.js para el kebab y el historial tienen regla 
     "menu-fila",
     "menu-item",
     "peligro",
-    "btn-icono",
+    "compacto",
     "arming",
     "pastilla",
     "en-progreso",
@@ -106,11 +106,11 @@ test("el historial habla con /api/operador/ligas/:id/eventos y el borrado pide d
   assert.ok(/4000/.test(js), "el armado del borrado no se desarma solo a los 4 segundos, como el kick del panel");
 });
 
-test("el modal de detalle existe y se abre desde el ojito de cada fila", () => {
+test("el modal de detalle existe y se abre desde el botón Ver de cada fila", () => {
   const js = leer(PORTAL, "operador.js");
   const html = leer(PORTAL, "operador.html");
 
   assert.ok(html.includes('<dialog id="modal-evento">'), "falta el <dialog> de detalle en operador.html");
-  assert.ok(/verDetalle\(/.test(js), "falta `verDetalle`: el ojito de la fila no abre nada");
+  assert.ok(/verDetalle\(/.test(js), "falta `verDetalle`: el botón Ver de la fila no abre nada");
   assert.ok(/showModal\(\)/.test(js), "nadie llama a `showModal()`: el <dialog> nunca se muestra");
 });

@@ -3,6 +3,50 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.5] — 2026-10-28
+
+**Repaso visual y de textos después de probar la 1.4 con los ojos puestos en pantalla**, no en el
+código: tres detalles sueltos que recién se notan usando el producto.
+
+### Los íconos del historial eran los únicos emoji de toda la interfaz
+
+**Síntoma:** el ojito y la basurita de la fila de historial (`/operador`) eran 👁 y 🗑, emoji a
+color, al lado de un kebab de texto (⋮) y de una tabla de admins que siempre usó botones de
+palabra.
+
+**Decisión:** pasan a ser botones `.compacto` con texto ("Ver", "Borrar"), igual criterio que el
+resto de la tabla. La clase `.btn-icono` se fue del CSS; `.arming` (el estado de "confirmá para
+borrar") queda genérica para que la siga usando cualquier botón.
+
+### Varios textos del panel y de la landing sonaban a eslogan, no a producto
+
+**Síntoma:** frases como "Acá se registra lo que pasó, no quién tuvo la culpa. Eso lo decidís vos.",
+"Dirigí tu carrera, no el software" o "Tres pasos, una sola vez" seguían el mismo molde de
+contraste ("X, no Y") y de frase corta cortada con un punto, que es más de copy publicitario
+genérico que de la voz directa que tiene el resto del producto.
+
+**Decisión:** se reescribieron a favor de decir el mecanismo en vez de la frase ingeniosa: el motor
+detecta y la persona decide, en vez de "no quién tuvo la culpa"; qué es el producto en vez de contra
+qué se define. De paso, la torre vacía ("Todavía no hay nadie en pista.") suma un ícono de volante
+centrado en vez de ser solo una línea de texto perdida arriba de una tabla sin filas.
+
+### El logo del auto se veía con un recuadro blanco duro, no con la placa suave que ya existía
+
+**Síntoma:** varios logos de marca (Porsche, Lotus, Kia, Bentley, entre otros) se veían con un fondo
+blanco opaco y sin el radio de borde que sí tiene el resto de los logos de la misma biblioteca.
+
+**Causa:** la biblioteca `brands/` ya tiene una placa clara propia en CSS (`.car-badge`) pensada
+para los logos que son solo líneas oscuras y necesitan fondo claro para no desaparecer sobre el
+panel. Doce de los 126 SVG de la biblioteca traían además su propio rectángulo blanco de fondo
+horneado en el archivo —herencia de cómo se exportaron—, que tapaba esa placa con un blanco más
+duro y sin esquinas redondeadas.
+
+**Decisión:** se les sacó ese rectángulo a los doce archivos; la placa de `.car-badge` queda como el
+único fondo, y es la misma para toda la biblioteca. De paso se actualizaron dos comentarios de
+`styles.css` y `app.js` que describían una versión anterior de este sistema (logos leídos de la
+instalación local de Assetto Corsa) y habían quedado desactualizados desde que la biblioteca
+`brands/` los reemplazó.
+
 ## [1.4] — 2026-10-28
 
 **La lista que dejó la 1.1, tercera y última tanda: el panel del operador.** Las dos primeras

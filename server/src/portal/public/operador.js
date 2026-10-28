@@ -403,22 +403,22 @@ function pintarHistorial() {
     tr.appendChild(tdEstado);
 
     const tdAcciones = el("td", "acciones");
-    const ojito = el("button", "btn-icono", "👁");
-    ojito.type = "button";
-    ojito.title = "Ver el detalle";
-    ojito.addEventListener("click", () => verDetalle(ev));
-    tdAcciones.appendChild(ojito);
+    const verBoton = el("button", "compacto", "Ver");
+    verBoton.type = "button";
+    verBoton.title = "Ver el detalle";
+    verBoton.addEventListener("click", () => verDetalle(ev));
+    tdAcciones.appendChild(verBoton);
 
-    const basurita = el("button", "btn-icono peligro", "🗑");
-    basurita.type = "button";
+    const borrarBoton = el("button", "compacto peligro", "Borrar");
+    borrarBoton.type = "button";
     if (enCurso) {
-      basurita.disabled = true;
-      basurita.title = "Todavía está en curso";
+      borrarBoton.disabled = true;
+      borrarBoton.title = "Todavía está en curso";
     } else {
-      basurita.title = "Borrar";
-      basurita.addEventListener("click", () => clickBorrar(ev, basurita));
+      borrarBoton.title = "Borrar";
+      borrarBoton.addEventListener("click", () => clickBorrar(ev, borrarBoton));
     }
-    tdAcciones.appendChild(basurita);
+    tdAcciones.appendChild(borrarBoton);
     tr.appendChild(tdAcciones);
 
     cuerpo.appendChild(tr);

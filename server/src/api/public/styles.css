@@ -537,7 +537,20 @@ tbody tr.selectable:hover { background: #1d2029; }
 tbody tr.selected, tbody tr.selected:hover { background: rgba(239, 142, 60, 0.14); }
 tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 
-.empty { color: var(--muted); font-size: 13px; padding: 14px 6px; }
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  padding: 28px 6px;
+}
+
+/* El ícono solo lo usa la torre: es el estado que más tiempo pasa vacío, a la espera del primer
+   auto, y antes era un renglón de texto solo que se perdía arriba de una tabla sin filas. */
+.empty-icon { width: 26px; height: 26px; opacity: 0.7; }
 
 .badge {
   display: inline-block;
@@ -686,9 +699,11 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 }
 tbody tr.selected .c-pos { color: var(--yellow); }
 
-/* Logo de marca leído de la instalación local de Assetto Corsa. Fondo claro tenue porque los
-   badges del juego son logos a color pensados sobre fondo claro: sobre el panel oscuro, varios
-   (Porsche, Lotus) quedan casi invisibles. */
+/* Logo de marca de la biblioteca que viene empaquetada con la app (`brands/`, ver `renderCarBadge`
+   en app.js). Fondo claro tenue porque son logos a color pensados para imprimirse sobre fondo
+   blanco: sobre el panel oscuro, varios (Porsche, Lotus) quedan casi invisibles sin esa placa
+   detrás. Algunos de los SVG de la biblioteca traían ellos mismos un rectángulo blanco de fondo —se
+   les sacó al bajarlos, porque duplicaba esta placa con un blanco más duro y sin el radio. */
 .car-badge {
   width: 20px;
   height: 20px;
@@ -698,10 +713,10 @@ tbody tr.selected .c-pos { color: var(--yellow); }
   border-radius: 4px;
   padding: 1px;
 }
-/* Sin Assetto Corsa instalado, o auto mod sin badge: escudo con el monograma de la marca, del
-   mismo tamaño que el logo real para que la columna no salte de ancho al mezclarse las dos
-   fuentes en la misma parrilla. La forma se dibuja con clip-path: no hay archivos de logos de
-   terceros en el repo. */
+/* Escudo con el monograma de la marca: lo que se dibuja cuando `brandLogo` viene `null` —la marca
+   no está en `brands/`, o es un mod sin badge reconocible— del mismo tamaño que el logo real para
+   que la columna no salte de ancho al mezclarse las dos fuentes en la misma parrilla. La forma se
+   dibuja con clip-path, sin depender de ningún archivo. */
 .brand-shield {
   --shield: #3a4050;
   --shield-ink: #ffffff;
