@@ -1,6 +1,6 @@
 {
   "name": "Race Control",
   "author": "Race Control",
-  "version": "1.2",
-  "description": "Tres overlays transparentes para el menu del juego: RC Mensajes (sanciones y vueltas invalidadas, en rojo), RC Banderas (un cuadro de color con la bandera vigente) y RC Largada (el semaforo de cinco luces de la largada en movimiento)."
+  "version": "1.3",
+  "description": "Cuatro overlays transparentes para el menu del juego: RC Mensajes (contador de cortes, sancion pendiente, y los avisos de direccion de carrera en rojo), RC Banderas (un cuadro de color con la bandera vigente), RC Largada (el semaforo de cinco luces de la largada en movimiento) y RC Alerta (el marco rojo que aparece si falta la credencial)."
 }

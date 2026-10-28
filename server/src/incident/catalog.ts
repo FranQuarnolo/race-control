@@ -51,6 +51,19 @@ export interface InfractionCatalog {
   trackLimits: TrackLimitsRule;
   wrongWay: WrongWayRule;
   disconnectDuringRace: SimpleRule;
+  /**
+   * Los dos excesos de velocidad. **No deciden si se sanciona** —eso ya lo deciden las secciones
+   * de Largada y de Pit, que son las que tienen el km/h y los segundos de tolerancia—: deciden
+   * qué pasa con el **registro** del hecho.
+   *
+   * Hasta la 1.2 el exceso emitía la sanción y nada más. Para la bandeja era como si no hubiera
+   * pasado: el resumen de un piloto podía decir "0 incidentes" con tres sanciones de pit lane
+   * encima, que es justo el dato que el comisario necesita para decidir si está pasado de vuelta
+   * o si el límite está mal puesto. Por eso son `SimpleRule` y no tienen umbral propio: duplicar
+   * el km/h acá sería tener dos números para lo mismo, y alguien iba a cambiar solo uno.
+   */
+  pitSpeeding: SimpleRule;
+  formationSpeeding: SimpleRule;
 }
 
 /**
@@ -59,6 +72,11 @@ export interface InfractionCatalog {
  * Es uno solo, y es a propósito. En un toque el servidor sabe que hubo contacto, **no quién tuvo
  * la culpa**: ofrecer "sancionar" ahí sería prometer un juicio que el dato no respalda. Las
  * salidas de pista sí: contar ruedas afuera es objetivo y no se interpreta.
+ *
+ * Los dos excesos de velocidad **tampoco están**, aunque son todavía más objetivos: su sanción ya
+ * se configura en Largada y en Pit, con su umbral y su tolerancia. Ofrecer acá un segundo
+ * interruptor para lo mismo terminaría en dos lugares que dicen cosas distintas, y el día que
+ * pasen a contradecirse nadie va a saber cuál manda.
  */
 export const AUTO_PENALTY_ALLOWED = new Set<InfractionType>(["trackLimits"]);
 
@@ -79,6 +97,11 @@ export function defaultInfractions(): InfractionCatalog {
     // Conservador a propósito: un tren de autos en una curva lenta puede parecer una retención
     // sin serlo. Diez segundos es mucho más de lo que tarda cualquier piloto de buena fe.
     disconnectDuringRace: { action: "log" },
+    // Van a la bandeja y no a "solo registrar": el piloto ya recibió su sanción automática, así
+    // que lo que queda es que el comisario vea el patrón —tres excesos del mismo auto en pit lane
+    // no es lo mismo que uno— y pueda anularla si el límite estaba mal.
+    pitSpeeding: { action: "review" },
+    formationSpeeding: { action: "review" },
   };
 }
 

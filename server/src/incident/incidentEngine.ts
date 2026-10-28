@@ -17,7 +17,9 @@ export type IncidentKind =
   | "cut-lap"
   | "telemetry-mismatch"
   | "wrong-way"
-  | "disconnect";
+  | "disconnect"
+  | "pit-speeding"
+  | "formation-speeding";
 
 /** Los que no nacen de una colisión: los reportan los watchers y el tracker de límites. */
 export type ObservedKind = Exclude<IncidentKind, "car-contact" | "env-collision">;
@@ -32,6 +34,11 @@ export type ObservedKind = Exclude<IncidentKind, "car-contact" | "env-collision"
  * `cut-lap` sí es una infracción y comparte la entrada de `trackLimits`: son la misma regla vista
  * por dos ojos distintos —el del servidor, que tacha la vuelta, y el de la app del piloto, que
  * cuenta ruedas—. Apagar "límites de pista" en Reglas tiene que apagar las dos.
+ *
+ * Los dos excesos de velocidad tienen entrada propia desde la 1.3, y lo que esa entrada decide es
+ * **solo si el hecho entra a la bandeja**: la sanción ya la emitió el monitor que lo detectó, con
+ * el umbral que vive en Largada o en Pit. Poner el tipo en "No controlar" deja de mostrarlo acá;
+ * no deja de sancionarlo.
  */
 const TYPE_OF_KIND: Record<IncidentKind, InfractionType | null> = {
   "car-contact": "carContact",
@@ -40,6 +47,8 @@ const TYPE_OF_KIND: Record<IncidentKind, InfractionType | null> = {
   "cut-lap": "trackLimits",
   "wrong-way": "wrongWay",
   disconnect: "disconnectDuringRace",
+  "pit-speeding": "pitSpeeding",
+  "formation-speeding": "formationSpeeding",
   "telemetry-mismatch": null,
 };
 
@@ -231,6 +240,15 @@ export class IncidentEngine extends EventEmitter {
     lap: number;
     splinePosition: number;
     detail: string;
+    /**
+     * Velocidad que queda escrita en el incidente, si la que importa no es la de ahora.
+     *
+     * Para un exceso de velocidad es la **máxima del pasaje**, que es el dato por el que se
+     * sancionó. La actual ya no sirve: el monitor avisa después de los segundos de tolerancia y
+     * el auto, para entonces, suele venir frenando — el incidente diría "48 km/h" al lado de una
+     * sanción por haber ido a 90.
+     */
+    speedKmh?: number;
   }): Incident | null {
     const car = this.stateTracker.get(args.carId);
     const incident: Incident = {
@@ -242,7 +260,7 @@ export class IncidentEngine extends EventEmitter {
           carId: args.carId,
           driverGuid: args.driverGuid,
           driverName: args.driverName,
-          speedKmh: car?.speedKmh ?? 0,
+          speedKmh: args.speedKmh ?? car?.speedKmh ?? 0,
         },
       ],
       geometry: "unknown",

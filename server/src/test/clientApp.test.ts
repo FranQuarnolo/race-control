@@ -140,6 +140,92 @@ test("todas las ventanas de la app del piloto se crean sin fondo ni título", ()
 });
 
 /**
+ * Los sonidos que el código nombra tienen que estar en disco.
+ *
+ * `playWav` hace `os.path.exists` y, si no está, loguea y sigue. Es la decisión correcta en pista
+ * —mejor una app muda que una app caída— y es también la que hace que un `.wav` faltante no se
+ * note nunca desde acá: el `.zip` se arma igual, se reparte igual, y el único síntoma es que a
+ * veinticuatro personas no les suena la largada.
+ */
+test("los .wav que la app reproduce existen en la carpeta que se empaqueta", () => {
+  const re = /os\.path\.join\(os\.path\.dirname\(__file__\), "sounds", "([^"]+)"\)/g;
+  const nombrados: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(ejecutable)) !== null) nombrados.push(m[1]);
+
+  assert.ok(nombrados.length >= 2, `se esperaban al menos 2 sonidos y se encontraron ${nombrados.length}`);
+  for (const archivo of nombrados) {
+    const ruta = path.join(CLIENT, "sounds", archivo);
+    assert.ok(fs.existsSync(ruta), `falta ${ruta}, que RaceControlClient.py reproduce`);
+    // Un .wav de menos de 1 KB es un archivo roto o un placeholder vacío, no un sonido.
+    assert.ok(fs.statSync(ruta).size > 1024, `${archivo} pesa casi nada: no es un .wav usable`);
+  }
+});
+
+/**
+ * El contador de cortes se muestra sin esperar al servidor.
+ *
+ * Toda la gracia del cambio es la inmediatez: el dato autoritativo del servidor sale del
+ * `LAP_COMPLETED`, que no llega hasta que el piloto cruza meta —hasta un minuto y medio después
+ * del corte—, así que si la app no adelanta la cuenta el piloto se entera de que iba por el
+ * tercero cuando ya está sancionado. Es un cableado de tres puntas (el flanco, el contador local,
+ * la corrección del poll) y cortar cualquiera lo deja funcionando "bien" pero tarde, que es
+ * justamente el bug que esto viene a arreglar.
+ */
+test("el contador de cortes está cableado por los dos lados: el flanco local y la corrección del poll", () => {
+  // El flanco de `checkLapInvalidated` suma localmente y hace sonar la chicharra.
+  const flanco = /def checkLapInvalidated\(\)[\s\S]*?(?=\ndef |\n[A-Za-z_]+ =|$)/.exec(ejecutable);
+  assert.ok(flanco, "no se encontró checkLapInvalidated");
+  assert.ok(/countCutLocally\(\)/.test(flanco![0]), "el flanco del corte ya no incrementa el contador local");
+  assert.ok(/playCutWarning\(\)/.test(flanco![0]), "el flanco del corte ya no hace sonar la chicharra");
+
+  // El poll aplica el estado que manda el servidor, que es lo único que sabe cuándo se reinicia.
+  assert.ok(/applyServerStatus\(data\.get\("status"/.test(ejecutable), "el poll dejó de leer `status`");
+  assert.ok(
+    /cuts_local_extra = 0/.test(ejecutable),
+    "al llegar una cuenta nueva del servidor hay que resetear el extra local, o los cortes se suman dos veces"
+  );
+
+  // Y los dos renglones fijos existen y no viven dentro de la cola de avisos.
+  for (const etiqueta of ["label_cuts", "label_pending"]) {
+    assert.ok(new RegExp("ac\\.setText\\(" + etiqueta + ",").test(ejecutable), `nadie escribe en ${etiqueta}`);
+  }
+  assert.ok(
+    /"CUTS: \{0\}\/\{1\}"/.test(ejecutable),
+    "cambió el formato del contador: el piloto tiene que ver cuántos lleva y cuántos lo sancionan"
+  );
+});
+
+/**
+ * La ventana de banderas no vuelve a estar verde todo el tiempo.
+ *
+ * Hasta la 1.2 `graphics.flag == 0` —el valor del 95% de una carrera— pintaba verde fijo, con lo
+ * cual el piloto salía detrás del pace car con un cuadro verde al lado. Es un bug que no falla:
+ * la app anda, dibuja, y lo que dibuja es exactamente lo contrario de lo que pasa. Volver a poner
+ * un color por defecto en el camino del 0 lo reintroduce sin que nada se rompa.
+ */
+test("la bandera no se dibuja sola: sin bandera y sin largada, la ventana queda vacía", () => {
+  const render = /def renderFlag\(deltaT\)[\s\S]*?(?=\ndef )/.exec(ejecutable);
+  assert.ok(render, "no se encontró renderFlag");
+
+  assert.ok(
+    /if flag == 0 and not enVerdeDeLargada\(\):\s*\n\s*return/.test(render![0]),
+    "renderFlag ya no corta en seco con la bandera 0: vuelve el cuadro verde durante toda la carrera"
+  );
+  // El verde sale del semáforo del poll, no de la Shared Memory: el juego no tiene ninguna
+  // bandera para "arrancó la carrera", así que si esta ventana solo mirara `graphics.flag` el
+  // verde de la largada no existiría.
+  assert.ok(/def enVerdeDeLargada\(\)/.test(ejecutable), "se borró el puente entre la bandera y el semáforo");
+  assert.ok(
+    /light_state != "green"/.test(ejecutable),
+    "enVerdeDeLargada dejó de mirar el estado del semáforo que trae el poll"
+  );
+  // Y la amarilla parpadea, que es lo único que la distingue de un cuadro que ya estaba.
+  assert.ok(/flag == FLAG_YELLOW and int\(time\.time\(\) \/ FLAG_BLINK_SECONDS\)/.test(render![0]),
+    "la bandera amarilla dejó de parpadear");
+});
+
+/**
  * El `ui.json` y el código tienen que nombrar las mismas apps.
  *
  * Es lo que lee Content Manager para listar la app. No rompe nada si se desincroniza —de ahí que

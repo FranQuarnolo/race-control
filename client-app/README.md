@@ -5,53 +5,93 @@
 1. Abrir Content Manager.
 2. Arrastrar `RaceControlClient.zip` (se lo pasa el admin de la liga, o se baja del release) a la
    ventana de Content Manager, como se instala cualquier mod de auto/pista.
-3. Activar las ventanas dentro del juego: menú de Apps (AC Apps) → **RC Mensajes**, **RC Banderas**
-   y **RC Largada**. Son tres entradas separadas y se activan las que uno quiera.
+3. Activar las ventanas dentro del juego: menú de Apps (AC Apps) → **RC Mensajes**, **RC Banderas**,
+   **RC Largada** y **RC Alerta**. Son cuatro entradas separadas y se activan las que uno quiera —
+   aunque conviene tener las cuatro: en reposo ninguna ocupa pantalla.
 4. Acomodarlas en pantalla. Una sola vez, y mejor antes de la primera carrera.
 
 No hay ningún archivo que editar ni ninguna IP que tipear: la app descubre sola a qué backend
 reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 
-> **Si ya la tenías instalada de una versión anterior a la 1.1, hay que reinstalarla.** Arrastrá el
+> **Si ya la tenías instalada de una versión anterior a la 1.3, hay que reinstalarla.** Arrastrá el
 > `.zip` nuevo igual que la primera vez: pisa lo que había sin dejar restos. El `ui.json` dice la
 > versión instalada, así que se puede verificar desde el listado de apps del juego.
 
-## Las tres ventanas
+## Las cuatro ventanas
 
 | Ventana | Qué muestra |
 |---|---|
-| **RC Mensajes** | Los avisos de dirección de carrera —sanciones, vueltas invalidadas, sanciones anuladas— en rojo y en letra grande. Arriba, en gris chiquito, el estado de la conexión con Race Control. |
+| **RC Mensajes** | De arriba abajo: el estado de la conexión en gris chiquito, el contador de cortes (`CUTS: 3/5`) en amarillo y grande, la sanción que falta cumplir en naranja, y abajo los avisos de dirección de carrera en rojo. |
 | **RC Banderas** | Un cuadro con el color de la bandera vigente, leída de la memoria del propio juego. |
 | **RC Largada** | Cinco luces: rojas parpadeando en la formación, verdes con el audio al verde. |
+| **RC Alerta** | Un marco rojo pulsante, solo si falta la credencial. Ver "Si aparece el marco rojo". |
 
-Son tres apps independientes a propósito: hasta la 0.7 era una sola ventana con todo apilado, así
-que el piloto que solo quería ver las banderas tenía que aguantar el resto ocupando pantalla.
+Son apps independientes a propósito: hasta la 0.7 era una sola ventana con todo apilado, así que
+el piloto que solo quería ver las banderas tenía que aguantar el resto ocupando pantalla.
 
 ### Desde la 1.1 son overlays, no ventanas
 
-No tienen fondo, ni borde, ni barra de título, ni ícono. En reposo **RC Largada** no se ve en
-absoluto y **RC Mensajes** queda vacía: lo que no está pasando no ocupa un pixel. Para moverlas o
-redimensionarlas, pasales el mouse por encima y el marco reaparece.
+No tienen fondo, ni borde, ni barra de título, ni ícono. En reposo no se ve **ninguna**: lo que no
+está pasando no ocupa un pixel. Para moverlas o redimensionarlas, pasales el mouse por encima y el
+marco reaparece.
 
-La excepción es **RC Banderas**, que siempre muestra algo —verde cuando no hay bandera—. Es
-deliberado: "pista despejada" también es información, y un cuadro que desaparece cuando no pasa
-nada dejaría sin saber si no hay bandera o si la app se colgó.
-
-Los colores son los del juego: verde (ninguna), amarillo, azul, negro, blanco, el tablero de
-cuadros de la final y un círculo naranja sobre negro para la de penalidad. Las dos últimas se
-dibujan distinto porque un color plano no alcanza: la de penalidad es negra igual que la negra a
-secas, y sin el círculo serían indistinguibles.
+Los colores de la bandera son los del juego: amarillo, azul, negro, blanco, el tablero de cuadros
+de la final y un círculo naranja sobre negro para la de penalidad. Las dos últimas se dibujan
+distinto porque un color plano no alcanza: la de penalidad es negra igual que la negra a secas, y
+sin el círculo serían indistinguibles.
 
 **El semáforo** arranca invisible. Cuando el admin aprieta "Iniciar formación" aparecen las cinco
 luces parpadeando en rojo; al "Verde" pasan a verde y suena el audio; tres segundos después
 desaparecen.
 
-**Las tres comparten los mismos hilos de fondo.** Cerrar una ventana —o no abrir ninguna— no apaga
+**Todas comparten los mismos hilos de fondo.** Cerrar una ventana —o no abrir ninguna— no apaga
 el heartbeat ni el reporte de telemetría: solo deja de dibujar. Alcanza con tener la app instalada
 y activada en Content Manager.
 
 Los avisos de **RC Mensajes** se borran solos a los 25 segundos y se muestran como máximo tres a
-la vez, los más nuevos abajo.
+la vez, los más nuevos abajo. El contador de cortes y la sanción pendiente **no** son avisos y no
+se borran: están mientras sean ciertos.
+
+### Desde la 1.3, la bandera verde ya no está siempre
+
+Hasta la 1.2 **RC Banderas** mostraba un cuadro verde cada vez que no había ninguna bandera, con
+el argumento de que "pista despejada" también es información. En pista resultó al revés: el verde
+estaba el 95% de la carrera —incluida la vuelta de formación entera, donde significa lo contrario
+de lo que pasa— así que no informaba nada.
+
+Ahora:
+
+- **Sin bandera, no se dibuja nada.** Igual que el semáforo.
+- **El verde aparece solo cuando se da el verde**, los mismos 3 segundos que las luces.
+- **La amarilla parpadea.** Es la única que pide levantar el pie ya mismo, y un cuadro quieto en
+  visión periférica no se distingue del que ya estaba.
+
+La pregunta que el verde fijo intentaba contestar —"¿se colgó la app?"— la contestan ahora el
+renglón de estado de **RC Mensajes** y el marco de **RC Alerta**.
+
+### El contador de cortes
+
+`CUTS: 3/5` arriba de todo, en amarillo: cuántas vueltas invalidó el servidor por irse de pista y
+cuántas hacen falta para la sanción. Se oculta en cero, así que después de una sanción —cuando la
+cuenta se reinicia— desaparece hasta el corte siguiente.
+
+Sube **en el instante del corte**, con una chicharra corta, sin esperar al servidor: el dato
+autoritativo recién llega cuando el piloto cruza meta, hasta un minuto y medio más tarde. El
+servidor corrige el número en el siguiente poll, así que si la app contó de más (o de menos) se
+acomoda solo.
+
+Debajo, en naranja, la sanción que falta cumplir y las vueltas de gracia que quedan. Esa línea
+sigue al piloto aunque se reconecte y el servidor le dé otro número de auto.
+
+### Si aparece el marco rojo
+
+**RC Alerta** significa una sola cosa: la app está corriendo pero el servidor no la reconoce —se
+perdió el mensaje de chat que trae la credencial, o venció (duran 24 h)—. Mientras tanto no llegan
+avisos, no se reporta telemetría, y si el admin tiene activado "Exigir que todos la tengan" el
+piloto va a ser desconectado.
+
+**Se arregla volviendo a entrar al servidor.** El marco se apaga solo en cuanto la credencial
+nueva funciona.
 
 ### La vuelta invalidada la avisa la app, no el servidor
 
@@ -80,7 +120,8 @@ comisario exactamente igual que antes.
   servidor).
 - Manda un heartbeat al backend cada 2 segundos. Si el admin dejó activado "Exigir que todos la
   tengan" (Reglas → App de los pilotos, que viene activado), el piloto que no la tenga es
-  expulsado del servidor pasado el tiempo de espera.
+  expulsado del servidor pasado el tiempo de espera — con dos avisos previos por el chat del
+  servidor, a los 45 y a los 15 segundos del final.
 - Reporta en ese mismo heartbeat la telemetría que el protocolo UDP de Assetto Corsa **no**
   transporta y que solo existe dentro del juego: tiempos por sector, compuesto, combustible,
   paradas en boxes y salidas de pista. Es lo que llena la torre de tiempos del panel; un piloto

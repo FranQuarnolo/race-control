@@ -72,6 +72,10 @@ function deps(board: PilotMessageBoard, guidAcreditado: string | null) {
     onHeartbeat: () => {},
     onSurfaceGrip: () => {},
     verifyToken: () => guidAcreditado,
+    // El estado permanente del piloto: acá devuelve siempre lo mismo porque lo que se prueba es
+    // el reparto de la cola de avisos, no el contador. Su cálculo real se prueba en
+    // `pilotStatus.test.ts`, contra el motor entero.
+    getPilotStatus: (guid: string) => ({ cuts: guid === GUID ? 2 : 0, cutsLimit: 5, penalty: null }),
   };
 }
 
@@ -84,7 +88,10 @@ async function pedir(board: PilotMessageBoard, guidAcreditado: string | null, qu
     const res = await fetch(`http://127.0.0.1:${port}/api/client/poll${query}`, {
       headers: { Authorization: "Bearer x" },
     });
-    return (await res.json()) as { messages: Array<{ seq: number; text: string }> };
+    return (await res.json()) as {
+      messages: Array<{ seq: number; text: string }>;
+      status: { cuts: number; cutsLimit: number; penalty: string | null };
+    };
   } finally {
     server.close();
   }
@@ -117,4 +124,26 @@ test("un poll sin `since` no rompe: devuelve la lista vacía", async () => {
   board.push(GUID, "penalty", "Drive-Through");
   const body = await pedir(board, GUID, "");
   assert.deepEqual(body.messages, []);
+});
+
+/**
+ * El contador de cortes NO viaja por la cola de avisos, y por eso tiene que llegar aunque la cola
+ * no entregue nada.
+ *
+ * Es la diferencia entre un aviso y un estado, y es justamente lo que se rompe si alguien mete el
+ * contador adentro de `messages` para ahorrarse un campo: la cola se entrega una vez por `seq`, y
+ * una app que se reabre a mitad de carrera arranca con el `seq` en cero y no vuelve a recibir lo
+ * que ya se entregó. El piloto se quedaría sin saber cuántos cortes lleva — el número por el que
+ * lo van a sancionar— hasta la próxima vez que se fuera de pista.
+ */
+test("el estado del piloto viaja en cada poll, aunque no haya ningún aviso nuevo", async () => {
+  const board = new PilotMessageBoard();
+  const body = await pedir(board, GUID, "?since=0&guid=" + GUID);
+  assert.deepEqual(body.messages, []);
+  assert.deepEqual(body.status, { cuts: 2, cutsLimit: 5, penalty: null });
+});
+
+test("un poll sin `since` igual trae el estado: son dos cosas independientes", async () => {
+  const body = await pedir(new PilotMessageBoard(), GUID, "");
+  assert.equal(body.status.cuts, 2);
 });

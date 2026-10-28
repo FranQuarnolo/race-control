@@ -6,6 +6,7 @@ Responsabilidades:
   - Avisar presencia al backend (heartbeat) mientras la app este activa.
   - Escuchar el estado del semaforo (polling HTTP) y reproducir "green green green" al verde.
   - Mostrar los avisos de direccion de carrera: sanciones, vueltas invalidadas, anulaciones.
+  - Mostrar el contador de cortes y la sancion pendiente, que son estado y no avisos.
   - Mostrar la bandera de pista actual, leida de la Shared Memory del propio juego.
   - Reportar al backend la telemetria fina que el protocolo UDP de AC NO transporta: tiempos por
     sector, compuesto, combustible, paradas en boxes y ruedas fuera de pista.
@@ -24,8 +25,9 @@ Ahora son tres apps independientes, cada una con su entrada en el menu del juego
   - RC Mensajes  -- avisos de direccion de carrera, al estilo RealPenalty
   - RC Banderas  -- la bandera de pista vigente
   - RC Largada   -- el semaforo de la largada en movimiento
+  - RC Alerta    -- el marco rojo de "falta la credencial" (desde la 1.3)
 
-Las tres comparten los mismos hilos de fondo (hay UNO de cada cosa, no tres): cerrar o no abrir una
+Todas comparten los mismos hilos de fondo (hay UNO de cada cosa, no cuatro): cerrar o no abrir una
 ventana no apaga nada, solo deja de dibujar. Por eso los hilos arrancan en acMain y no al abrirse
 cada ventana -- el heartbeat tiene que seguir saliendo aunque el piloto no tenga ninguna abierta,
 o el watchdog de presencia lo daria por desconectado.
@@ -47,9 +49,30 @@ De ahi los dos cambios de esta version:
     luces: leerlos como palabra obliga a decodificar algo que el ojo ya sabe reconocer, y a 200
     km/h eso es tiempo que no hay. Se dibujan con `ac.glQuad` en un render callback, sin assets.
 
-El corolario de no tener fondo es que en reposo no se ve NADA: sin bandera no hay bandera (el
-verde del cuadro es la unica excepcion, porque "todo despejado" tambien es informacion), y el
-semaforo en idle es literalmente transparente.
+El corolario de no tener fondo es que en reposo no se ve NADA: sin bandera no hay bandera y el
+semaforo en idle es literalmente transparente. Desde la 1.3 eso vale tambien para el cuadro verde,
+que hasta la 1.2 era la excepcion y estaba prendido toda la carrera -- ver FLAG_COLORS.
+
+---
+
+DOS RENGLONES FIJOS ARRIBA DE LA COLA (desde la 1.3)
+
+"RC Mensajes" era solo una cola: tres lineas que aparecen, duran 25 segundos y se van. Eso sirve
+para un hecho ("vuelta invalidada") y no sirve para una situacion ("llevas 3 de 5 cortes"), que es
+cierta hasta que deje de serlo y no durante 25 segundos.
+
+Arriba de la cola hay ahora dos renglones que son ESTADO, no aviso:
+
+  - `CUTS: 3/5` en amarillo y grande. Se oculta en cero.
+  - La sancion pendiente en naranja, con las vueltas de gracia que quedan.
+
+Los dos salen del campo `status` que el poll trae en cada respuesta -- no de la cola de avisos, a
+proposito: la cola entrega cada cosa una sola vez, y una app que se reabre a mitad de carrera
+arrancaria sin saber cuantos cortes lleva. Ver `applyServerStatus` y clientApi.ts.
+
+El contador ademas suma solo, en el instante del corte, sin esperar al servidor: el juego invalida
+la vuelta en el mismo frame y el dato autoritativo del servidor no llega hasta que el piloto cruza
+meta. Ver el comentario largo arriba de `countCutLocally`.
 
 ---
 
@@ -77,6 +100,10 @@ POLL_INTERVAL_SECONDS = 1.0
 HEARTBEAT_INTERVAL_SECONDS = 2.0
 SHARED_MEMORY_INTERVAL_SECONDS = 0.25
 SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "green_green_green.wav")
+# La chicharra del corte. Dos bips cortos y ascendentes, de 220 ms en total: suena en el instante
+# del corte, con el auto todavia fuera de pista, y ahi lo ultimo que hace falta es un sonido que
+# tape el del motor medio segundo.
+CUT_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "cut_warning.wav")
 
 # Prefijo que manda el backend por chat (SEND_CHAT, dirigido solo a este auto) apenas nos
 # conectamos -- asi la app no necesita que nadie le tipee una IP. Ver server/src/udp/announcer.ts.
@@ -107,6 +134,22 @@ STATUS_COLOR = (0.72, 0.74, 0.78, 1.0)
 MESSAGE_FONT_SIZE = 20
 STATUS_FONT_SIZE = 13
 
+# Los dos renglones fijos de la 1.3: el contador de cortes y la sancion que falta cumplir.
+#
+# "Fijos" quiere decir que NO pasan por la cola de avisos y no vencen. La cola existe para cosas
+# que ocurren una vez ("vuelta invalidada", "sancion anulada") y se van a los 25 segundos; estos
+# dos son estado, y mientras sean ciertos tienen que estar en pantalla. Mezclarlos con la cola
+# tenia dos problemas: el contador se iba solo a los 25 segundos justo cuando mas importa, y
+# ocupaba una de las tres lineas de avisos, asi que un corte tapaba la sancion que lo causo.
+#
+# El amarillo del contador es el de la bandera amarilla, y es el color de "cuidado, todavia no
+# pasa nada". La sancion pendiente va en naranja: ya pasa algo, pero no es rojo porque el rojo es
+# del aviso que acaba de llegar, y un renglon permanente en rojo deja de leerse a los dos minutos.
+CUTS_COLOR = (1.0, 0.82, 0.10, 1.0)
+PENDING_COLOR = (1.0, 0.52, 0.05, 1.0)
+CUTS_FONT_SIZE = 24
+PENDING_FONT_SIZE = 17
+
 # Cuanto dura en pantalla un estado que no es un problema (el "Conectado a Race Control").
 #
 # Antes se escribia una vez y no se borraba nunca, asi que quedaba toda la carrera ocupando el
@@ -121,8 +164,12 @@ LAP_INVALIDATED_TEXT = "VUELTA INVALIDADA"
 window_messages = None
 window_flags = None
 window_lights = None
+window_alert = None
 
 label_backend_status = None
+label_cuts = None
+label_pending = None
+label_alert = None
 label_messages = []
 
 backend_url = None  # None hasta que llega el chat de auto-discovery.
@@ -160,13 +207,22 @@ def ocultarChrome(window):
 
 
 def acMain(ac_version):
-    global window_messages, window_flags, window_lights
-    global label_backend_status, label_messages
+    global window_messages, window_flags, window_lights, window_alert
+    global label_backend_status, label_cuts, label_pending, label_alert, label_messages
     global steam_guid, poll_thread_running
 
     # ---------------------------------------------------------------- RC Mensajes
+    #
+    # El orden de arriba a abajo no es casual: lo permanente arriba, lo que pasa abajo. El estado
+    # de conexion (chiquito y gris) es lo menos urgente y por eso encabeza; despues los dos
+    # renglones fijos, que son los que el piloto va a mirar de reojo toda la carrera; y al final
+    # la cola de avisos, que es lo que cambia. Si la cola fuera arriba, cada aviso empujaria el
+    # contador a otra posicion de la pantalla y habria que buscarlo cada vez.
+    #
+    # La ventana es mas alta que en la 1.1 (de 104 a 158) y eso no ocupa pantalla de mas: sin
+    # fondo, un renglon vacio no se ve. Lo que crecio es el espacio reservado, no lo dibujado.
     window_messages = ac.newApp("RC Mensajes")
-    ac.setSize(window_messages, 460, 104)
+    ac.setSize(window_messages, 460, 158)
     ocultarChrome(window_messages)
 
     label_backend_status = ac.addLabel(window_messages, "Buscando servidor de Race Control...")
@@ -174,10 +230,20 @@ def acMain(ac_version):
     ac.setFontSize(label_backend_status, STATUS_FONT_SIZE)
     ac.setFontColor(label_backend_status, *STATUS_COLOR)
 
+    label_cuts = ac.addLabel(window_messages, "")
+    ac.setPosition(label_cuts, 6, 18)
+    ac.setFontSize(label_cuts, CUTS_FONT_SIZE)
+    ac.setFontColor(label_cuts, *CUTS_COLOR)
+
+    label_pending = ac.addLabel(window_messages, "")
+    ac.setPosition(label_pending, 6, 48)
+    ac.setFontSize(label_pending, PENDING_FONT_SIZE)
+    ac.setFontColor(label_pending, *PENDING_COLOR)
+
     label_messages = []
     for i in range(MESSAGE_LINES):
         label = ac.addLabel(window_messages, "")
-        ac.setPosition(label, 6, 22 + i * 26)
+        ac.setPosition(label, 6, 74 + i * 26)
         ac.setFontSize(label, MESSAGE_FONT_SIZE)
         ac.setFontColor(label, *MESSAGE_COLOR)
         label_messages.append(label)
@@ -195,6 +261,18 @@ def acMain(ac_version):
     ac.setSize(window_lights, LIGHTS_WINDOW_WIDTH, LIGHTS_WINDOW_HEIGHT)
     ocultarChrome(window_lights)
     ac.addRenderCallback(window_lights, renderLights)
+
+    # ---------------------------------------------------------------- RC Alerta
+    # Invisible mientras todo este bien, que es el 99% del tiempo. Ver el bloque de comentarios de
+    # ALERT_WINDOW_WIDTH para por que es un marco y no un fondo.
+    window_alert = ac.newApp("RC Alerta")
+    ac.setSize(window_alert, ALERT_WINDOW_WIDTH, ALERT_WINDOW_HEIGHT)
+    ocultarChrome(window_alert)
+    label_alert = ac.addLabel(window_alert, "")
+    ac.setPosition(label_alert, ALERT_BORDER + 12, ALERT_WINDOW_HEIGHT / 2 - 12)
+    ac.setFontSize(label_alert, ALERT_FONT_SIZE)
+    ac.setFontColor(label_alert, *ALERT_TEXT_COLOR)
+    ac.addRenderCallback(window_alert, renderAlert)
 
     # El listener del chat va en una sola ventana: el juego lo entrega una vez por listener
     # registrado, asi que ponerlo en las tres mostraria cada anuncio por triplicado.
@@ -381,7 +459,79 @@ def checkLapInvalidated():
 
     if invalid and not lap_invalidated and not in_pit_lane:
         showMessage(LAP_INVALIDATED_TEXT)
+        # El corte se suma AHORA, no cuando el servidor lo confirme. Ver `countCutLocally`.
+        countCutLocally()
+        playCutWarning()
     lap_invalidated = invalid
+
+
+# =============================================================================================
+# El contador de cortes y la sancion pendiente
+#
+# Los dos renglones fijos. Lo que los hace distintos de un aviso es que son ESTADO: valen mientras
+# sean ciertos, no durante 25 segundos.
+#
+# El contador suma por los dos lados, y hace falta que sea asi:
+#
+#   - La APP lo adelanta. El juego invalida la vuelta en el instante del corte y la app lo lee del
+#     mismo frame (`checkLapInvalidated`). Sumar ahi es lo unico que da un aviso inmediato.
+#   - El SERVIDOR lo corrige. El dato autoritativo es el `cuts` del LAP_COMPLETED, que no llega
+#     hasta que el piloto cruza meta -- hasta un minuto y medio despues. Tambien es el unico que
+#     sabe cuando la cuenta se reinicia, porque la sancion la decide el.
+#
+# De ahi los dos numeros: `cuts_server` es lo ultimo que dijo el servidor y `cuts_local_extra` son
+# los cortes que la app vio desde entonces. Lo que se muestra es la suma. Cuando el servidor
+# cambia su numero --porque conto la vuelta, o porque sanciono y reinicio-- el extra vuelve a cero:
+# el servidor ya los tiene contados y dejarlos sumaria dos veces el mismo corte.
+#
+# Mostrar `max()` de los dos en vez de la suma seria el bug obvio: dos cortes en la misma vuelta
+# mostrarian 1, porque el servidor sigue en el valor de la vuelta anterior.
+# =============================================================================================
+
+cuts_server = 0
+cuts_limit = 0
+cuts_local_extra = 0
+pending_penalty_text = None
+
+
+def countCutLocally():
+    global cuts_local_extra
+    cuts_local_extra += 1
+    renderCuts()
+
+
+def applyServerStatus(status):
+    """Aplica el estado que trajo el poll. Lo llama el hilo del poll, no el del juego."""
+    global cuts_server, cuts_limit, cuts_local_extra, pending_penalty_text
+    if not isinstance(status, dict):
+        return
+    nuevo = int(status.get("cuts", 0) or 0)
+    cuts_limit = int(status.get("cutsLimit", 0) or 0)
+    if nuevo != cuts_server:
+        cuts_server = nuevo
+        cuts_local_extra = 0
+    penalty = status.get("penalty") or None
+    if penalty != pending_penalty_text:
+        pending_penalty_text = penalty
+        ac.setText(label_pending, penalty if penalty else "")
+    renderCuts()
+
+
+def renderCuts():
+    # Sin limite configurado no se dibuja nada: "CUTS: 2/0" no significa nada, y es lo que se
+    # veria mientras el backend todavia no contesto.
+    if cuts_limit <= 0:
+        ac.setText(label_cuts, "")
+        return
+    total = cuts_server + cuts_local_extra
+    # En cero se oculta, que es lo que pasa justo despues de una sancion: la cuenta arranca de
+    # nuevo y un "CUTS: 0/5" permanente seria un cartel que no dice nada ocupando el renglon mas
+    # visible de la pantalla.
+    ac.setText(label_cuts, "CUTS: {0}/{1}".format(total, cuts_limit) if total > 0 else "")
+
+
+def playCutWarning():
+    playWav(CUT_SOUND_PATH)
 
 
 def authHeaders():
@@ -417,7 +567,16 @@ def pollLoop():
             seq = light_event.get("seq", 0)
             state = light_event.get("type", "idle")
 
+            # El poll contesto: la credencial vale. Es el unico lugar donde se apaga la alerta, y
+            # tiene que estar aca arriba -- el piloto vuelve a entrar al servidor, le llega el
+            # anuncio con el token nuevo, y el marco rojo se va solo sin que tenga que hacer nada
+            # mas. Apagarla al recibir el anuncio seria apagarla antes de saber si el token sirve.
+            setAlert(False)
+
             setLightState(state)
+            # El estado va siempre, aunque no haya avisos nuevos: es lo que corrige el contador
+            # que la app viene adelantando sola. Ver `applyServerStatus`.
+            applyServerStatus(data.get("status", {}))
 
             for message in data.get("messages", []):
                 showMessage(message.get("text", ""))
@@ -438,6 +597,10 @@ def pollLoop():
                 # piloto haga algo, y un cartel que se borra solo lo dejaria sin saber por que
                 # la app dejo de avisarle cosas.
                 setStatus("Credencial vencida: volve a entrar al servidor")
+                # Y el marco rojo, porque el renglon gris de 13 px no alcanza: sin credencial el
+                # watchdog de presencia lo va a desconectar, y entre que empieza a fallar y que lo
+                # echan puede pasar un minuto entero sin que el piloto mire esa linea.
+                setAlert(True)
             ac.log("[RaceControlClient] poll error: {0}".format(e))
         time.sleep(POLL_INTERVAL_SECONDS)
 
@@ -480,16 +643,23 @@ def heartbeatLoop():
         time.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
-def playGreenGreenGreen():
+def playWav(path):
+    """Reproduce un .wav sin bloquear. `winsound` es de Windows, que es donde corre AC."""
     try:
         import winsound
 
-        if os.path.exists(SOUND_PATH):
-            winsound.PlaySound(SOUND_PATH, winsound.SND_FILENAME | winsound.SND_ASYNC)
+        if os.path.exists(path):
+            # ASYNC es obligatorio: esto lo puede llamar el hilo del juego desde
+            # `checkLapInvalidated`, y sin ASYNC el frame se clavaria lo que dure el sonido.
+            winsound.PlaySound(path, winsound.SND_FILENAME | winsound.SND_ASYNC)
         else:
-            ac.log("[RaceControlClient] no se encontro {0}".format(SOUND_PATH))
+            ac.log("[RaceControlClient] no se encontro {0}".format(path))
     except Exception as e:
         ac.log("[RaceControlClient] error reproduciendo audio: {0}".format(e))
+
+
+def playGreenGreenGreen():
+    playWav(SOUND_PATH)
 
 
 # =============================================================================================
@@ -514,6 +684,40 @@ FLAG_WINDOW_SIZE = 64
 LIGHTS_WINDOW_WIDTH = 170
 LIGHTS_WINDOW_HEIGHT = 46
 
+# ---------------------------------------------------------------------------------------------
+# La alerta de credencial (1.3)
+#
+# El caso que cubre: la app esta instalada y corriendo, pero el servidor no la acredita --porque
+# el anuncio del chat se perdio, o porque la credencial vencio a las 24 h-- y entonces el poll
+# devuelve 401. Desde afuera la app se ve igual de prendida que siempre: no avisa nada, no suena
+# nada, y el piloto se entera cuando el watchdog de presencia lo desconecta.
+#
+# Dos cosas que conviene tener escritas, porque las dos se pidieron de otra forma:
+#
+#   1. **No es a pantalla completa.** Una app de Assetto Corsa dibuja dentro de su ventana; no
+#      hay una superficie "toda la pantalla" a la que se pueda acceder. Lo que si se puede es un
+#      marco rojo grueso pulsando alrededor del texto, que es lo que hace RealPenalty y lo que de
+#      verdad se ve de reojo.
+#   2. **Es un marco y no un relleno.** El relleno lo dibuja el render callback, que corre DESPUES
+#      de las etiquetas de la ventana: un rectangulo rojo del tamano de la ventana taparia su
+#      propio texto. El marco deja el centro libre.
+#
+# Y el limite de fondo: a quien no tiene la app instalada no se le puede dibujar NADA dentro del
+# juego, porque el overlay es la app. A ese piloto solo le llega el chat del servidor y despues
+# el kick. Ver server/src/presence/presenceWatchdog.ts.
+ALERT_WINDOW_WIDTH = 520
+ALERT_WINDOW_HEIGHT = 92
+ALERT_BORDER = 10.0
+ALERT_COLOR = (0.92, 0.07, 0.07, 1.0)
+ALERT_TEXT_COLOR = (1.0, 0.92, 0.92, 1.0)
+ALERT_FONT_SIZE = 19
+# Un pulso lento, de segundo y medio: lo bastante como para que el ojo lo agarre en periferia y no
+# tan rapido como para volverse un estrobo delante de alguien que esta manejando.
+ALERT_PULSE_SECONDS = 1.5
+ALERT_ALPHA_MIN = 0.30
+ALERT_ALPHA_MAX = 1.00
+ALERT_TEXT = "FALTA LA CREDENCIAL - VOLVE A ENTRAR AL SERVIDOR"
+
 LIGHTS_COUNT = 5
 LIGHT_RADIUS = 13.0
 LIGHT_SPACING = 32.0
@@ -532,13 +736,25 @@ LIGHT_HOUSING = (0.04, 0.04, 0.05, 0.85)
 # El color de cada bandera del juego. Las claves son los valores de `graphics.flag` de la Shared
 # Memory: 0 ninguna, 1 azul, 2 amarilla, 3 negra, 4 blanca, 5 a cuadros, 6 penalidad.
 #
-# El 0 es verde y no transparente, y es la unica ventana de las tres que muestra algo en reposo:
-# "pista despejada" tambien es informacion, y un cuadro que desaparece cuando no pasa nada deja al
-# piloto sin saber si no hay bandera o si la app se colgo.
-#
 # El 5 (a cuadros) y el 6 (penalidad) no son un color plano y se dibujan aparte.
+#
+# EL 0 YA NO ES "PISTA DESPEJADA" (cambio de la 1.3)
+#
+# Hasta la 1.2 el 0 pintaba verde fijo, con el argumento de que "pista despejada" tambien es
+# informacion y de que un cuadro que desaparece deja al piloto sin saber si no hay bandera o si
+# la app se colgo. La prueba en pista lo desarmo: el 0 es el valor del 95% de una carrera, asi que
+# el cuadro verde estaba SIEMPRE -- incluido todo el largo de la vuelta de formacion, donde un
+# verde es exactamente lo contrario de lo que pasa. Un indicador que esta prendido siempre no
+# informa nada y ademas miente en el unico momento en que mirarlo importa.
+#
+# Ahora el verde aparece solo cuando se DA el verde, los mismos 3 segundos que las luces (ver
+# `enVerdeDeLargada`), y eso obliga a que esta ventana mire tambien el semaforo que trae el poll y
+# no solo la Shared Memory: el juego no tiene ninguna bandera para "arranco la carrera".
+#
+# Y la duda que resolvia el verde fijo --"se colgo la app?"-- la contestan ahora el renglon de
+# estado de RC Mensajes y el marco de RC Alerta, que es donde corresponde.
 FLAG_COLORS = {
-    0: (0.10, 0.80, 0.25, 1.0),
+    0: (0.10, 0.80, 0.25, 1.0),  # el verde de la largada, no "pista despejada"
     1: (0.15, 0.45, 1.00, 1.0),
     2: (1.00, 0.85, 0.05, 1.0),
     3: (0.06, 0.06, 0.07, 1.0),
@@ -547,6 +763,12 @@ FLAG_COLORS = {
 FLAG_BORDER = (0.0, 0.0, 0.0, 0.70)
 FLAG_PENALTY_DOT = (1.00, 0.45, 0.00, 1.0)
 CHECKER_CELLS = 4
+# La amarilla parpadea y las demas no. Es la unica que pide una reaccion inmediata --hay algo en
+# la pista, ahora, y hay que levantar el pie-- y un cuadro quieto en vision periferica no se
+# distingue del que ya estaba. Mismo ritmo que el semaforo, por la misma razon: lento como para
+# que se note sin convertirse en un estrobo.
+FLAG_BLINK_SECONDS = LIGHTS_BLINK_SECONDS
+FLAG_YELLOW = 2
 
 current_flag = 0  # Lo escribe sharedMemoryLoop. 0 = sin bandera.
 
@@ -580,7 +802,27 @@ def drawDisc(cx, cy, radius, color, strips=12):
         ac.glQuad(cx - half, cy - radius + height * i, half * 2.0, height)
 
 
+def enVerdeDeLargada():
+    """Los 3 segundos de verde que siguen a la largada. Lo miran el semaforo y la bandera."""
+    if light_state != "green" or light_green_at is None:
+        return False
+    return (time.time() - light_green_at) <= LIGHTS_GREEN_HOLD_SECONDS
+
+
 def renderFlag(deltaT):
+    flag = current_flag
+
+    # Sin bandera no se dibuja nada, con una sola excepcion: el verde de la largada, que no sale
+    # de la Shared Memory sino del semaforo del poll. En la vuelta de formacion `light_state` es
+    # "formation", asi que esto tambien es lo que deja la ventana invisible durante la formacion
+    # -- que era el sintoma concreto: salir detras del pace car con un cuadro verde al lado.
+    if flag == 0 and not enVerdeDeLargada():
+        return
+
+    # La amarilla es la unica que parpadea. Mitad del ciclo apagada, igual que el semaforo.
+    if flag == FLAG_YELLOW and int(time.time() / FLAG_BLINK_SECONDS) % 2 != 0:
+        return
+
     size = FLAG_WINDOW_SIZE
     inner = size - 12.0
     x = 6.0
@@ -590,7 +832,6 @@ def renderFlag(deltaT):
     ac.glColor4f(*FLAG_BORDER)
     ac.glQuad(x - 2.0, y - 2.0, inner + 4.0, inner + 4.0)
 
-    flag = current_flag
     if flag == 5:
         drawChecker(x, y, inner)
         return
@@ -618,6 +859,40 @@ def drawChecker(x, y, inner):
             ac.glQuad(x + col * cell, y + row * cell, cell, cell)
 
 
+alert_active = False
+
+
+def setAlert(active):
+    """Prende o apaga la alerta de credencial. Lo llama el hilo del poll; no dibuja nada."""
+    global alert_active
+    if active == alert_active:
+        return
+    alert_active = active
+    # El texto se escribe una sola vez, al cambiar de estado, y no una vez por frame: `ac.setText`
+    # en el render callback es trabajo inutil sesenta veces por segundo.
+    ac.setText(label_alert, ALERT_TEXT if active else "")
+
+
+def renderAlert(deltaT):
+    if not alert_active:
+        return  # Sin alerta la ventana es un vidrio, igual que las otras dos.
+
+    # Triangular y no cuadrada: sube y baja en vez de prenderse y apagarse. Un parpadeo duro a
+    # pantalla entera es agresivo de mas para algo que el piloto va a tener puesto varias vueltas.
+    fase = (time.time() % ALERT_PULSE_SECONDS) / ALERT_PULSE_SECONDS
+    pulso = 1.0 - abs(fase * 2.0 - 1.0)
+    alpha = ALERT_ALPHA_MIN + (ALERT_ALPHA_MAX - ALERT_ALPHA_MIN) * pulso
+    ac.glColor4f(ALERT_COLOR[0], ALERT_COLOR[1], ALERT_COLOR[2], alpha)
+
+    w = float(ALERT_WINDOW_WIDTH)
+    h = float(ALERT_WINDOW_HEIGHT)
+    b = ALERT_BORDER
+    ac.glQuad(0.0, 0.0, w, b)              # arriba
+    ac.glQuad(0.0, h - b, w, b)            # abajo
+    ac.glQuad(0.0, b, b, h - 2.0 * b)      # izquierda
+    ac.glQuad(w - b, b, b, h - 2.0 * b)    # derecha
+
+
 def renderLights(deltaT):
     if light_state == "formation":
         if int(time.time() / LIGHTS_BLINK_SECONDS) % 2 != 0:
@@ -626,7 +901,7 @@ def renderLights(deltaT):
     elif light_state == "green":
         # El apagado lo decide el render y no un timer: un timer mas es un hilo mas que sincronizar
         # con el poll, y aca alcanza con mirar el reloj una vez por frame.
-        if light_green_at is None or (time.time() - light_green_at) > LIGHTS_GREEN_HOLD_SECONDS:
+        if not enVerdeDeLargada():
             return
         color = LIGHT_GREEN
     else:

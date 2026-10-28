@@ -9,8 +9,9 @@ una sola pantalla.
   un click—, sectores, neumáticos, combustible y ping.
 - 🗺️ **Mapa del circuito en tiempo real**, dibujado desde el primer segundo —198 circuitos vienen
   incluidos— con la zona de boxes marcada encima.
-- 💥 **Bandeja de incidentes**: toques entre autos, choques contra el muro, salidas de pista y
-  contramano, con el contexto de cada uno. **Reporta, no sanciona**: eso lo decidís vos.
+- 💥 **Bandeja de incidentes**: toques entre autos, choques contra el muro, salidas de pista,
+  contramano y excesos de velocidad en pit lane y en la formación, agrupados por piloto y con el
+  contexto de cada uno. **Reporta, no sanciona**: eso lo decidís vos.
 - 🚩 **Sanciones** de pit lane y largada automáticas, y las del comisario a un click. Todas se
   pueden **anular**: al piloto le llega el aviso y dejan de contar en el informe.
 - 📊 **Informe de carrera** descargable al terminar, para pegar en la planilla del campeonato.
@@ -61,9 +62,10 @@ dirigiendo. Lo único que se descarga es la app de los pilotos.
 
 1. Abrí Content Manager.
 2. Arrastrá `RaceControlClient.zip` a la ventana, como instalarías un mod de auto o pista. 📦
-3. Activá en el juego, en el menú de Apps, las ventanas que quieras: **RC Mensajes** (sanciones y
-   vueltas invalidadas, en rojo), **RC Banderas** (un cuadro de color) y **RC Largada** (cinco
-   luces). ✅
+3. Activá en el juego, en el menú de Apps, las ventanas que quieras: **RC Mensajes** (tu contador
+   de cortes, la sanción que debés y los avisos de dirección de carrera), **RC Banderas** (un
+   cuadro de color), **RC Largada** (cinco luces) y **RC Alerta** (el marco rojo que aparece si
+   algo anda mal con tu credencial). ✅
 4. Acomodalas en pantalla. Una sola vez, y mejor antes de largar. 🖱️
 
 Nada más — ni una IP que tipear, ni un archivo que editar. El servidor le manda sola la dirección
@@ -72,8 +74,10 @@ y una credencial por el chat del juego apenas entrás. 🎮
 Son transparentes y sin barra de título: en reposo casi no se ven. Para volver a agarrarlas,
 pasales el mouse por encima.
 
-> ⚠️ **Si la instalaste antes de la 1.1, reinstalala.** La app cambió entera. Arrastrá el `.zip`
-> nuevo igual que la primera vez: pisa lo anterior sin dejar restos.
+> ⚠️ **Si la instalaste antes de la 1.3, reinstalala.** No hay actualización automática: sin
+> reinstalar no vas a ver el contador de cortes ni el aviso de credencial, y vas a seguir viendo
+> el cuadro verde durante la vuelta de formación. Arrastrá el `.zip` nuevo igual que la primera
+> vez: pisa lo anterior sin dejar restos.
 
 ## 🖥️ Para el admin: qué hay adentro del panel
 

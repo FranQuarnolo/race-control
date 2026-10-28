@@ -89,6 +89,12 @@ const PENALTY_STATUS_LABELS: Record<string, string> = {
   revoked: "Anulada",
 };
 
+/**
+ * Las claves son los `IncidentKind` tal cual, y eso importa: lo que no matchea sale crudo en el
+ * CSV. Acá decía `disconnect-during-race` —que es el nombre de la *entrada del catálogo*, no el
+ * del tipo— así que una desconexión en carrera figuraba como "disconnect" en la planilla que el
+ * admin le muestra a su liga. No falla, solo sale feo, que es por donde se escapan estas cosas.
+ */
 const INCIDENT_LABELS: Record<string, string> = {
   "car-contact": "Toque entre autos",
   "env-collision": "Choque en solitario",
@@ -96,7 +102,9 @@ const INCIDENT_LABELS: Record<string, string> = {
   "cut-lap": "Vuelta invalidada por irse de pista",
   "wrong-way": "Contramano",
   "telemetry-mismatch": "Telemetría inconsistente",
-  "disconnect-during-race": "Se desconectó en carrera",
+  disconnect: "Se desconectó en carrera",
+  "pit-speeding": "Exceso de velocidad en pit lane",
+  "formation-speeding": "Exceso de velocidad en la formación",
 };
 
 const INCIDENT_STATUS_LABELS: Record<string, string> = {

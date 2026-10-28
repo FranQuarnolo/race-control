@@ -132,6 +132,26 @@ export class TrackLimitsTracker extends EventEmitter {
     return this.byGuid.get(driverGuid)?.cutsSeen ?? 0;
   }
 
+  /**
+   * Cuántos cortes lleva el piloto **desde la última vez que se le reinició la cuenta**, y cuántos
+   * necesita para la próxima. Es lo que la app muestra arriba de todo: `CUTS: 2/5`.
+   *
+   * No es `getCuts()`: ese es el total de la sesión y va a la torre del admin, que quiere saber si
+   * alguien se fue de pista veinte veces en la fecha. Al piloto le sirve otra cosa — cuánto le
+   * queda antes de que le cueste algo— y para eso el total es inútil: después de la primera
+   * sanción seguiría creciendo para siempre, diciendo "17" cuando en realidad le quedan tres.
+   *
+   * El techo es el mismo `excursionsForIncident` que dispara la sanción, y la cuenta se reinicia
+   * en el mismo lugar (`cutsPenalizedAt`), con o sin sanción automática configurada. Si viniera de
+   * otro lado, el contador podría mostrar 4/5 justo después de que se le reinició la cuenta.
+   */
+  getCutProgress(driverGuid: string): { count: number; limit: number } {
+    const limits = this.byGuid.get(driverGuid);
+    const limit = this.rules.excursionsForIncident;
+    if (!limits) return { count: 0, limit };
+    return { count: Math.max(0, limits.cutsSeen - limits.cutsPenalizedAt), limit };
+  }
+
   /** Procesa las salidas que vinieron en un heartbeat. `raw` llega del cliente sin validar. */
   report(driverGuid: string, raw: unknown): void {
     if (this.rules.action === "ignore" || !driverGuid || !Array.isArray(raw)) return;

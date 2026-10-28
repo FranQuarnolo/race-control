@@ -245,23 +245,32 @@ Una vez por temporada, por piloto:
 
 1. Abrir Content Manager.
 2. Arrastrar `RaceControlClient.zip` a la ventana, como cualquier mod.
-3. Activar las ventanas en el juego: menú de Apps → **RC Mensajes**, **RC Banderas** y **RC
-   Largada**.
+3. Activar las ventanas en el juego: menú de Apps → **RC Mensajes**, **RC Banderas**, **RC
+   Largada** y **RC Alerta**.
 4. Acomodarlas en pantalla. Esto hay que hacerlo **una sola vez** y conviene hacerlo antes de la
    primera carrera, no durante.
 
-Son tres entradas desde la **0.8** y cada piloto activa las que quiera:
+Son entradas separadas desde la **0.8** —cuatro desde la **1.3**— y cada piloto activa las que
+quiera:
 
 | Ventana | Qué muestra |
 |---|---|
-| **RC Mensajes** | Sanciones, vueltas invalidadas, sanciones anuladas. En rojo y en letra grande. Arriba, en gris chiquito, el estado de la conexión. |
-| **RC Banderas** | Un cuadro de color con la bandera vigente: verde si no hay ninguna, amarillo, azul, negro, blanco, el tablero de cuadros o el círculo naranja de la de penalidad. |
+| **RC Mensajes** | De arriba abajo: el estado de la conexión en gris chiquito, el contador de cortes (`CUTS: 3/5`) en amarillo y grande, la sanción pendiente en naranja, y los avisos de dirección de carrera en rojo. |
+| **RC Banderas** | Un cuadro de color con la bandera vigente: amarillo (parpadeando), azul, negro, blanco, el tablero de cuadros o el círculo naranja de la de penalidad. Y el verde, los 3 segundos que siguen a la largada. |
 | **RC Largada** | Cinco luces. Rojas parpadeando durante la formación, verdes con el aviso sonoro al verde, y después nada. |
+| **RC Alerta** | Un marco rojo pulsante, solo cuando falta la credencial. |
 
-**Desde la 1.1 las tres son transparentes y no tienen barra de título.** En reposo no se ven: RC
-Largada desaparece del todo y RC Mensajes queda vacía. La única que muestra algo siempre es RC
-Banderas, porque "pista despejada" también es información. Para moverlas o redimensionarlas,
-pasales el mouse por encima y el marco vuelve a aparecer.
+**Desde la 1.1 son transparentes y no tienen barra de título.** En reposo no se ve ninguna. Para
+moverlas o redimensionarlas, pasales el mouse por encima y el marco vuelve a aparecer.
+
+**Desde la 1.3 eso vale también para RC Banderas**, que hasta la 1.2 mostraba un cuadro verde
+siempre que no hubiera bandera. Sonaba razonable —"pista despejada" también es información— y en
+pista resultó al revés: el verde estaba el 95% de la carrera, incluida la vuelta de formación
+entera. Ahora el verde aparece solo cuando se da el verde, y la amarilla parpadea.
+
+**El contador de cortes** sube en el instante del corte, con una chicharra, sin esperar a que el
+piloto cruce meta; el servidor corrige el número en el poll siguiente. Se oculta en cero, así que
+desaparece solo después de cada sanción.
 
 **No hace falta tener ninguna abierta para que Race Control funcione.** Alcanza con que la app esté
 instalada y activada: el reporte de telemetría y la señal de presencia salen igual. Cerrar una
@@ -271,8 +280,19 @@ No hay nada que configurar adentro. Cuando el piloto entra al servidor, Race Con
 el chat del juego —solo a su auto— la dirección a la que reportar y una credencial firmada que
 dura 24 horas. La app las lee sola.
 
-Si a alguien le aparece **"Credencial vencida: volvé a entrar al servidor"**, es literal: sale,
-vuelve a entrar, y recibe una nueva.
+Si a alguien le aparece **"Credencial vencida: volvé a entrar al servidor"** —y, desde la 1.3, el
+marco rojo de **RC Alerta**—, es literal: sale, vuelve a entrar, y recibe una nueva. El marco se
+apaga solo en cuanto la credencial nueva funciona.
+
+**Al que le falta la app se le avisa antes de echarlo.** Con "Exigir que todos la tengan" activado
+(Reglas → App de los pilotos), el piloto recibe dos mensajes por el chat del servidor —a los 45 y
+a los 15 segundos del final de la espera— con la cuenta regresiva, y recién después el kick. En
+modo sombra no sale ninguno de los dos: anunciar una desconexión que no va a pasar es peor que no
+avisar nada.
+
+**El límite, para que no sorprenda:** a quien **no tiene la app instalada** no se le puede dibujar
+nada dentro del juego, porque el overlay *es* la app. El chat del servidor y después el kick son
+los dos únicos canales que le llegan. El marco rojo solo lo ve quien ya la tiene corriendo.
 
 ---
 
@@ -312,6 +332,12 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   con el resto); el seleccionado sigue en blanco y el que perdió telemetría, hueco. Una pista mod
   que no esté en el catálogo se sigue aprendiendo de la telemetría, como antes, y el cartel lo
   aclara.
+- **Incidentes**: los hechos de la carrera agrupados por piloto, con un contador por tipo —Cuts,
+  Choques y, desde la **1.3**, **Pit** y **Largada** para los excesos de velocidad—. Los dos
+  nuevos van aparte y no adentro de "Otros" porque son hechos medidos: mezclarlos con una
+  desconexión perdería el dato. Qué se registra de cada tipo se elige en Reglas; **cuánto cuesta**
+  pasarse de velocidad se sigue configurando en las secciones de Pit lane y de Largada, que es
+  donde están los km/h y la tolerancia.
 - **Sanciones**: lo que se aplicó solo y lo que aplicó el comisario, más "Descargar informe de
   carrera" al terminar.
 - **Reglas**: qué se controla en pista y, arriba de todo, los **perfiles de carrera**. Un perfil

@@ -400,6 +400,24 @@ const INFRACTION_UI = {
     help: "Irse a mitad de carrera. Queda anotado para el informe; no hay nada que sancionar en vivo.",
     fields: [],
   },
+  // Estos dos NO deciden si se sanciona: eso ya está arriba, en Largada y en Pit, junto al km/h y
+  // los segundos de tolerancia. Acá se decide si el hecho además se le muestra al comisario. El
+  // texto de ayuda lo dice con todas las letras, porque es exactamente lo que se malinterpreta.
+  pitSpeeding: {
+    title: "Exceso de velocidad en pit lane",
+    help:
+      "La sanción se configura en Pit lane, con el límite y la tolerancia. Acá elegís si además " +
+      "aparece en la bandeja, agrupado por piloto: tres excesos seguidos del mismo auto dicen " +
+      "algo que uno solo no dice.",
+    fields: [],
+  },
+  formationSpeeding: {
+    title: "Exceso de velocidad en la formación",
+    help:
+      "Lo mismo para la vuelta de formación: la sanción se configura en Largada, y acá elegís si " +
+      "el hecho entra a la bandeja.",
+    fields: [],
+  },
 };
 
 /** Catálogo que mandó el backend. Null hasta que responde. */
@@ -1877,10 +1895,12 @@ const INCIDENT_KIND_LABELS = {
   "telemetry-mismatch": "telemetría inconsistente",
   "wrong-way": "contramano",
   disconnect: "se desconectó en carrera",
+  "pit-speeding": "exceso en pit lane",
+  "formation-speeding": "exceso en la formación",
 };
 
 /**
- * Las dos cuentas que el comisario lleva de cada piloto.
+ * Las cuentas que el comisario lleva de cada piloto.
  *
  * **Cuts** es irse de pista; **choques** es pegarle a algo, solo o contra otro. Son dos cosas
  * distintas y se juzgan distinto: diez cuts es alguien que está usando de más el pianito, diez
@@ -1888,12 +1908,19 @@ const INCIDENT_KIND_LABELS = {
  * trompo solo en una práctica llenaba la pantalla de diecinueve tarjetas sueltas y había que
  * contarlas a ojo para saber cuál de las dos cosas había pasado.
  *
- * Lo que no cae en ninguna de las dos (contramano, desconexión, telemetría inconsistente) se
- * cuenta aparte en vez de forzarlo a una de estas: meter una desconexión adentro de "choques"
- * sería inventar un dato.
+ * Desde la 1.3 los dos excesos de velocidad tienen cuenta propia, **Pit** y **Largada**, y no van
+ * dentro de "Otros": son objetivos y medidos —un número contra un límite, sin interpretación— y
+ * meterlos en la misma bolsa que una desconexión perdería justo lo que los hace útiles. Tres
+ * excesos en pit lane de un mismo piloto es un patrón; adentro de "Otros: 3" no se ve.
+ *
+ * Lo que no cae en ninguna (contramano, desconexión, telemetría inconsistente) se sigue contando
+ * aparte en vez de forzarlo a una de estas: meter una desconexión adentro de "choques" sería
+ * inventar un dato.
  */
 const CUT_KINDS = ["track-limits", "cut-lap"];
 const CHOQUE_KINDS = ["car-contact", "env-collision"];
+const PIT_KINDS = ["pit-speeding"];
+const LARGADA_KINDS = ["formation-speeding"];
 
 const INCIDENT_STATUS = {
   dismissed: ["neutral", "descartado"],
@@ -1949,13 +1976,26 @@ function agruparPorPiloto(incidents) {
       const clave = party.driverGuid || "car-" + party.carId;
       let grupo = porPiloto.get(clave);
       if (!grupo) {
-        grupo = { clave, nombre: party.driverName, cuts: 0, choques: 0, otros: 0, pendientes: 0, ultimo: 0, filas: [] };
+        grupo = {
+          clave,
+          nombre: party.driverName,
+          cuts: 0,
+          choques: 0,
+          pit: 0,
+          largada: 0,
+          otros: 0,
+          pendientes: 0,
+          ultimo: 0,
+          filas: [],
+        };
         porPiloto.set(clave, grupo);
       }
       if (party.driverName) grupo.nombre = party.driverName;
       grupo.filas.push({ incident, propio: party });
       if (CUT_KINDS.indexOf(incident.kind) !== -1) grupo.cuts++;
       else if (CHOQUE_KINDS.indexOf(incident.kind) !== -1) grupo.choques++;
+      else if (PIT_KINDS.indexOf(incident.kind) !== -1) grupo.pit++;
+      else if (LARGADA_KINDS.indexOf(incident.kind) !== -1) grupo.largada++;
       else grupo.otros++;
       if (incident.status === "pending") grupo.pendientes++;
       if (incident.createdAt > grupo.ultimo) grupo.ultimo = incident.createdAt;
@@ -1988,6 +2028,8 @@ function grupoCard(grupo) {
   // chapas, "Choques: 0" ocupa tanto como "Choques: 9" y no dice nada.
   if (grupo.cuts > 0) sum.appendChild(cuentaChip("Cuts", grupo.cuts, "cuts"));
   if (grupo.choques > 0) sum.appendChild(cuentaChip("Incidentes", grupo.choques, "choques"));
+  if (grupo.pit > 0) sum.appendChild(cuentaChip("Pit", grupo.pit, "velocidad"));
+  if (grupo.largada > 0) sum.appendChild(cuentaChip("Largada", grupo.largada, "velocidad"));
   if (grupo.otros > 0) sum.appendChild(cuentaChip("Otros", grupo.otros, "otros"));
 
   if (grupo.pendientes > 0) {

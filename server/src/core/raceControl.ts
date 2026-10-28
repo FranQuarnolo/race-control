@@ -7,7 +7,7 @@ import { FormationStart } from "../instances/formationStart";
 import { PitComplianceTracker, PitSpeedMonitor } from "../instances/pitSpeeding";
 import { PenaltyEngine, Penalty } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
-import { SpeedWatcher } from "../state/speedWatcher";
+import { SpeedViolation, SpeedWatcher } from "../state/speedWatcher";
 import { StateTracker } from "../state/stateTracker";
 import { AcUdpClient } from "../udp/client";
 import { BackendAnnouncer } from "../udp/announcer";
@@ -84,6 +84,21 @@ export interface RaceControlOptions {
    * y tiene que ser una IP, porque lo consume el servidor de AC y no un navegador.
    */
   clientBase?: () => string | null;
+}
+
+/**
+ * Una sanción pendiente, en el renglón más corto que se puede leer a 200 km/h.
+ *
+ * No se reusa el texto del chat ("PENALIDAD: <motivo largo>. Tenés 3 vuelta(s)...") porque ese es
+ * un aviso que pasa una vez y puede darse el lujo de explicarse. Este se queda fijo en pantalla
+ * toda la carrera hasta que se cumpla, y lo único que el piloto necesita mirar ahí es QUÉ debe y
+ * CUÁNTO le queda. El motivo ya lo leyó cuando llegó el aviso.
+ */
+function textoDeSancionPendiente(p: Penalty): string {
+  const que = p.type === "SG" ? "STOP & GO" : p.type === "DT" ? "DRIVE THROUGH" : "SANCION";
+  if (p.graceLapsRemaining <= 0) return que;
+  const vueltas = p.graceLapsRemaining === 1 ? "1 vuelta" : `${p.graceLapsRemaining} vueltas`;
+  return `${que} - te quedan ${vueltas}`;
 }
 
 /** Arma el motor de una liga (sin levantar los listeners HTTP todavía) — separado del worker para
@@ -417,6 +432,44 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // Instancia 2: pit lane speeding + cumplimiento de DT/SG durante la carrera.
   const pitPenaltyEngine = new PenaltyEngine(config.pit.penalty);
   const pitSpeedMonitor = new PitSpeedMonitor(stateTracker, config.pit.zone, pitPenaltyEngine);
+
+  /**
+   * El exceso de velocidad también es un hecho de la bandeja, no solo una sanción.
+   *
+   * Hasta la 1.2 los dos monitores emitían `violation` y **no lo escuchaba nadie**: el piloto
+   * recibía su Drive-Through y para el comisario no había pasado nada. El resumen de un piloto
+   * podía decir "0 incidentes" con tres excesos en pit lane encima, que es exactamente el patrón
+   * que se quiere ver agrupado —uno es un descuido, tres seguidos es otra conversación—.
+   *
+   * Se cablea acá y no adentro de los monitores a propósito: el que detecta el exceso no tiene
+   * por qué saber que existe una bandeja, y meterle el `IncidentEngine` por el constructor lo
+   * ataría a él solo para esto. Acá ya viven todos los cables.
+   *
+   * La velocidad que se guarda es la **máxima del pasaje**, que es por la que se sancionó. La
+   * actual no sirve: el aviso llega después de los segundos de tolerancia, cuando el auto ya
+   * viene frenando.
+   */
+  const reportarExceso = (kind: "pit-speeding" | "formation-speeding", contexto: string) => (data: {
+    violation: SpeedViolation;
+  }) => {
+    const { violation } = data;
+    const car = violation.car;
+    incidentEngine.reportObserved({
+      kind,
+      carId: violation.carId,
+      driverGuid: car.driverGuid,
+      driverName: car.driverName || `Auto ${violation.carId}`,
+      lap: car.lapCount,
+      splinePosition: car.normalizedSplinePosition,
+      speedKmh: violation.maxSpeedKmh,
+      detail: `${contexto}: llegó a ${violation.maxSpeedKmh.toFixed(1)} km/h con el límite en ${
+        kind === "pit-speeding" ? config.pit.penalty.speedThresholdKmh : config.formation.penalty.speedThresholdKmh
+      } km/h`,
+    });
+  };
+  pitSpeedMonitor.on("violation", reportarExceso("pit-speeding", "Exceso en pit lane"));
+  formationStart.on("violation", reportarExceso("formation-speeding", "Exceso en la vuelta de formación"));
+
   /**
    * Instancia 3: las sanciones que aplica el comisario a mano desde la bandeja de incidentes.
    *
@@ -616,6 +669,24 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     isEnforced: () => config.presence.enforce,
     dispatchKick: (carId, driverGuid, driverName) =>
       dispatchOrSuppress(() => udpClient.kick(carId), "presence.kick", { carId, driverGuid, driverName }),
+    /**
+     * El aviso pasa por el mismo dispatcher que el kick, y tiene que ser así.
+     *
+     * En modo sombra no se echa a nadie: anunciar por chat "te desconectamos en 45 segundos" y
+     * después no hacerlo es peor que no avisar nada — el piloto se va a los boxes a instalar la
+     * app en medio de una sesión por una amenaza que no existía.
+     */
+    warnMissingApp: (carId, driverGuid, driverName, secondsLeft) =>
+      dispatchOrSuppress(
+        () =>
+          udpClient.sendChatToCar(
+            carId,
+            `RACE CONTROL: no detectamos la app del piloto. Instalala y volvé a entrar, o te vamos a ` +
+              `desconectar en ${secondsLeft} segundos.`
+          ),
+        "presence.warning",
+        { carId, driverGuid, driverName, secondsLeft }
+      ),
   });
   presenceWatchdog.start();
 
@@ -674,6 +745,28 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     onHeartbeat: (guid: string) => announcer.onHeartbeatReceived(guid),
     onSurfaceGrip: (grip: number) => sessionTracker.onSurfaceGrip(grip),
     verifyToken: (token) => pilotTokens.verify(token),
+    /**
+     * El estado permanente del piloto: su cuenta de cortes y lo que debe.
+     *
+     * Se calcula en cada poll en vez de guardarse. Hay un solo dato de verdad para cada cosa —el
+     * contador vive en `TrackLimitsTracker`, las sanciones en sus motores— y copiarlo a un tablero
+     * aparte abriría la puerta a que la app muestre un número que ya no es.
+     *
+     * Las sanciones se buscan por `driverGuid` y no por `carId`: el motor indexa por slot, y un
+     * piloto que se reconectó después de que lo sancionaran tiene otro. Sin esto, la app le diría
+     * que no debe nada justo al que más le importa saberlo.
+     */
+    getPilotStatus: (driverGuid: string) => {
+      const progreso = trackLimits.getCutProgress(driverGuid);
+      const pendiente = [formationPenaltyEngine, pitPenaltyEngine, stewardPenaltyEngine]
+        .flatMap((engine) => engine.getAll())
+        .find((p) => p.driverGuid === driverGuid && p.status === "servingWindow");
+      return {
+        cuts: progreso.count,
+        cutsLimit: progreso.limit,
+        penalty: pendiente ? textoDeSancionPendiente(pendiente) : null,
+      };
+    },
   });
 
   return {

@@ -19,6 +19,29 @@ export interface ClientApiDeps {
   onSurfaceGrip: (grip: number) => void;
   /** Devuelve el `steamGuid` que acredita el token, o `null`. Ver security/pilotToken.ts. */
   verifyToken: (token: string | undefined) => string | null;
+  /**
+   * Lo que el piloto tiene que ver **en todo momento**, no una sola vez.
+   *
+   * Va aparte de `messages` a propósito. La pizarra es una cola con secuencia: cada aviso se
+   * entrega una vez y después es responsabilidad del cliente acordarse. Eso está bien para
+   * "PENALIDAD: ..." y es exactamente lo que no sirve para un contador: si la app se reabre a
+   * mitad de carrera —o el `seq` se pierde— el piloto se queda sin saber cuántos cortes lleva, y
+   * es el dato por el que lo van a sancionar.
+   *
+   * Siendo estado idempotente, el servidor no tiene que acordarse de nada: lo calcula en cada
+   * poll de lo que ya sabe, y una app que acaba de arrancar ve lo mismo que una que nunca se fue.
+   */
+  getPilotStatus: (driverGuid: string) => PilotStatus;
+}
+
+/** Ver `getPilotStatus`. Los dos campos son "lo que está pasando ahora", no "lo que pasó". */
+export interface PilotStatus {
+  /** Cortes desde la última vez que se reinició la cuenta. */
+  cuts: number;
+  /** Cuántos hacen falta para la sanción. La app muestra `CUTS: 2/5`. */
+  cutsLimit: number;
+  /** Sanción pendiente de cumplir, en una línea. `null` si no debe nada. */
+  penalty: string | null;
 }
 
 // SteamID64: 17 dígitos numéricos. El rango exacto queda a confirmar contra el spike de protocolo
@@ -114,12 +137,13 @@ export function createClientApi(deps: ClientApiDeps): Express {
     // Mismo criterio que el heartbeat: con token manda el token; sin token (modo local, donde el
     // canal no sale a internet) se acepta el guid que diga el cliente.
     const guid = (req as AuthedRequest).pilotGuid || String(req.query.guid ?? "");
+    const conocido = STEAM_GUID_PATTERN.test(guid);
     const since = Number(req.query.since);
-    const messages =
-      STEAM_GUID_PATTERN.test(guid) && Number.isFinite(since) && since >= 0
-        ? deps.messageBoard.since(guid, since)
-        : [];
-    res.json({ lightEvent: deps.lightEventTracker.get(), messages });
+    const messages = conocido && Number.isFinite(since) && since >= 0 ? deps.messageBoard.since(guid, since) : [];
+    // El estado va aunque el `since` sea basura: son dos cosas independientes, y un `since`
+    // malformado no es razón para dejar al piloto sin su contador de cortes.
+    const status = conocido ? deps.getPilotStatus(guid) : { cuts: 0, cutsLimit: 0, penalty: null };
+    res.json({ lightEvent: deps.lightEventTracker.get(), messages, status });
   });
 
   /**

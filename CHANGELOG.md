@@ -3,6 +3,101 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.3] — 2026-10-28
+
+**La lista que dejó la 1.1, segunda tanda: la pista y el auto.** Lo que la 1.2 arregló se mira
+desde un escritorio; esto se mira a doscientos por hora y con las dos manos ocupadas. Cuatro
+cambios, los cuatro salidos de la misma prueba en pista.
+
+**Los pilotos tienen que reinstalar el `.zip`.** El `.py` cambió, así que el `ui.json` de la app
+subió a 1.3 y no hay actualización automática: quien siga con la versión anterior no va a ver el
+contador de cortes ni el aviso de credencial, y va a seguir viendo el cuadro verde durante la
+vuelta de formación.
+
+### El exceso de velocidad no figuraba en el resumen del piloto
+
+**Síntoma:** un piloto se pasaba tres veces de velocidad en pit lane, se llevaba sus tres
+Drive-Through, y en la bandeja de incidentes su resumen decía "0 incidentes". El comisario no
+tenía forma de ver el patrón.
+
+**Causa:** `PitSpeedMonitor` y `FormationStart` emitían un evento `violation` que **no escuchaba
+nadie**. La sanción salía por otro camino, así que nada fallaba: simplemente el hecho no se
+registraba en ningún lado donde se pudiera leer junto al resto.
+
+**Decisión:** dos tipos de incidente nuevos (`pit-speeding`, `formation-speeding`) con sus dos
+entradas en el catálogo de infracciones, y dos contadores propios al lado de Cuts y Choques: Pit y
+Largada. Propios y no dentro de "Otros" porque son hechos objetivos y medidos — mezclarlos con una
+desconexión perdería el dato. Las dos entradas del catálogo gobiernan el **registro** y no la
+sanción: el km/h y la tolerancia siguen viviendo en las secciones de Pit lane y de Largada, que es
+donde el admin ya los configura. Dos interruptores para lo mismo son dos interruptores que algún
+día se contradicen.
+
+### El piloto se enteraba de sus cortes cuando ya lo habían sancionado
+
+**Síntoma:** el contador de salidas de pista existía en el servidor y el piloto no lo veía por
+ningún lado. La sanción por reincidencia le llegaba de sorpresa.
+
+**Causa:** el dato autoritativo son los `cuts` del `LAP_COMPLETED`, que no llega hasta que el
+piloto cruza la meta — hasta un minuto y medio después del corte.
+
+**Decisión:** dos renglones fijos arriba de la cola de avisos en RC Mensajes: `CUTS: 3/5` en
+amarillo y grande, y la sanción pendiente con las vueltas de gracia que le quedan. Son **estado**
+y no avisos: viajan en un campo `status` que el poll trae en cada respuesta, no por la cola. La
+cola entrega cada cosa una sola vez, así que una app reabierta a mitad de carrera arrancaría sin
+saber cuántos cortes lleva — el número por el que lo van a sancionar. Y la inmediatez la resuelve
+la app sola: el juego invalida la vuelta en el mismo frame, así que la app adelanta la cuenta y
+hace sonar una chicharra nueva (`cut_warning.wav`, dos bips ascendentes de 220 ms); el servidor
+corrige en el poll siguiente.
+
+### Al que le faltaba la app lo echábamos sin decirle nada
+
+**Síntoma:** el watchdog de presencia kickeaba, y el piloto aparecía de golpe en el menú
+principal en medio de una sesión. En el journal quedaba un `presence.kick` prolijo; en el auto, un
+juego que te sacó.
+
+**Causa:** no había ningún aviso previo. Y el que sí tenía la app y se le caía estaba peor: entre
+la caída y el kick, `isReporting()` seguía contestando que sí —mide contra la gracia entera—, así
+que ni siquiera el panel lo marcaba.
+
+**Decisión:** aviso por chat del servidor a los 45 y a los 15 segundos del final de la gracia, con
+la cuenta regresiva, y un umbral propio de "app viva" (10 s, cinco veces el intervalo del
+heartbeat) para que la caída también dispare los avisos. El aviso pasa por el mismo dispatcher que
+el kick: en modo sombra no sale, porque anunciar una desconexión que no va a pasar es peor que no
+avisar. Del lado de la app, una ventana nueva —RC Alerta— con un marco rojo pulsante para el caso
+de app instalada sin credencial, que es el único que el piloto puede arreglar solo.
+
+**El límite, escrito para que no se vuelva a discutir:** a quien **no tiene la app instalada** no
+se le puede dibujar nada dentro del juego, porque el overlay *es* la app. El chat del servidor y
+después el kick son los dos únicos canales que le llegan.
+
+### El `.zip` de los pilotos se llevaba bytecode de otra versión de Python
+
+**Síntoma:** ninguno todavía, y por eso vale anotarlo. Se descubrió al revisar el contenido del
+`.zip`: adentro viajaba un `__pycache__/RaceControlClient.cpython-313.pyc`.
+
+**Causa:** el `__pycache__` lo deja cualquier import desde la PC de desarrollo —un chequeo de
+sintaxis, un editor con el linter prendido— y `Compress-Archive` se lleva la carpeta entera.
+
+**Decisión:** el empaquetador los borra antes de comprimir. Es bytecode de Python 3.13 al lado de
+un `.py` que corre en el 3.3 embebido del juego: no se usa, pero es basura que viaja a
+veinticuatro PCs y es justo el tipo de cosa que después aparece como "a mí no me anda" sin
+ninguna pista.
+
+### La bandera estaba verde durante la vuelta de formación
+
+**Síntoma:** se sale detrás del pace car y al costado de la pantalla hay un cuadro verde.
+
+**Causa:** `graphics.flag == 0` —"ninguna bandera", que es el valor del 95% de una carrera— se
+pintaba de verde fijo, documentado como "pista despejada". El argumento original era que un cuadro
+que desaparece deja al piloto sin saber si no hay bandera o si la app se colgó.
+
+**Decisión:** el 0 deja de dibujar nada. El verde aparece solo cuando se **da** el verde, los
+mismos 3 segundos que las luces, y para eso la ventana de banderas pasa a mirar también el estado
+del semáforo que trae el poll: el juego no tiene ninguna bandera para "arrancó la carrera". La
+amarilla ahora parpadea, que es lo único que la distingue de un cuadro que ya estaba. Y la duda
+que el verde fijo pretendía resolver —"¿se colgó la app?"— la contestan el renglón de estado de RC
+Mensajes y el marco de RC Alerta, que es donde corresponde.
+
 ## [1.2] — 2026-10-28
 
 **La lista que dejó la 1.1, primera tanda.** La 1.1 fue la primera versión probada en pista y

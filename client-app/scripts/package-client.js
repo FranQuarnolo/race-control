@@ -6,15 +6,41 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.join(__dirname, "..");
-const soundPath = path.join(root, "apps", "python", "RaceControlClient", "sounds", "green_green_green.wav");
-if (!fs.existsSync(soundPath)) {
-  console.warn(
-    "ADVERTENCIA: falta " +
-      soundPath +
-      " — el audio de largada no va a sonar hasta que agregues ese archivo " +
-      "(un .wav corto tipo 'green green green', libre de derechos)."
-  );
+
+// El .zip se arma igual sin los sonidos —la app los chequea con `os.path.exists` y sigue— pero el
+// aviso tiene que estar: un piloto al que no le suena la largada reporta "no me anda la app", y
+// desde acá no hay forma de distinguirlo de un problema real.
+const sounds = path.join(root, "apps", "python", "RaceControlClient", "sounds");
+const esperados = [
+  ["green_green_green.wav", "el audio de largada"],
+  ["cut_warning.wav", "la chicharra del corte"],
+];
+for (const [archivo, que] of esperados) {
+  const ruta = path.join(sounds, archivo);
+  if (!fs.existsSync(ruta)) {
+    console.warn(`ADVERTENCIA: falta ${ruta} — ${que} no va a sonar hasta que agregues ese archivo.`);
+  }
 }
+
+/**
+ * Fuera los `__pycache__` antes de comprimir.
+ *
+ * Aparecen en cuanto alguien importa el módulo desde la PC de desarrollo —un chequeo de sintaxis,
+ * un editor con el linter prendido— y `Compress-Archive` se lleva la carpeta entera, así que
+ * terminan adentro del `.zip` que instalan los pilotos. Son bytecode de la versión de Python que
+ * los generó (3.13 acá), metidos al lado de un `.py` que corre en el intérprete 3.3 de Assetto
+ * Corsa. Un `.pyc` de otra versión no se usa, pero es basura que viaja a veinticuatro PCs y es
+ * exactamente el tipo de cosa que después aparece como "a mí no me anda" sin ninguna pista.
+ */
+function limpiarPycache(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const ruta = path.join(dir, entry.name);
+    if (entry.name === "__pycache__") fs.rmSync(ruta, { recursive: true, force: true });
+    else limpiarPycache(ruta);
+  }
+}
+limpiarPycache(path.join(root, "apps"));
 
 const releaseDir = path.join(root, "release");
 fs.mkdirSync(releaseDir, { recursive: true });

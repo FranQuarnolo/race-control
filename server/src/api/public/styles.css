@@ -1047,6 +1047,9 @@ tbody tr.desconectado.selected { opacity: 0.75; }
 }
 .chip-cuenta.cuts { background: rgba(239, 142, 60, 0.16); color: var(--yellow); }
 .chip-cuenta.choques { background: rgba(224, 85, 85, 0.16); color: var(--red); }
+/* Celeste para los dos excesos de velocidad: no es una decisión del comisario —el límite ya se
+   pasó o no— así que no comparte el ámbar de lo que hay que juzgar ni el rojo del contacto. */
+.chip-cuenta.velocidad { background: rgba(93, 173, 226, 0.16); color: #5dade2; }
 .chip-cuenta.otros { background: rgba(139, 147, 163, 0.16); color: var(--muted); }
 .chip-cuenta.pendiente { background: rgba(240, 180, 41, 0.16); color: var(--accent); }
 
