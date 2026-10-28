@@ -38,7 +38,7 @@ export class FormationStart extends EventEmitter {
     if (this.lightState !== "formation") return;
     this.speedWatcher.disarm();
     this.lightState = "green";
-    this.udpClient.broadcastChat(">>> GREEN GREEN GREEN <<<");
+    this.udpClient.broadcastChat(">>> VERDE VERDE VERDE <<<");
     this.emit("stateChanged", this.lightState);
     this.emit("green");
   }

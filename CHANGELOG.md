@@ -3,6 +3,37 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.6] — 2026-10-28
+
+**Primer uso real en modo carrera completo**: formación, verde, bandera a cuadros y vuelta a
+práctica, de punta a punta. Dejó un bug visible desde el primer intento.
+
+### "Carrera en curso" y la bandera seguían encendidos en la práctica siguiente
+
+**Síntoma:** después de dar el verde y terminar la carrera, el servidor volvía a Práctica y el panel
+seguía mostrando el cartel "Carrera en curso", la bandera ondeando en la barra y el semáforo en
+VERDE, como si la carrera siguiera.
+
+**Causa:** el semáforo (`FormationStart.lightState`) solo volvía a `"idle"` con el botón "Reiniciar"
+largada. El `NEW_SESSION` de la sesión siguiente reseteaba la fase (`phaseTracker`) cuando venía de
+`finished`, pero nunca tocaba el semáforo — el comentario original decía que "las otras transiciones
+de fase las maneja la largada", dando por sentado que nadie necesitaba resetearla desde afuera. El
+panel calcula tanto el cartel como la bandera a partir de `lightState === "green"`, así que ese valor
+fantasma bastaba para que las dos cosas quedaran prendidas en medio de una práctica.
+
+**Decisión:** el `NEW_SESSION` resetea el semáforo siempre, no solo cuando la fase venía de
+`finished` — algunos hostings no mandan `END_SESSION` para práctica o clasificación, así que atarlo
+a esa condición hubiera dejado el mismo bug en esos servidores. Test de regresión nuevo en
+`core.test.ts` que reproduce la secuencia completa (formación → verde → sesión nueva sin
+`END_SESSION`) y verifica que el semáforo y la fase vuelven a `idle`.
+
+### El chat de la largada decía "GREEN GREEN GREEN"
+
+**Síntoma:** el único texto en inglés de todo el producto, en el chat que ven los pilotos al dar
+verde.
+
+**Decisión:** pasa a decir "VERDE VERDE VERDE".
+
 ## [1.5] — 2026-10-28
 
 **Repaso visual y de textos después de probar la 1.4 con los ojos puestos en pantalla**, no en el

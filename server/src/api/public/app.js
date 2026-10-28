@@ -2424,7 +2424,7 @@ function renderStart(lightState, session) {
   // Fuera de carrera la tarjeta entera se apaga. En práctica y clasificación no hay parrilla que
   // formar ni nadie a quien sancionar por adelantarse: los autos salen de boxes cuando quieren.
   // Antes los tres botones estaban activos igual y dar verde en una práctica mandaba un
-  // "GREEN GREEN GREEN" por el chat a 20 pilotos que estaban girando tranquilos.
+  // "VERDE VERDE VERDE" por el chat a 20 pilotos que estaban girando tranquilos.
   //
   // Sin sesión todavía (`session` es null hasta el primer SESSION_INFO) NO se bloquea: un panel
   // recién abierto no sabe en qué sesión está el servidor, y bloquear por las dudas dejaría al

@@ -313,10 +313,14 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
 
   udpClient.on("NEW_SESSION", (data: SessionInfo) => {
     journal.log("ac.newSession", { track: data.track, sessionType: data.sessionType, name: data.name });
-    // Una sesión nueva después de una carrera terminada devuelve el panel al principio. Las otras
-    // transiciones de fase las maneja la largada (`formationStart`): acá se toca solo este caso
-    // para no pisarle el estado al semáforo en medio de una carrera reiniciada.
+    // Una sesión nueva después de una carrera terminada devuelve el panel al principio.
     if (phaseTracker.get() === "finished") phaseTracker.set("idle");
+    // El semáforo también tiene que apagarse con la sesión. Hasta la 1.5 esto no pasaba: después de
+    // dar verde y terminar la carrera, `formationStart` seguía en "green" en la práctica siguiente,
+    // y el panel mostraba "Carrera en curso" y la bandera ondeando sin que hubiera ninguna. Se
+    // resetea siempre, no solo si venía de `finished`: tampoco tiene sentido arrastrar una formación
+    // armada de una sesión a otra si el `END_SESSION` nunca llegó (no todos los hostings lo mandan).
+    formationStart.reset();
     sessionTracker.onSessionInfo(data);
     udpClient.setRealtimePosInterval(200);
     sessionType = data.sessionType;

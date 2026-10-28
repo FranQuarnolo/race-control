@@ -189,3 +189,50 @@ test("el circuito se carga aunque el servidor ya estuviera corriendo (sin NEW_SE
     limpiar(rc, dataDir);
   }
 });
+
+const sesionDePrueba = (sessionType: number) => ({
+  protocolVersion: 4,
+  sessionIndex: 0,
+  currentSessionIndex: 0,
+  sessionCount: 1,
+  serverName: "Liga de prueba",
+  track: "spa",
+  trackConfig: "",
+  name: sessionType === 1 ? "Practice" : "Race",
+  sessionType,
+  timeMinutes: 20,
+  laps: 0,
+  waitTimeSeconds: 0,
+  ambientTemp: 20,
+  roadTemp: 28,
+  weatherGraphics: "3_clear",
+  elapsedMs: 0,
+});
+
+/**
+ * El semáforo se apaga con la carrera, no se arrastra a la práctica siguiente.
+ *
+ * Hasta la 1.5, `formationStart` solo volvía a "idle" con el botón "Reiniciar" o con una sesión
+ * nueva que venía de `finished` sin que el admin lo hubiera reseteado antes: dar verde, que la
+ * carrera termine y que el servidor pase a práctica dejaba `lightState` en "green" para siempre.
+ * El panel, que calcula "Carrera en curso" a partir de ese valor, mostraba la carrera corriendo
+ * en medio de una práctica. Visto en pista, no en un test, que es justo el problema.
+ */
+test("el semáforo se apaga al pasar de carrera a práctica, aunque el END_SESSION nunca haya llegado", async () => {
+  const { rc, dataDir } = await levantar("semaforo", 12660, 13660);
+  try {
+    rc.udpClient.emit("NEW_SESSION", sesionDePrueba(3));
+    rc.formationStart.beginFormation();
+    rc.formationStart.triggerGreen();
+    assert.equal(rc.formationStart.getLightState(), "green");
+    assert.equal(rc.phaseTracker.get(), "race");
+
+    // El END_SESSION no todos los hostings lo mandan: el reset tiene que valer sin él.
+    rc.udpClient.emit("NEW_SESSION", sesionDePrueba(1));
+
+    assert.equal(rc.formationStart.getLightState(), "idle", "el semáforo quedó en verde en la práctica siguiente");
+    assert.equal(rc.phaseTracker.get(), "idle", "la fase siguió en carrera en la práctica siguiente");
+  } finally {
+    limpiar(rc, dataDir);
+  }
+});
