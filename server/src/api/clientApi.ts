@@ -17,6 +17,9 @@ export interface ClientApiDeps {
   onHeartbeat: (driverGuid: string) => void;
   /** Grip de la pista leído de la Shared Memory. Es una condición del circuito, no del piloto. */
   onSurfaceGrip: (grip: number) => void;
+  /** El piloto reportó `inPitLane: true` en este poll. Alimenta la calibración automática de la
+   * zona de pit lane — ver `track/pitZoneLearner.ts`. */
+  onPitLaneSample: (driverGuid: string) => void;
   /** Devuelve el `steamGuid` que acredita el token, o `null`. Ver security/pilotToken.ts. */
   verifyToken: (token: string | undefined) => string | null;
   /**
@@ -173,8 +176,10 @@ export function createClientApi(deps: ClientApiDeps): Express {
         deps.telemetryStore.report(steamGuid, req.body.telemetry);
         // El grip es de la pista, no del piloto: viaja por acá porque es el único canal que lo ve,
         // pero se guarda una sola vez para toda la sesión en vez de por fila de la torre.
-        const grip = (req.body.telemetry as Record<string, unknown> | null)?.surfaceGrip;
+        const telemetryBody = req.body.telemetry as Record<string, unknown> | null;
+        const grip = telemetryBody?.surfaceGrip;
         if (typeof grip === "number") deps.onSurfaceGrip(grip);
+        if (telemetryBody?.inPitLane === true) deps.onPitLaneSample(steamGuid);
       }
       if (req.body?.excursions !== undefined) deps.onExcursions(steamGuid, req.body.excursions);
     }

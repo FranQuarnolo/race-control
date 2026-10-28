@@ -24,6 +24,9 @@ export type IncidentKind =
 /** Los que no nacen de una colisión: los reportan los watchers y el tracker de límites. */
 export type ObservedKind = Exclude<IncidentKind, "car-contact" | "env-collision">;
 
+/** Tipo de sesión del protocolo de AC. Ver `RACE_SESSION_TYPE` en adminApi.ts. */
+const PRACTICE_SESSION_TYPE = 1;
+
 /**
  * Qué entrada del catálogo gobierna cada tipo.
  *
@@ -161,6 +164,7 @@ export class IncidentEngine extends EventEmitter {
     private stateTracker: StateTracker,
     private rules: InfractionCatalog,
     private getPhase: () => string,
+    private getSessionType: () => number,
     private clock: Clock = systemClock
   ) {
     super();
@@ -172,8 +176,13 @@ export class IncidentEngine extends EventEmitter {
    * `log` emite el hecho para el journal pero NO lo mete en la bandeja: queda registrado para el
    * informe de la carrera sin obligar al comisario a resolverlo uno por uno. Es la diferencia
    * entre "quiero que quede constancia" y "quiero decidir qué hago con esto".
+   *
+   * En práctica no hay nada que sancionar: los autos salen de boxes cuando quieren, se cruzan de
+   * cualquier forma y un toque no significa nada. Antes se registraba igual que en carrera, y la
+   * bandeja de un piloto arrancaba la clasificación con incidentes de una sesión que no corrió.
    */
   private route(incident: Incident): InfractionAction {
+    if (this.getSessionType() === PRACTICE_SESSION_TYPE) return "ignore";
     const type = TYPE_OF_KIND[incident.kind];
     const action = type === null ? "review" : this.rules[type].action;
     if (action === "ignore") return action;

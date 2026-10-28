@@ -426,13 +426,23 @@
 
       <section>
         <h3>Pit lane (durante la carrera)</h3>
+        <!-- La zona se calibra sola: cualquier piloto con la app instalada que pase por boxes le
+             enseña al motor dónde empieza y termina el pit lane de este circuito (ver
+             `track/pitZoneLearner.ts`). Los dos campos de abajo quedan como el ajuste manual — el
+             que corrige la calibración automática, o el único camino en un circuito donde todavía
+             nadie con la app pasó por boxes. -->
+        <div id="p-zone-suggestion" class="muted" hidden>
+          Calibración automática para este circuito: <span id="p-zone-suggestion-value"></span>.
+          <button type="button" id="btn-use-zone-suggestion" class="btn-mini">Usar esta calibración</button>
+        </div>
         <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
         <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
         <p class="muted">
           Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. El tramo
-          configurado se dibuja en ámbar sobre el mapa. Para calibrarlo, pedile a alguien que
-          maneje por boxes, hacé click en su auto en el mapa y copiá el "punto de la vuelta" que
-          aparece debajo: el de cuando entra va en el inicio y el de cuando sale, en el fin.
+          configurado se dibuja en ámbar sobre el mapa. Se ajusta solo en cuanto alguien con la app
+          pasa por boxes; estos dos campos son para corregirlo a mano o para un circuito donde
+          todavía no hay ninguna calibración. Para eso, hacé click en un auto en el mapa mientras
+          entra y sale de boxes, y copiá el "punto de la vuelta" que aparece debajo del mapa.
         </p>
         <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
         <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>

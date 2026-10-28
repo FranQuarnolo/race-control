@@ -7,6 +7,7 @@ import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
 import { CarState, StateTracker } from "../state/stateTracker";
 import { PitZone } from "../instances/pitSpeeding";
+import { PitZoneSample } from "../track/pitZoneLearner";
 import { ConnectivityManager } from "../net/connectivity";
 import { runDiagnostics, summarize } from "../net/diagnostics";
 import { AcUdpClient } from "../udp/client";
@@ -40,6 +41,9 @@ export interface AdminApiDeps {
   /** Fase interna de la carrera (`idle`/`formation`/`race`/`finished`) — la bandera animada de la
    * barra superior ondea solo en `race`. */
   getPhase: () => string;
+  /** La zona de pit lane que la calibración automática aprendió para el circuito actual, o `null`
+   * sin ninguna muestra todavía. Ver `track/pitZoneLearner.ts`. */
+  getPitZoneSuggestion: () => PitZoneSample | null;
   /** Kick manual pedido por el admin desde la tabla de pilotos. Se inyecta en vez de llamar a
    * `udpClient.kick` directo para que index.ts lo registre en el journal como manual. */
   manualKick: (carId: number) => void;
@@ -61,7 +65,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.6";
+export const APP_VERSION = "1.7";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -176,6 +180,11 @@ export function createAdminApi(deps: AdminApiDeps): Express {
        * cambio recién guardado tiene que verse en el dibujo en el poll siguiente. Son dos números:
        * no pesa nada al lado de los autos. */
       pitZone: { splineStart: deps.config.pit.zone.splineStart, splineEnd: deps.config.pit.zone.splineEnd },
+      /** Lo que la calibración automática (telemetría de los pilotos con app, ver
+       * `track/pitZoneLearner.ts`) aprendió para el circuito actual. `null` sin ninguna muestra
+       * todavía — un circuito recién visitado, o sin nadie con la app pasando por boxes. El panel
+       * la ofrece como sugerencia; no pisa la zona activa sola. */
+      pitZoneSuggestion: deps.getPitZoneSuggestion(),
       /** Condiciones de la sesión en curso: circuito, clima, temperaturas, grip y cuánto falta.
        * `null` hasta que llegue el primer SESSION_INFO del servidor. */
       session: deps.sessionTracker.get(),

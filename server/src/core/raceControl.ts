@@ -23,6 +23,7 @@ import { restoreState } from "../log/restore";
 import { LightEventTracker } from "../instances/lightEventTracker";
 import { PilotMessageBoard } from "../instances/pilotMessages";
 import { TrackLearner } from "../track/trackLearner";
+import { PitZoneLearner } from "../track/pitZoneLearner";
 import { TrackLimitsIncident, TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { PilotTokenIssuer } from "../security/pilotToken";
@@ -197,6 +198,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
 
   // El trazado del circuito se aprende de las propias posiciones de los autos — ver trackLearner.
   const trackLearner = new TrackLearner(path.join(dataDir, "tracks"));
+  const pitZoneLearner = new PitZoneLearner(path.join(dataDir, "tracks"));
   udpClient.on("CAR_UPDATE", (data: CarUpdate) => {
     stateTracker.onCarUpdate(data);
     trackLearner.onCarUpdate(data);
@@ -207,6 +209,13 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     stateTracker.onNewConnection(data);
     journal.log("car.connected", { carId: data.carId, driverGuid: data.driverGuid, driverName: data.driverName });
     announcer.onNewConnection(data);
+    // El único mensaje que un piloto veía al entrar era el técnico de autodescubrimiento
+    // (`RACECONTROL_BACKEND:dirección|token`, por chat porque es el único canal que AC ofrece para
+    // hablarle a un auto y no a toda la parrilla) — ese NO se puede tocar ni ocultar: el cliente
+    // Python lo necesita tal cual para autoconfigurarse, y a veces se repite porque reintenta hasta
+    // el primer latido. Esto suma, aparte, un saludo corto y legible para cualquiera que entre,
+    // tenga la app o no.
+    udpClient.sendChatToCar(data.carId, "Race Control ENCENDIDO");
   });
   // Barrido de la parrilla, una sola vez por arranque.
   //
@@ -367,7 +376,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // servidor sabe que hubo contacto, no quién tuvo la culpa, así que esto va a revisión humana.
   // Por lo mismo no pasa por `dispatchOrSuppress`: registrar un hecho observado no es aplicar
   // una sanción, y el modo sombra no tiene por qué cegar al comisario.
-  const incidentEngine = new IncidentEngine(stateTracker, config.infractions, () => phaseTracker.get());
+  const incidentEngine = new IncidentEngine(stateTracker, config.infractions, () => phaseTracker.get(), () => sessionType);
   udpClient.on("CLIENT_EVENT", (data: ClientEvent) => incidentEngine.onClientEvent(data));
   // "Solo registrar": queda en el journal para el informe de la carrera, sin entrar a la bandeja
   // ni obligar al comisario a resolverlo uno por uno.
@@ -596,6 +605,19 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     messageBoard.push(driverGuid, kind, texto);
   };
 
+  /**
+   * El aviso al piloto se manda siempre, con o sin modo sombra: a diferencia de `dispatchOrSuppress`,
+   * que frena el EFECTO real de una sanción (el lastre, el kick), acá lo que se frena es que el
+   * admin no tenga forma de probar que la detección y el mensaje funcionan sin sancionar a nadie de
+   * verdad. Antes el modo sombra —que es el default de un servidor recién conectado— también se
+   * comía el aviso, así que la ventana de mensajes de la app del piloto se veía vacía durante toda
+   * la prueba, aunque el motor sí estuviera detectando todo.
+   */
+  const avisarSiempre = (accionAviso: () => void, logType: string, data: Record<string, unknown>) => {
+    accionAviso();
+    journal.log(config.shadowMode ? `shadow.${logType}` : logType, data);
+  };
+
   const handlePenaltyIssued = (engineLabel: string) => (p: Penalty) => {
     const carId = resolveCurrentCarId(p);
     if (p.type === "BALLAST") {
@@ -607,13 +629,13 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     } else if (p.type === "TIME") {
       // No hay nada que cumplir en pista: se le avisa al piloto y queda anotada para el informe
       // de fin de carrera, que es donde el admin la vuelca al resultado.
-      dispatchOrSuppress(
+      avisarSiempre(
         () => avisar(carId, p.driverGuid, "penalty", `PENALIDAD: +${p.timePenaltySeconds}s al resultado final. ${p.reason}`),
         "penalty.time",
         { engine: engineLabel, carId, driverGuid: p.driverGuid, reason: p.reason, seconds: p.timePenaltySeconds }
       );
     } else {
-      dispatchOrSuppress(
+      avisarSiempre(
         () =>
           avisar(
             carId,
@@ -645,13 +667,15 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     const carId = resolveCurrentCarId(p);
     const data = { engine: engineLabel, carId, driverGuid: p.driverGuid, reason: p.reason, from: p.revokedFrom };
     if (p.type === "BALLAST") {
-      dispatchOrSuppress(() => {
-        udpClient.sendAdminCommand(`/ballast ${carId} 0`);
-        avisar(carId, p.driverGuid, "info", `SANCIÓN ANULADA por el comisario: te sacamos el lastre. ${p.reason}`);
-      }, "penalty.revoked", data);
+      dispatchOrSuppress(() => udpClient.sendAdminCommand(`/ballast ${carId} 0`), "penalty.revoked.ballast", data);
+      avisarSiempre(
+        () => avisar(carId, p.driverGuid, "info", `SANCIÓN ANULADA por el comisario: te sacamos el lastre. ${p.reason}`),
+        "penalty.revoked",
+        data
+      );
       return;
     }
-    dispatchOrSuppress(
+    avisarSiempre(
       () => avisar(carId, p.driverGuid, "info", `SANCIÓN ANULADA por el comisario: ${p.reason}`),
       "penalty.revoked",
       data
@@ -777,6 +801,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     telemetryStore,
     getSessionType: () => sessionType,
     getPhase: () => phaseTracker.get(),
+    getPitZoneSuggestion: () => pitZoneLearner.suggestionFor(trackLearner.getTrackKey()),
     manualKick: (carId: number) => {
       const car = stateTracker.get(carId);
       journal.log("kick.manual", { carId, driverGuid: car?.driverGuid, driverName: car?.driverName });
@@ -799,6 +824,17 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     onExcursions: (guid: string, excursions: unknown) => trackLimits.report(guid, excursions),
     onHeartbeat: (guid: string) => announcer.onHeartbeatReceived(guid),
     onSurfaceGrip: (grip: number) => sessionTracker.onSurfaceGrip(grip),
+    // La muestra para la calibración automática del pit lane: en qué punto de la vuelta está el
+    // piloto justo cuando SU PROPIA Shared Memory dice que está en el pit lane. El carId se busca
+    // recién acá y no se guarda: es el mismo motivo que `resolveCurrentCarId`, puede cambiar entre
+    // un poll y el siguiente si el piloto se reconectó.
+    onPitLaneSample: (guid: string) => {
+      const trackKey = trackLearner.getTrackKey();
+      if (!trackKey) return;
+      const carId = stateTracker.findCarIdByGuid(guid);
+      const car = carId === undefined ? undefined : stateTracker.get(carId);
+      if (car) pitZoneLearner.observe(trackKey, car.normalizedSplinePosition);
+    },
     verifyToken: (token) => pilotTokens.verify(token),
     /**
      * El estado permanente del piloto: su cuenta de cortes y lo que debe.

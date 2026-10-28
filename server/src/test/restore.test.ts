@@ -261,7 +261,7 @@ test("los ids nuevos no chocan con los restaurados", () => {
 });
 
 test("los incidentes restaurados conservan el orden de llegada", () => {
-  const engine = new IncidentEngine(new StateTracker(), defaultInfractions(), () => "race");
+  const engine = new IncidentEngine(new StateTracker(), defaultInfractions(), () => "race", () => 3);
   engine.restore([
     { id: "i2", kind: "carContact", parties: [], status: "pending", createdAt: 2000 } as never,
     { id: "i1", kind: "carContact", parties: [], status: "pending", createdAt: 1000 } as never,

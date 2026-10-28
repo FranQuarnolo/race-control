@@ -46,8 +46,9 @@ function setup() {
   }
   const clock = new FakeClock();
   const catalog = rules();
-  const engine = new IncidentEngine(tracker, catalog, () => "race", clock);
-  return { engine, tracker, clock, catalog };
+  const sessionBox = { sessionType: 3 };
+  const engine = new IncidentEngine(tracker, catalog, () => "race", () => sessionBox.sessionType, clock);
+  return { engine, tracker, clock, catalog, sessionBox };
 }
 
 const FRONT = v3(0, 0, 2); // golpe en la trompa
@@ -156,6 +157,17 @@ test("resolver un incidente lo saca de pendientes y no se puede resolver dos vec
 });
 
 // ------------------------------------------------ enrutado según el catálogo
+
+test("en práctica no se registra ningún incidente, aunque el catálogo lo mande a revisión", () => {
+  const { engine, sessionBox } = setup();
+  sessionBox.sessionType = 1; // Práctica
+  engine.onClientEvent(envHit(3, 150));
+  assert.equal(engine.getAll().length, 0, "en práctica un choque no es nada que revisar");
+
+  sessionBox.sessionType = 2; // Clasificación
+  engine.onClientEvent(envHit(3, 150));
+  assert.equal(engine.getAll().length, 1, "en clasificación el mismo choque sí entra a la bandeja");
+});
 
 test("en 'no controlar' el incidente ni siquiera se crea", () => {
   const { engine, catalog } = setup();

@@ -152,6 +152,12 @@ export class TrackLearner {
     return this.catalogued !== null;
   }
 
+  /** La clave normalizada del circuito actual (pista + variante), o `""` sin `SESSION_INFO` todavía.
+   * La usa `PitZoneLearner` para guardar la calibración de pit lane bajo la misma identidad. */
+  getTrackKey(): string {
+    return this.track;
+  }
+
   private file(): string {
     return path.join(this.storageDir, `${this.track}.json`);
   }

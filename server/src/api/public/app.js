@@ -94,6 +94,11 @@ let lastTrackCoverage = -1;
  * mapa la pueda pintar sin depender de que alguien haya abierto el cajón de Reglas. */
 let pitZone = null;
 
+/** Sugerencia de `PitZoneLearner` para el circuito actual (o `null` si todavía nadie con la app
+ * pasó por boxes). Se guarda acá para que el botón "Usar esta calibración" la tenga disponible
+ * sin tener que pedirla de nuevo al servidor. */
+let pitZoneSuggestion = null;
+
 /** Qué muestra la columna de intervalo: `"ahead"` el hueco con el auto de adelante, `"leader"` el
  * acumulado contra el líder. Son las dos preguntas distintas que se hacen mirando una torre —"¿lo
  * alcanzo?" y "¿en qué carrera estoy?"— y no entran en una sola columna sin que una de las dos
@@ -293,6 +298,19 @@ function num(id) {
   return Number($(id).value);
 }
 
+/** Muestra u oculta el aviso de calibración automática del pit lane (`PitZoneLearner` en el
+ * servidor), con el rango que propone. `null` cuando todavía nadie con la app pasó por boxes en
+ * este circuito. */
+function renderPitZoneSuggestion(suggestion) {
+  pitZoneSuggestion = suggestion;
+  const box = $("p-zone-suggestion");
+  box.hidden = !suggestion;
+  if (suggestion) {
+    $("p-zone-suggestion-value").textContent =
+      suggestion.splineStart.toFixed(3) + " – " + suggestion.splineEnd.toFixed(3);
+  }
+}
+
 function setupForms() {
   registerForm(
     "formation",
@@ -329,6 +347,17 @@ function setupForms() {
       },
     })
   );
+
+  // El botón de la sugerencia no es parte del form "pit": copia los valores aprendidos a los dos
+  // campos manuales y dispara el guardado de siempre, para que la calibración automática pase por
+  // el mismo camino (y la misma validación) que un valor tipeado a mano.
+  $("btn-use-zone-suggestion").addEventListener("click", () => {
+    if (!pitZoneSuggestion) return;
+    $("p-zone-start").value = pitZoneSuggestion.splineStart.toFixed(3);
+    $("p-zone-end").value = pitZoneSuggestion.splineEnd.toFixed(3);
+    refreshFormButton("pit");
+    saveForm("pit");
+  });
 
   registerForm(
     "presence",
@@ -2535,6 +2564,7 @@ async function refresh() {
   // le cortó, indistinguible de un auto detenido de verdad.
   updateCarTargets(state.cars.filter((c) => c.connected !== false));
   pitZone = state.pitZone || null;
+  renderPitZoneSuggestion(state.pitZoneSuggestion || null);
   await refreshTrack(state.track ? state.track.coverage : 0);
   renderMapStatus(state);
   renderSession(state.session);

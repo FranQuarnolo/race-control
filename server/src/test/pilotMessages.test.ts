@@ -71,6 +71,7 @@ function deps(board: PilotMessageBoard, guidAcreditado: string | null) {
     onExcursions: () => {},
     onHeartbeat: () => {},
     onSurfaceGrip: () => {},
+    onPitLaneSample: () => {},
     verifyToken: () => guidAcreditado,
     // El estado permanente del piloto: acá devuelve siempre lo mismo porque lo que se prueba es
     // el reparto de la cola de avisos, no el contador. Su cálculo real se prueba en

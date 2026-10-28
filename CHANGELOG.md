@@ -3,6 +3,62 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.7] — 2026-10-28
+
+**Segunda tanda de observaciones de la misma carrera de prueba**, esta vez del lado del servidor:
+qué sesiones cuentan, qué ve el piloto en modo sombra, qué mensaje recibe al conectarse y cómo se
+calibra el pit lane.
+
+### Los incidentes se registraban también en Práctica
+
+**Síntoma:** un choque o un corte de pista en Práctica generaba un incidente en la bandeja, igual que
+en Clasificación o Carrera.
+
+**Causa:** `IncidentEngine.route()` no sabía en qué tipo de sesión estaba — enrutaba todo lo que le
+llegaba, sin importar que la sesión fuera de descarte.
+
+**Decisión:** `route()` ahora recibe el tipo de sesión y descarta todo en Práctica (`sessionType`
+1 del protocolo de AC), antes de mirar el catálogo de reglas. Test nuevo en `incidentEngine.test.ts`
+que prueba el mismo choque en Práctica (nada) y en Clasificación (sí entra).
+
+### En modo sombra, el piloto no se enteraba de nada
+
+**Síntoma:** con el modo sombra activo —el default de instalación—, una sanción detectada no
+generaba ningún aviso al piloto, así que la ventana de mensajes de la app se veía vacía siempre. Lo
+que se había reportado como "no me aparece ningún mensaje" era, en la mayoría de los casos, esto: el
+admin nunca había desactivado el modo sombra.
+
+**Decisión del usuario:** el modo sombra sigue suprimiendo el efecto real de la sanción (el comando
+de lastre, la expulsión), pero ya no suprime el aviso — el piloto ve "te corresponde Drive-Through"
+igual, aunque el servidor no se lo aplique. Nuevo helper `avisarSiempre()` en `raceControl.ts`,
+separado del `dispatchOrSuppress()` que sigue gateando solo la acción real.
+
+### El mensaje de bienvenida en el chat era el técnico de autodescubrimiento
+
+**Síntoma:** lo único que veía un piloto al entrar al servidor era
+`RACECONTROL_BACKEND:dirección|token` — repetido, porque el anuncio reintenta hasta el primer latido
+de la app — más el aviso de Real Penalty de que la app no está activa si no la tiene instalada.
+
+**Límite:** ese mensaje técnico no se puede tocar, ocultar ni reemplazar — es el único canal que AC
+ofrece para hablarle a un auto puntual (no a toda la parrilla), y el cliente Python lo necesita tal
+cual para autoconfigurarse.
+
+**Decisión:** se agrega, además, un saludo corto: "Race Control ENCENDIDO". No reemplaza al técnico,
+convive con él.
+
+### Calibrar el pit lane era un procedimiento manual y poco claro
+
+**Síntoma:** para configurar la zona de pit de un circuito había que pedirle a un piloto que pasara
+por boxes, hacer click en su auto en el mapa y copiar a mano el "punto de la vuelta" de entrada y de
+salida.
+
+**Decisión:** nuevo `PitZoneLearner` (mismo patrón que `TrackLearner`: aprende de la telemetría que
+ya manda la app en cada latido, persiste por liga y circuito). En cuanto cualquier piloto con la app
+pasa por boxes, el panel ofrece "Usar esta calibración" con el rango aprendido; los dos campos
+manuales quedan para corregirlo o para un circuito donde todavía nadie pasó por boxes con la app
+puesta. No contempla pit lanes que cruzan la línea de meta — una muestra así se descarta en vez de
+sugerir una zona rota.
+
 ## [1.6] — 2026-10-28
 
 **Primer uso real en modo carrera completo**: formación, verde, bandera a cuadros y vuelta a
