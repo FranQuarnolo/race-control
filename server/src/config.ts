@@ -7,8 +7,6 @@ import {
   InfractionAction,
   InfractionCatalog,
   InfractionType,
-  PRESETS,
-  PresetName,
   defaultInfractions,
 } from "./incident/catalog";
 
@@ -54,11 +52,47 @@ export interface AppConfig {
   /** Catálogo de infracciones: qué se controla y qué se hace con cada cosa. Reemplaza a los
    * bloques `incidents` y `trackLimits` de versiones anteriores (ver migrateLegacyRules). */
   infractions: InfractionCatalog;
-  /** Preset de torneo elegido en el wizard. Solo informativo: tocar cualquier regla a mano no lo
-   * invalida, porque el preset es un punto de partida y no un candado. */
-  preset: PresetName | "";
+  /** Perfiles de carrera guardados por el admin. Ver `RuleProfile`. */
+  ruleProfiles: RuleProfile[];
+  /** Perfil cargado por última vez, solo informativo: tocar una regla a mano no lo invalida, pero
+   * saber de dónde salió lo que está puesto es la mitad de para qué sirven los perfiles. Vacío
+   * cuando la configuración actual no vino de ninguno. */
+  activeProfileId: string;
   /** Si está activo, el motor detecta y registra todo pero NO aplica sanciones/kicks reales. */
   shadowMode: boolean;
+}
+
+/**
+ * El subconjunto de la configuración que un perfil de carrera guarda.
+ *
+ * Es **todo el reglamento y nada más**: el catálogo de infracciones, las sanciones de largada y de
+ * pit lane, la zona de pit y la exigencia de la app. Queda afuera, a propósito, todo lo que
+ * describe la instalación —nombre de la liga, puertos, dirección pública, modo sombra—: cargar el
+ * perfil "Endurance" no puede dejar a nadie sin servidor, y ese es el único motivo por el que un
+ * admin podría tenerle miedo al botón.
+ */
+export interface ProfileRules {
+  infractions: InfractionCatalog;
+  formation: { penalty: PenaltyRules };
+  pit: { zone: PitZone; stopGoSeconds: number; penalty: PenaltyRules };
+  presence: { graceSeconds: number; enforce: boolean };
+}
+
+/**
+ * Un perfil de carrera: el reglamento completo, con nombre, guardado de una.
+ *
+ * Reemplaza a los tres modos de fábrica (casual / campeonato / estricto), que eran un punto de
+ * partida razonable y nada más: en cuanto el admin tocaba dos valores, el modo que figuraba
+ * elegido ya no describía lo que estaba corriendo. Una liga no corre "campeonato", corre su
+ * reglamento — y suele tener dos o tres distintos (la fecha normal, la de resistencia, la de
+ * invitados) entre los que va y viene.
+ */
+export interface RuleProfile {
+  id: string;
+  name: string;
+  /** ISO 8601. Solo para mostrar: sirve para distinguir dos perfiles parecidos. */
+  createdAt: string;
+  rules: ProfileRules;
 }
 
 /**
@@ -108,7 +142,8 @@ function defaultConfig(): AppConfig {
     // bandeja en la primera vuelta. Los choques en solitario arrancan con un umbral más alto:
     // un toque leve contra el muro es un error del piloto, no un incidente para revisar.
     infractions: defaultInfractions(),
-    preset: "",
+    ruleProfiles: [],
+    activeProfileId: "",
     shadowMode: true,
   };
 }
@@ -241,6 +276,44 @@ function validateInfractions(rules: InfractionCatalog): void {
 }
 
 /**
+ * Un perfil guardado por una versión anterior puede tener huecos, y uno editado a mano puede tener
+ * cualquier cosa. Se valida con el mismo camino que la config viva —se arma un config completo, se
+ * le aplica el perfil y se valida— para que un perfil no pueda meter por la ventana un valor que
+ * el panel no deja escribir por la puerta.
+ */
+function validateProfiles(config: AppConfig): void {
+  if (!Array.isArray(config.ruleProfiles)) config.ruleProfiles = [];
+  const vistos = new Set<string>();
+  const limpios: RuleProfile[] = [];
+  for (const crudo of config.ruleProfiles) {
+    if (!isPlainObject(crudo)) continue;
+    const name = typeof crudo.name === "string" ? crudo.name.trim() : "";
+    const id = typeof crudo.id === "string" && crudo.id.length > 0 ? crudo.id : "";
+    if (!name || !id || vistos.has(id)) continue;
+    vistos.add(id);
+    const base = defaultConfig();
+    if (isPlainObject(crudo.rules)) mergeConfigInto(base as unknown as Record<string, any>, crudo.rules);
+    validatePenalty(base.formation.penalty);
+    validatePenalty(base.pit.penalty);
+    base.presence.graceSeconds = clampPositive(base.presence.graceSeconds, 60);
+    base.presence.enforce = typeof base.presence.enforce === "boolean" ? base.presence.enforce : true;
+    base.pit.stopGoSeconds = clampPositive(base.pit.stopGoSeconds, 30);
+    validateInfractions(base.infractions);
+    limpios.push({
+      id,
+      name: name.slice(0, 60),
+      createdAt: typeof crudo.createdAt === "string" ? crudo.createdAt : new Date(0).toISOString(),
+      rules: snapshotRules(base),
+    });
+  }
+  config.ruleProfiles = limpios;
+  config.activeProfileId =
+    typeof config.activeProfileId === "string" && limpios.some((p) => p.id === config.activeProfileId)
+      ? config.activeProfileId
+      : "";
+}
+
+/**
  * Migra un `config.json` de una versión anterior al catálogo nuevo.
  *
  * Se hace sobre el JSON crudo y ANTES del merge, no después: `mergeConfigInto` copia claves que
@@ -248,6 +321,12 @@ function validateInfractions(rules: InfractionCatalog): void {
  * del catálogo nuevo, sin efecto y confundiendo a cualquiera que abra el archivo.
  */
 function migrateLegacyRules(raw: Record<string, any>): void {
+  // Los tres modos de fábrica (casual / campeonato / estricto) desaparecieron en la 1.2, con los
+  // perfiles de carrera en su lugar. La clave se descarta y no se convierte en un perfil: el modo
+  // era solo el punto de partida que alguien eligió una vez en el wizard, y lo que efectivamente
+  // está corriendo son los valores que ya están en este mismo archivo.
+  delete raw.preset;
+
   if (!isPlainObject(raw.infractions)) raw.infractions = {};
   const target = raw.infractions as Record<string, any>;
 
@@ -277,27 +356,116 @@ function migrateLegacyRules(raw: Record<string, any>): void {
   }
 }
 
-/**
- * Aplica un preset de torneo sobre un config en memoria.
- *
- * No toca nada que el preset no mencione (nombre de liga, red, puertos): elegir "campeonato" no
- * puede desconfigurarle el servidor a nadie.
- */
-export function applyPresetTo(config: AppConfig, preset: PresetName): void {
-  const chosen = PRESETS[preset];
-  mergeConfigInto(config.infractions as unknown as Record<string, unknown>, chosen.infractions);
-  for (const penalty of [config.formation.penalty, config.pit.penalty]) {
-    penalty.toleranceSeconds = chosen.penalty.toleranceSeconds;
-    penalty.graceLaps = chosen.penalty.graceLaps;
-    penalty.escalation = chosen.penalty.escalation;
-  }
-  config.preset = preset;
-  validateConfig(config);
+/** Foto del reglamento que está corriendo ahora. Copia profunda: un perfil guardado no puede
+ * quedar apuntando a los objetos vivos de la config, porque el próximo "Guardar" de una sección
+ * lo cambiaría solo, sin que nadie lo pidiera. */
+export function snapshotRules(config: AppConfig): ProfileRules {
+  return JSON.parse(
+    JSON.stringify({
+      infractions: config.infractions,
+      formation: { penalty: config.formation.penalty },
+      pit: { zone: config.pit.zone, stopGoSeconds: config.pit.stopGoSeconds, penalty: config.pit.penalty },
+      presence: config.presence,
+    })
+  ) as ProfileRules;
 }
 
-export function applyPreset(config: AppConfig, preset: PresetName): void {
-  applyPresetTo(config, preset);
+/**
+ * Firma del contenido de un reglamento, para detectar dos perfiles iguales con distinto nombre.
+ *
+ * Es un JSON con las claves ordenadas y no el objeto crudo: `JSON.stringify` respeta el orden de
+ * inserción, así que dos reglamentos idénticos guardados por caminos distintos —uno armado a mano,
+ * otro copiado de un perfil— producen cadenas distintas y la comparación diría que son diferentes
+ * justo cuando son iguales.
+ */
+export function rulesFingerprint(rules: ProfileRules): string {
+  const ordenar = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(ordenar);
+    if (!isPlainObject(value)) return value;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value).sort()) out[key] = ordenar(value[key]);
+    return out;
+  };
+  return JSON.stringify(ordenar(rules));
+}
+
+/** Para comparar nombres: sin mayúsculas, sin acentos y sin espacios de más. "Endurance" y
+ * "endurance " son el mismo perfil para cualquiera que mire la lista. */
+export function normalizeProfileName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+/** Los ids no se muestran nunca: solo tienen que ser distintos entre sí dentro de una liga. */
+function nextProfileId(config: AppConfig): string {
+  let n = config.ruleProfiles.length + 1;
+  let id = "perfil-" + n;
+  while (config.ruleProfiles.some((p) => p.id === id)) id = "perfil-" + ++n;
+  return id;
+}
+
+export type ProfileError = { error: string };
+
+/**
+ * Guarda el reglamento que está puesto como un perfil con nombre.
+ *
+ * Las dos validaciones son las que pidió el usuario y las dos viven acá, en el servidor, y no en
+ * el panel: el panel es un cliente más —el portal expone esta API por internet— y una regla de
+ * unicidad que solo existe en el navegador no es una regla.
+ */
+export function saveProfile(config: AppConfig, rawName: string): RuleProfile | ProfileError {
+  const name = String(rawName ?? "").trim();
+  if (name.length === 0) return { error: "El perfil necesita un nombre." };
+  if (name.length > 60) return { error: "El nombre del perfil es demasiado largo." };
+
+  const repetido = config.ruleProfiles.find((p) => normalizeProfileName(p.name) === normalizeProfileName(name));
+  if (repetido) return { error: `Ya existe un perfil llamado "${repetido.name}".` };
+
+  const rules = snapshotRules(config);
+  const firma = rulesFingerprint(rules);
+  // Decir *cuál* es el que ya existe y no un "ya hay uno igual" pelado: con cinco perfiles
+  // guardados, saber que hay un duplicado sin saber cuál no ayuda a decidir nada.
+  const igual = config.ruleProfiles.find((p) => rulesFingerprint(p.rules) === firma);
+  if (igual) return { error: `Estas mismas reglas ya están guardadas como "${igual.name}".` };
+
+  const profile: RuleProfile = { id: nextProfileId(config), name, createdAt: new Date().toISOString(), rules };
+  config.ruleProfiles.push(profile);
+  config.activeProfileId = profile.id;
   saveConfig(config);
+  return profile;
+}
+
+/**
+ * Carga un perfil sobre la configuración viva.
+ *
+ * `mergeConfigInto` y no una asignación: los motores de sanción guardan la referencia al
+ * sub-objeto de config, así que reemplazarlo los deja mirando el reglamento viejo para siempre. Es
+ * el mismo motivo documentado en `resetToDefaults`, y el modo de falla también es el mismo —el
+ * panel dice "guardado" y en pista no cambia nada—.
+ */
+export function applyProfile(config: AppConfig, id: string): RuleProfile | ProfileError {
+  const profile = config.ruleProfiles.find((p) => p.id === id);
+  if (!profile) return { error: "Ese perfil ya no existe." };
+  mergeConfigInto(config as unknown as Record<string, any>, JSON.parse(JSON.stringify(profile.rules)));
+  config.activeProfileId = profile.id;
+  validateConfig(config);
+  saveConfig(config);
+  return profile;
+}
+
+export function deleteProfile(config: AppConfig, id: string): RuleProfile | ProfileError {
+  const index = config.ruleProfiles.findIndex((p) => p.id === id);
+  if (index === -1) return { error: "Ese perfil ya no existe." };
+  const [borrado] = config.ruleProfiles.splice(index, 1);
+  // Borrar el perfil no cambia el reglamento que está corriendo: solo deja de haber de dónde
+  // volver a cargarlo. Interrumpir una carrera por borrar una fila de una lista sería inaceptable.
+  if (config.activeProfileId === id) config.activeProfileId = "";
+  saveConfig(config);
+  return borrado;
 }
 
 /** Exportada para poder probarla sin tocar el disco: `applyConfigPatch` guarda, y un test que
@@ -346,7 +514,7 @@ export function validateConfig(config: AppConfig): void {
   }
   config.presence.enforce = typeof config.presence.enforce === "boolean" ? config.presence.enforce : true;
   validateInfractions(config.infractions);
-  config.preset = config.preset in PRESETS ? config.preset : "";
+  validateProfiles(config);
   config.shadowMode = typeof config.shadowMode === "boolean" ? config.shadowMode : true;
 }
 

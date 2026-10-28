@@ -14,6 +14,8 @@ una sola pantalla.
 - 🚩 **Sanciones** de pit lane y largada automáticas, y las del comisario a un click. Todas se
   pueden **anular**: al piloto le llega el aviso y dejan de contar en el informe.
 - 📊 **Informe de carrera** descargable al terminar, para pegar en la planilla del campeonato.
+- 📋 **Perfiles de carrera**: guardás todo tu reglamento con un nombre —"Endurance", "4Fun"— y lo
+  reponés entero de una, sin volver a tocar umbral por umbral.
 
 ## 🚦 Cómo se usa
 
@@ -81,8 +83,8 @@ pasales el mouse por encima.
 - **Sanciones**: lo aplicado automáticamente, lo que aplicaste vos, y el botón
   **"Descargar informe de carrera"** — una planilla con la clasificación, los segundos de
   penalización de cada piloto y los incidentes revisados. 📊
-- **Reglas**: el tipo de torneo y qué se controla. Cada infracción puede solo registrarse, mandarse
-  a revisar o sancionarse sola. 🏎️
+- **Reglas**: tus perfiles de carrera y qué se controla. Cada infracción puede solo registrarse,
+  mandarse a revisar o sancionarse sola. 🏎️
 - **Conexión**: el mensaje para el soporte del hosting, el estado de la señal, un diagnóstico para
   cuando algo no cierra, y el interruptor del **modo sombra**: 🛡️ **recomendado para las primeras
   carreras**. En sombra el sistema registra todo pero no sanciona a nadie en serio, así podés

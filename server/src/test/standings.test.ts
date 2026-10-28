@@ -231,3 +231,58 @@ test("las sub-marcas llevan el logo de la marca madre", () => {
   // Race Sim Studio es un estudio de mods, no una marca de autos: no hay logo que mostrar.
   assert.equal(brandSlug("Race Sim Studio"), null);
 });
+
+test("el prefijo del autor del mod no tapa la marca", () => {
+  // El bug de la 1.1: se exigía que el nombre EMPEZARA con la marca, y el único prefijo de autor
+  // que se sacaba era `ks_`. Toda la parrilla de una liga —que es casi toda mods— se veía en
+  // hexágonos con tres letras.
+  assert.equal(brandOf("acf_ferrari_296_gt3"), "Ferrari");
+  assert.equal(brandOf("urd_bmw_m4_gt3_2024"), "BMW");
+  assert.equal(brandOf("rss_porsche_992_gt3_cup"), "Porsche");
+  assert.equal(brandOf("vrc_lamborghini_huracan_gt3_evo"), "Lamborghini");
+  assert.equal(brandOf("emka_aston_martin_vantage_gt3"), "Aston Martin");
+  // Y el prefijo de siempre sigue andando.
+  assert.equal(brandOf("ks_mercedes_amg_gt3"), "Mercedes-Benz");
+});
+
+test("un modelo nombrado sin la marca resuelve por el modelo", () => {
+  // Varios packs de GT3 nombran por modelo: el número o la sigla es lo único que identifica al auto.
+  assert.equal(brandOf("emka_m4_gt3"), "BMW");
+  assert.equal(brandOf("720s_evo_gt3"), "McLaren");
+  assert.equal(brandOf("acf_rcf_gt3"), "Lexus");
+  assert.equal(brandOf("gt3r_2023"), "Porsche");
+  assert.equal(brandOf("z06_gt3r"), "Chevrolet Corvette");
+  assert.equal(brandOf("nsx_gt3_evo"), "Acura");
+  // La segunda pasada corre solo si la primera no encontró marca: acá gana Audi, no "r8".
+  assert.equal(brandOf("ks_audi_r8_lms"), "Audi");
+});
+
+test("un nombre escrito de corrido también encuentra la marca", () => {
+  // Sin separadores no hay tokens que partir, así que se busca por contención — pero solo con
+  // claves largas: con `bmw` o `ford` adentro de cualquier palabra serían todos falsos positivos.
+  assert.equal(brandOf("ksferrari488gt3"), "Ferrari");
+  assert.equal(brandOf("modlamborghinigt3"), "Lamborghini");
+});
+
+test("toda la parrilla GT3 encuentra su logo en disco", () => {
+  // La cadena completa: nombre de mod → marca → archivo que existe. Si falla acá, en el panel se
+  // ve el escudo de iniciales y nadie se entera de por qué.
+  const parrilla = [
+    "acf_ferrari_296_gt3",
+    "acf_porsche_992_gt3r",
+    "emka_m4_gt3",
+    "emka_amg_gt3_evo",
+    "urd_aston_martin_vantage_gt3",
+    "rss_mclaren_720s_gt3",
+    "vrc_lamborghini_huracan_gt3_evo2",
+    "acf_lexus_rcf_gt3",
+    "ks_audi_r8_lms_2016",
+    "acf_corvette_z06_gt3r",
+    "acf_bentley_continental_gt3",
+    "acf_ginetta_g55_gt4",
+  ];
+  for (const modelo of parrilla) {
+    const marca = brandOf(modelo);
+    assert.ok(brandSlug(marca), `${modelo} → "${marca}" se quedó sin logo`);
+  }
+});

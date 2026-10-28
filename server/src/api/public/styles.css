@@ -785,6 +785,22 @@ tbody tr.stale .lap-time.session-best,
 tbody tr.stale .lap-time.personal-best { color: #5a6273; font-weight: 400; }
 tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
 
+/* Piloto que salió del servidor. Desde la 1.2 la fila no se borra: se apaga.
+
+   Es más fuerte que `.stale` a propósito —aquello es "no llega el dato", esto es "no está"— y por
+   eso baja la opacidad de la fila entera en vez de recolorear celda por celda. Los colores de
+   mejor vuelta se apagan con ella: una vuelta morada en una fila fantasma se lee como que esa
+   persona sigue girando.
+
+   Lo que NO se apaga es el nombre, que queda legible: la fila existe justamente para poder decir
+   "a Fulano se le cortó en la vuelta 12". */
+tbody tr.desconectado { opacity: 0.45; }
+tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
+tbody tr.desconectado .lap-time.session-best,
+tbody tr.desconectado .lap-time.personal-best { color: inherit; font-weight: 400; }
+tbody tr.desconectado.selected { opacity: 0.75; }
+.sin-conexion { color: var(--muted); font-style: italic; }
+
 /* Columnas que solo existen con la app del piloto instalada. El guion es deliberado: el UDP de
    Assetto Corsa no transporta estos datos, no hay forma de completarlos desde el servidor. */
 .nodata { color: #4d5564; }
@@ -858,8 +874,12 @@ tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+/* El reloj bajó de 26 px a 18 px en la 1.2. No porque sobrara espacio: al lado de una chapa de
+   13 px era lo más grande del renglón, y la primera pregunta frente al panel no es cuánto falta
+   sino qué sesión se está corriendo. El que dirige mira el reloj cuando lo busca; la sesión la
+   tiene que leer sin buscarla. */
 #session-clock .value {
-  font-size: 26px;
+  font-size: 18px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -882,32 +902,40 @@ tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
 
   `align-self: center` porque el contenedor alinea por `baseline` para que la etiqueta y el número
   grande del reloj compartan la línea de base; una chapa con fondo alineada así queda colgando.
+
+  Pasó de 13 px a 22 px en la 1.2: el color estaba bien elegido pero sobre 13 px no se leía como
+  color, se leía como una letra que casualmente no era blanca. `min-width` para que la P y la R
+  ocupen lo mismo que la TA y el renglón no se mueva al cambiar de sesión.
 */
 .chapa-sesion {
   align-self: center;
-  border-radius: 6px;
-  padding: 3px 9px;
-  font-size: 13px;
+  border-radius: 7px;
+  padding: 5px 13px;
+  min-width: 46px;
+  text-align: center;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: 0.04em;
   line-height: 1;
   border: 1px solid transparent;
 }
 .chapa-sesion[hidden] { display: none; }
+/* Los fondos y bordes se subieron de saturación junto con el tamaño: en 13 px un fondo al 14 %
+   alcanzaba para teñir la chapa, en 22 px se perdía contra el panel. */
 .chapa-sesion.practica {
-  background: rgba(148, 163, 184, 0.14);
-  border-color: rgba(148, 163, 184, 0.4);
-  color: var(--muted);
+  background: rgba(148, 163, 184, 0.2);
+  border-color: rgba(148, 163, 184, 0.55);
+  color: #b9c2d0; /* más claro que --muted: en gris sobre gris, a 22 px, el muted se apaga */
 }
 .chapa-sesion.qualy {
-  background: rgba(239, 142, 60, 0.14);
-  border-color: rgba(239, 142, 60, 0.45);
-  color: var(--yellow);
+  background: rgba(239, 142, 60, 0.24);
+  border-color: rgba(239, 142, 60, 0.75);
+  color: #ffa857;
 }
 .chapa-sesion.carrera {
-  background: rgba(53, 199, 110, 0.14);
-  border-color: rgba(53, 199, 110, 0.45);
-  color: var(--green);
+  background: rgba(53, 199, 110, 0.24);
+  border-color: rgba(53, 199, 110, 0.75);
+  color: #4fe089;
 }
 
 #map-host {
@@ -1226,28 +1254,22 @@ pre.snippet {
 .check p { font-size: 12px; color: var(--muted); margin: 5px 0 0 0; line-height: 1.45; }
 .check-action { color: var(--text) !important; }
 
-/* ------------------------------------------------ presets y catálogo de infracciones */
+/* ------------------------------------------------ perfiles y catálogo de infracciones */
 
-.preset-list { display: grid; gap: 8px; }
-.preset {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: #0c0e12;
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  cursor: pointer;
-}
-.preset:hover { border-color: var(--accent); }
-/* El elegido se marca con borde y fondo, no solo con color de texto: a 12 px un cambio de tinte
-   es exactamente lo que no se ve de reojo durante una carrera. */
-.preset[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: rgba(240, 180, 41, 0.1);
-}
-.preset strong { display: block; font-size: 13px; color: var(--text); margin-bottom: 3px; }
-.preset span { display: block; font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.4; }
+/* Acá vivían los tres tipos de torneo de fábrica (`.preset`, `.preset-list`): tres botones que
+   aplicaban un paquete de reglas cerrado. Se fueron en la 1.2 porque no tenían vuelta —tocabas dos
+   umbrales para la fecha de resistencia y la configuración de la fecha normal se perdía—. Si
+   alguna vez hace falta volver a ofrecer reglamentos de arranque, van como perfiles sembrados en
+   la config inicial, no como una lista aparte con su propio CSS. */
+
+/* Cargar y Borrar van juntos en un renglón propio, debajo del select: son las dos acciones sobre
+   el perfil elegido, y Borrar separado del resto para que no se confunda con Guardar. */
+.profile-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+.profile-actions button { flex: 1 1 0; }
+/* Borrar pierde el perfil guardado. Rojo sobre el gris del resto, mismo criterio que el kebab de
+   la torre: una acción destructiva no puede verse igual que la de al lado. */
+button.secondary.peligro { color: var(--red); }
+button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.18); }
 
 .infraction {
   border: 1px solid var(--panel-border);
@@ -1278,8 +1300,8 @@ pre.snippet {
 #wizard-overlay[hidden] { display: none; }
 #wizard-overlay .card { max-width: 480px; width: 92vw; }
 #wizard-overlay .card h2 { margin-bottom: 8px; }
-/* Tercera (y última) excepción a "sin scroll": los pasos con la lista de presets o los cuatro
-   chequeos no entran en 768 px de alto. Scrollea la tarjeta, no la página. */
+/* Tercera (y última) excepción a "sin scroll": el paso de los cuatro chequeos no entra en 768 px
+   de alto. Scrollea la tarjeta, no la página. */
 .wizard { max-height: 88vh; overflow-y: auto; }
 .wizard .row { align-items: baseline; }
 .wizard .row > label { flex: 1 1 auto; }

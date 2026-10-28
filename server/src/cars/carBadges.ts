@@ -43,6 +43,7 @@ const BRANDS: Array<[string, string]> = [
   ["ferrari", "Ferrari"],
   ["fiat", "Fiat"],
   ["ford", "Ford"],
+  ["ginetta", "Ginetta"],
   ["glickenhaus", "Glickenhaus"],
   ["honda", "Honda"],
   ["hyundai", "Hyundai"],
@@ -79,25 +80,132 @@ const BRANDS: Array<[string, string]> = [
   ["vw", "Volkswagen"],
 ];
 
-/** Prefijo de autor, no de marca: `ks_` es Kunos Simulazioni, el estudio. Sacarlo deja a la vista
- * la marca real, que es el token siguiente. */
-const AUTHOR_PREFIXES = ["ks_"];
+/**
+ * Modelos que se nombran **sin la marca adelante**, que es como los bautizan varios packs de GT3
+ * (`emka_m4_gt3`, `720s_evo`). Corre como segunda pasada, solo si no se encontró ninguna marca:
+ * un `ks_bmw_m4` ya resolvió por marca y nunca llega acá.
+ *
+ * La clave es el token completo, no un prefijo: `m4` tiene que ser el token entero para no
+ * confundirse con cualquier cosa que empiece igual.
+ */
+const MODELOS: Record<string, string> = {
+  // Ferrari
+  "296": "Ferrari",
+  "296gt3": "Ferrari",
+  "488": "Ferrari",
+  "488gt3": "Ferrari",
+  "458": "Ferrari",
+  // McLaren
+  "720s": "McLaren",
+  "650s": "McLaren",
+  "570s": "McLaren",
+  artura: "McLaren",
+  // BMW
+  m4: "BMW",
+  m6: "BMW",
+  m8: "BMW",
+  z4: "BMW",
+  // Mercedes-AMG
+  amg: "Mercedes-Benz",
+  sls: "Mercedes-Benz",
+  // Porsche
+  "911": "Porsche",
+  "992": "Porsche",
+  "991": "Porsche",
+  "718": "Porsche",
+  gt3r: "Porsche",
+  // Aston Martin
+  vantage: "Aston Martin",
+  // Lexus
+  rcf: "Lexus",
+  rcfgt3: "Lexus",
+  // Audi
+  r8: "Audi",
+  // Lamborghini
+  huracan: "Lamborghini",
+  evo2: "Lamborghini",
+  // Acura / Honda
+  nsx: "Acura",
+  // Corvette
+  z06: "Chevrolet Corvette",
+  c7r: "Chevrolet Corvette",
+  c8r: "Chevrolet Corvette",
+  elkhart: "Chevrolet Corvette",
+  // Bentley
+  continental: "Bentley",
+  // Nissan
+  gtr: "Nissan",
+  // Alpine
+  a110: "Alpine",
+};
 
-/** Deduce la marca del nombre del modelo (`ks_ferrari_488_gt3` → "Ferrari"). Si no reconoce
- * ninguna, devuelve el nombre del modelo presentable, que sigue siendo más útil que nada. */
+/**
+ * Estudios de mods que figuran en `BRANDS` pero **no son marcas de autos**. Se buscan al final de
+ * todo: en `rss_porsche_992_gt3` la marca real es Porsche y tiene logo, mientras que el estudio
+ * solo da un escudo de iniciales. Quedan en la lista igual porque un `rss_formula_hybrid`, que no
+ * tiene marca real ninguna, es mejor que diga "Race Sim Studio" y no "Rss formula hybrid".
+ */
+const ESTUDIOS = new Set(["rss"]);
+
+/** Más larga primero: sin esto `alfa` le gana a `alfaromeo` y "Alfa Romeo 155" quedaría como marca
+ * distinta según el modelo. */
+const CANDIDATAS = BRANDS.slice()
+  .filter(([key]) => !ESTUDIOS.has(key))
+  .sort((a, b) => b[0].length - a[0].length);
+
+const CANDIDATAS_ESTUDIO = BRANDS.filter(([key]) => ESTUDIOS.has(key));
+
+/** Parte el nombre del modelo en tokens: `acf_ferrari_296_gt3` → `["acf","ferrari","296","gt3"]`. */
+function tokenizar(carModel: string): string[] {
+  return carModel
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length > 0);
+}
+
+/**
+ * Deduce la marca del nombre del modelo (`ks_ferrari_488_gt3` → "Ferrari"). Si no reconoce ninguna,
+ * devuelve el nombre del modelo presentable, que sigue siendo más útil que nada.
+ *
+ * **Busca la marca en cualquier token, no solo al principio.** Antes exigía que el nombre
+ * *empezara* con la marca y sacaba un único prefijo de autor conocido (`ks_`). Con eso, todo auto
+ * mod —ACF, EMKA, URD, RSS, VRC, que van con el prefijo del autor adelante— caía al escudo de
+ * iniciales, y la parrilla de una liga, que es casi toda mods, se veía entera en hexágonos con tres
+ * letras. Mantener una lista de prefijos de autor no servía: nunca va a estar completa.
+ */
 export function brandOf(carModel: string): string {
   if (!carModel) return "";
-  let normalized = carModel.toLowerCase();
-  for (const prefix of AUTHOR_PREFIXES) {
-    if (normalized.startsWith(prefix)) normalized = normalized.slice(prefix.length);
+  const tokens = tokenizar(carModel);
+  if (tokens.length === 0) return prettifyModel(carModel);
+
+  // Pasada 1: la marca en alguno de los tokens, de izquierda a derecha.
+  for (const token of tokens) {
+    for (const [key, label] of CANDIDATAS) {
+      if (token.startsWith(key)) return label;
+    }
   }
-  const compact = normalized.replace(/[^a-z0-9]/g, "");
-  // Más larga primero: sin esto `alfa` le gana a `alfaromeo` y "Alfa Romeo 155" quedaría como
-  // marca distinta según el modelo.
-  const candidates = BRANDS.slice().sort((a, b) => b[0].length - a[0].length);
-  for (const [key, label] of candidates) {
-    if (compact.startsWith(key)) return label;
+
+  // Pasada 1b: nombres escritos de corrido, sin separador alguno (`ksferrari488gt3`). Solo con
+  // claves de cinco letras o más: con `bmw` o `ford` adentro de una palabra cualquiera, la
+  // contención daría falsos positivos todo el tiempo.
+  const compact = tokens.join("");
+  for (const [key, label] of CANDIDATAS) {
+    if (key.length >= 5 && compact.includes(key)) return label;
   }
+
+  // Pasada 2: el modelo sin marca.
+  for (const token of tokens) {
+    const porModelo = MODELOS[token];
+    if (porModelo) return porModelo;
+  }
+
+  // Última: el estudio que lo armó, cuando el auto no corresponde a ninguna marca real.
+  for (const token of tokens) {
+    for (const [key, label] of CANDIDATAS_ESTUDIO) {
+      if (token === key) return label;
+    }
+  }
+
   return prettifyModel(carModel);
 }
 

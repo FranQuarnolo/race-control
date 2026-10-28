@@ -67,7 +67,6 @@ async function main(): Promise<void> {
   config.acUdp.remoteHost = "198.51.100.22";
   config.acUdp.remotePortSource = "detected";
   config.shadowMode = false;
-  config.preset = "campeonato";
 
   const rc = await createRaceControl({ config, dataDir, ports: { adminPort: puerto, clientPort: puerto + 1 } });
 

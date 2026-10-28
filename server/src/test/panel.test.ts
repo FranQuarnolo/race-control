@@ -387,3 +387,80 @@ test("el panel clasifica todos los tipos de incidente del motor", () => {
   const cruce = cuts.filter((t) => choques.indexOf(t) !== -1);
   assert.equal(cruce.length, 0, "estos tipos suman en las dos cuentas: " + cruce.join(", "));
 });
+
+/**
+ * Las posiciones finales aparecen cuando la carrera termina, y la carrera tiene que poder terminar.
+ *
+ * El link de la torre se muestra con `phase === "finished"`, y `finished` existía en el tipo
+ * `SessionPhase` desde la 0.5 sin que **nadie lo pusiera nunca**: el único que movía la fase era
+ * la largada, que solo conoce idle / formación / verde. Un botón atado a una condición
+ * inalcanzable es el bug de siempre de este proyecto —no falla, simplemente no pasa— y encima
+ * detrás de algo que se usa una vez por fecha, cuando ya no hay tiempo de averiguar por qué.
+ *
+ * Se valida la punta y la cola: que el backend llegue a `finished` y que el panel lo lea.
+ */
+test("la carrera terminada es un estado alcanzable y el panel lo usa", () => {
+  const core = leer(DIST, "core", "raceControl.js");
+  const js = leer(PANEL, "app.js");
+  const html = leer(PANEL, "index.html");
+
+  assert.ok(/set\("finished"\)/.test(core), "nadie pone la fase en `finished`: el botón no aparece nunca");
+  assert.ok(core.includes("END_SESSION"), "la fase `finished` no se engancha al fin de sesión del servidor");
+  assert.ok(js.includes('"finished"'), "el panel no mira la fase terminada");
+  assert.ok(html.includes('id="btn-report-timing"'), "falta el link de posiciones finales en la torre");
+});
+
+/**
+ * La torre de tiempos muestra la jornada entera, no solo a los conectados.
+ *
+ * Desde la 1.2 `/api/state` manda también a los pilotos desconectados, con `connected: false`. Si
+ * el panel dejara de distinguirlos, las filas grises volverían a verse como gente en pista: el
+ * mismo error de antes, al revés y peor, porque ahora habría veinte autos que no existen.
+ */
+test("el panel distingue al piloto desconectado del que está en pista", () => {
+  const js = leer(PANEL, "app.js");
+  const css = sinComentarios(leer(PANEL, "styles.css"));
+  const api = leer(DIST, "api", "adminApi.js");
+
+  assert.ok(api.includes("getRoster"), "`/api/state` volvió a mandar solo a los conectados");
+  assert.ok(/connected === false/.test(js), "el panel no mira `connected`: el que se fue se ve igual que el que corre");
+  assert.ok(/tr\.desconectado/.test(css), "la fila del desconectado no tiene estilo propio");
+});
+
+/**
+ * Los perfiles de carrera están enganchados de punta a punta.
+ *
+ * Los tres tipos de torneo de fábrica se borraron en la 1.2 y los reemplazaron los perfiles con
+ * nombre. Un borrado a medias acá no rompe nada visible: el cajón de Reglas sigue abriendo, los
+ * botones de Guardar de cada sección siguen andando, y la sección de perfiles queda muerta —un
+ * select vacío que nunca se llena y un botón que no hace nada—. Exactamente la clase de bug que
+ * solo se descubre el día que alguien quiere guardar el reglamento de la fecha.
+ *
+ * Se revisan las dos puntas: que no quede nada del preset viejo, y que cada control de la sección
+ * nueva tenga quien lo escuche.
+ */
+test("la sección de perfiles de carrera está cableada y no quedó nada del preset viejo", () => {
+  const js = leer(PANEL, "app.js");
+  const html = leer(PANEL, "index.html");
+  const api = leer(DIST, "api", "adminApi.js");
+
+  assert.ok(!/api\/config\/preset/.test(js), "el panel sigue pegándole al endpoint de presets, que ya no existe");
+  assert.ok(!/api\/config\/preset/.test(api), "el backend sigue exponiendo `POST /api/config/preset`");
+  assert.ok(!/id="preset-list"/.test(html), "quedó la lista de presets en el HTML");
+
+  for (const ruta of ["/api/profiles"]) {
+    assert.ok(api.includes(ruta), "el backend no expone `" + ruta + "`");
+    assert.ok(js.includes(ruta), "el panel nunca llama a `" + ruta + "`");
+  }
+
+  // Cada id de la sección tiene que existir en el HTML y estar nombrado en el JS: un `$("...")`
+  // con el id mal escrito devuelve null y revienta recién cuando alguien hace click.
+  for (const id of ["profile-select", "profile-name", "profile-empty", "btn-save-profile", "btn-apply-profile", "btn-delete-profile"]) {
+    assert.ok(html.includes('id="' + id + '"'), "falta `" + id + "` en index.html");
+    assert.ok(js.includes('"' + id + '"'), "`" + id + "` está en el HTML pero el panel no lo toca");
+  }
+
+  assert.ok(/renderProfiles\(/.test(js), "nadie llena el select de perfiles al cargar la config");
+  assert.ok(/wireProfiles\(\);/.test(js), "`wireProfiles()` está definida pero nunca se llama: los botones no escuchan nada");
+  assert.ok(/window\.confirm/.test(js), "borrar un perfil tiene que pedir confirmación");
+});

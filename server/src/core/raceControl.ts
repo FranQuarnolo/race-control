@@ -267,8 +267,30 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // el `setRealtimePosInterval`. Son el mismo pedido con dos motivos distintos —refrescar el
   // reloj de la sesión y probar que el servidor sigue ahí— y tenerlo dos veces a dos cadencias
   // distintas era la clase de duplicación que termina en que alguien cambia una sola.
+  /**
+   * Fin de sesión: la bandera a cuadros.
+   *
+   * `END_SESSION` llega cuando el servidor cierra la sesión y escribe el archivo de resultados.
+   * Hasta la 1.1 se parseaba y se tiraba, así que la fase `finished` —que existe en el tipo desde
+   * siempre— no la alcanzaba nadie nunca. Eso dejaba al panel sin forma de distinguir una carrera
+   * terminada de una en curso, que es justo cuando el admin necesita la tabla de posiciones
+   * finales.
+   *
+   * Solo cierra la carrera: el fin de una práctica no es una bandera a cuadros, y poner en
+   * `finished` una fase que nunca fue `race` ofrecería un informe de una carrera que no se corrió.
+   */
+  udpClient.on("END_SESSION", () => {
+    if (phaseTracker.get() !== "race") return;
+    journal.log("ac.endSession", {});
+    phaseTracker.set("finished");
+  });
+
   udpClient.on("NEW_SESSION", (data: SessionInfo) => {
     journal.log("ac.newSession", { track: data.track, sessionType: data.sessionType, name: data.name });
+    // Una sesión nueva después de una carrera terminada devuelve el panel al principio. Las otras
+    // transiciones de fase las maneja la largada (`formationStart`): acá se toca solo este caso
+    // para no pisarle el estado al semáforo en medio de una carrera reiniciada.
+    if (phaseTracker.get() === "finished") phaseTracker.set("idle");
     sessionTracker.onSessionInfo(data);
     udpClient.setRealtimePosInterval(200);
     sessionType = data.sessionType;

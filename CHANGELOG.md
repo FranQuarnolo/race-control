@@ -3,6 +3,114 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.2] — 2026-10-28
+
+**La lista que dejó la 1.1, primera tanda.** La 1.1 fue la primera versión probada en pista y
+volvió con once observaciones de uso real. Las seis que tocan el panel entran acá; las de la app
+del piloto y las del panel del operador van en la 1.3 y la 1.4, porque la app del piloto obliga a
+que todos reinstalen el `.zip` y eso no se mete en la misma entrega que un cambio de CSS.
+
+### Los íconos de marca no aparecían con ningún mod
+
+**Síntoma:** en la torre, casi todos los autos mostraban el hexágono con tres letras en vez del
+logo de la marca. Con los `ks_` de fábrica andaba; con cualquier pack de mods, no.
+
+**Causa:** `brandOf()` exigía que el nombre del modelo **empezara** con la marca
+(`compact.startsWith(key)`) y sabía sacar exactamente un prefijo de autor: `ks_`. Todo mod llega
+con el prefijo de quien lo hizo adelante —`acf_`, `emka_`, `urd_`, `rss_`, `vrc_`— así que nunca
+matcheaba y caía al escudo de iniciales. No era un problema de assets: los 127 SVG a color están
+en el repo desde la 0.7 y están todas las marcas GT3.
+
+**Decisión:** matchear por token en vez de por prefijo, en cuatro pasadas: cada token del nombre
+contra la lista de marcas (las claves largas primero), después el nombre pegado de corrido, después
+un diccionario chico de modelos que se nombran sin la marca (`296`, `720s`, `m4`, `amg`, `gt3r`,
+`z06`, `elkhart`), y recién al final los estudios. El orden importa: `rss_porsche_992_gt3_cup`
+resolvía a "Race Sim Studio" porque el estudio venía primero en el nombre, y lo que el usuario
+quiere ver ahí es el Porsche. Un estudio solo gana cuando no hay ninguna marca real en el nombre,
+que es el caso de `rss_formula_hybrid`. El test nuevo recorre la parrilla GT3 entera y verifica que
+el nombre termine en un archivo que existe en disco, no solo en una cadena no vacía.
+
+### Los pilotos desaparecían de la torre al desconectarse
+
+**Síntoma:** alguien se va a boxes, se le cuelga el juego, vuelve a entrar — y mientras tanto no
+estaba en la tabla. Si el servidor le daba otro slot al volver, entraba como una fila nueva, sin
+sus vueltas. Al final de la fecha, la clasificación tenía al mismo tipo dos veces.
+
+**Causa:** `StateTracker` indexa por `carId`, que es el número de slot y el servidor lo reutiliza.
+`/api/state` mandaba `getConnected()`: el que no estaba conectado en ese instante, no existía.
+
+**Decisión:** la torre pasa a ser de la **jornada**, no del instante. La identidad es el
+`driverGuid` —el SteamID, que no cambia— y el snapshot lleva `connected: true|false`. El
+desconectado queda en gris al 45 %, con sus tiempos y sin posición, abajo de todo; el que vuelve
+recupera su fila aunque el slot sea otro. Los tiempos y las vueltas se siguen reseteando con cada
+sesión, que es lo correcto: lo que persiste es la persona, no sus tiempos de práctica.
+
+Esto obligó a un segundo mapa, `historial`, indexado por guid: cuando otro piloto ocupa un slot
+liberado, el ocupante anterior se muda ahí antes de que le pisen la identidad. Sin eso, el primer
+piloto que se iba y era reemplazado desaparecía igual que antes — con la diferencia de que ahora
+nadie lo habría notado hasta ver la clasificación final. Hay un techo de 64 filas por jornada, para
+que una fecha larga de servidor público no acumule sin fin.
+
+### La carrera no podía terminar
+
+**Causa:** `SessionPhase` tiene `"finished"` desde la 0.5 y **nadie lo ponía nunca**. El único que
+movía la fase era la largada, que conoce idle, formación y verde. Era el bug de siempre de este
+proyecto: no falla, simplemente no pasa.
+
+**Decisión:** `END_SESSION` del servidor de AC pone la fase en `finished` si veníamos en carrera, y
+el `NEW_SESSION` siguiente la devuelve a `idle`. Recién con eso el link de **"Posiciones finales"**
+—el mismo informe que ya vivía en la pestaña Sanciones— puede aparecer en el título de la torre al
+terminar, que es cuando se lo busca. Hay un test de invariante que verifica las dos puntas: que el
+backend llegue al estado y que el panel lo lea.
+
+### Los tres tipos de torneo se fueron: ahora la liga guarda su reglamento
+
+**Síntoma:** no había vuelta atrás. El admin tocaba dos umbrales para la fecha de resistencia y la
+configuración de la fecha normal se perdía; además, el modo que figuraba elegido ya no describía lo
+que estaba corriendo.
+
+**Decisión:** fuera `PRESETS`, `PresetName`, `applyPreset()` y `POST /api/config/preset`. En su
+lugar, **perfiles de carrera**: el admin guarda todo el reglamento —catálogo de infracciones,
+sanción de largada, zona y sanción de pit, presencia— con el nombre que su liga use para hablar de
+él, y lo repone entero de una. Un perfil **no guarda nada de red, puertos ni nombre de liga**:
+elegir un perfil no puede desconfigurar un servidor.
+
+Las dos validaciones viven en el servidor y devuelven 409 con el mensaje ya escrito: nombre
+repetido —comparado sin mayúsculas ni acentos— y contenido idéntico a uno que ya existe, **diciendo
+cuál es**. La segunda compara un JSON canónico con las claves ordenadas, no el objeto crudo, que
+cambia de orden según por dónde se lo escribió. Aplicar un perfil usa `mergeConfigInto` y no un
+reemplazo: los motores tienen referencias vivas a los objetos anidados de la config, y pisarlos los
+deja mirando un objeto huérfano.
+
+Un `config.json` viejo con `preset` adentro pierde la clave al cargarse, igual que ya pasaba con
+`incidents` y `trackLimits`. El asistente de primera vez queda en **tres pasos**: el que se fue era
+justamente el de elegir modo, y era el único obligatorio — pedirle a alguien que nunca vio el
+producto que elija entre "casual" y "estricto" es pedirle una decisión que no tiene con qué tomar.
+
+### La chapa de sesión y los colores del mapa
+
+Dos cosas que en el escritorio se ven bien y a dos metros de la pantalla no: la chapa **P/Q/R**
+medía 13 px al lado de un reloj de 26, así que su color —gris, ámbar, verde según cuánto pesa la
+sesión— no llegaba a leerse. Ahora mide 22, el reloj bajó a 18 y los colores subieron de saturación
+porque ocupan más superficie.
+
+Y en el mapa los veinte autos eran veinte puntos del mismo dorado. Ahora cada uno se pinta del
+color de su marca —Ferrari rojo, BMW azul, Porsche celeste, Mercedes gris, Aston Martin verde
+oscuro, Lexus violeta, McLaren naranja, Corvette amarillo— con un borde oscuro fino para que un
+color apagado no se pierda sobre el asfalto. Es la **misma** tabla que ya usaban los escudos de
+monograma, no una segunda: tener dos paletas para lo mismo termina en un auto que es rojo en la
+torre y naranja en el mapa. Lo que no está en la tabla sigue derivando un tono estable de su
+nombre. El auto seleccionado sigue blanco y el que perdió telemetría sigue hueco y gris: esos dos
+estados ganan sobre el color de marca, porque dicen algo que el color de marca no dice.
+
+### Tests
+
+De 270 a 288. Los nuevos: el matcheo de marcas contra los archivos en disco, la persistencia del
+roster —incluido el caso del slot reutilizado, que es el que falló primero—, los perfiles de reglas
+con sus dos conflictos, y dos invariantes de panel: que la fase `finished` sea alcanzable y que la
+sección de perfiles esté cableada de punta a punta. Ese último existe porque un borrado a medias no
+rompe nada visible: el cajón de Reglas sigue abriendo y la sección nueva queda muerta.
+
 ## [1.1] — 2026-10-26
 
 **La primera versión probada en pista.** La 1.0 se corrió en Spa con gente adentro y volvió con

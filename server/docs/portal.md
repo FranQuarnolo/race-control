@@ -180,8 +180,9 @@ leagues:  { id, slug, name, udpPort, clientPort, adminPort, status, lastError, o
    ya armado y le pregunta al worker cada 2 segundos si llegó algo.
 4. Cuando llega, se pone verde y lo manda al panel.
 
-No se le pide la IP, ni puertos, ni el tipo de torneo. Eso arranca en *Campeonato* y se cambia
-después desde Reglas, donde ya vive.
+No se le pide la IP, ni puertos, ni el reglamento. Las reglas arrancan en los valores por defecto
+y se cambian después desde Reglas, donde ya viven; si la liga quiere varios reglamentos, los guarda
+ahí mismo como perfiles.
 
 Lo mismo está en `portal/cli.ts`, para cuando el portal no está levantado. Los comandos que
 escriben se niegan a correr con el portal vivo, y el motivo es concreto: el portal tiene todo

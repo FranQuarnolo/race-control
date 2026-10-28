@@ -1,7 +1,7 @@
 import express, { Express, Response } from "express";
 import * as path from "path";
-import { AppConfig, applyConfigPatch, applyPreset, isFirstRun } from "../config";
-import { ACTION_LABELS, AUTO_PENALTY_ALLOWED, PRESETS, PresetName } from "../incident/catalog";
+import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveProfile } from "../config";
+import { ACTION_LABELS, AUTO_PENALTY_ALLOWED } from "../incident/catalog";
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
 import { PresenceWatchdog } from "../presence/presenceWatchdog";
@@ -61,7 +61,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.1";
+export const APP_VERSION = "1.2";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -113,7 +113,12 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.get("/api/state", (_req, res) => {
     deps.connectivity.refreshTelemetryFlag();
     const now = Date.now();
-    const connected = deps.stateTracker.getConnected();
+    // La torre muestra la jornada entera, no solo a los que están conectados ahora mismo; la
+    // clasificación y los intervalos, en cambio, se calculan solo entre los que están en pista.
+    // Un desconectado no tiene posición ni intervalo: su fila va al fondo con `--`, que es lo
+    // único honesto que se puede poner ahí.
+    const roster = deps.stateTracker.getRoster();
+    const connected = roster.filter((c) => c.connected);
     const sessionType = deps.getSessionType();
     const standings = computeStandings(connected, sessionType);
     const gaps = computeGaps(connected, sessionType);
@@ -124,7 +129,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       shadowMode: deps.config.shadowMode,
       lightState: deps.formationStart.getLightState(),
       phase: deps.getPhase(),
-      cars: connected.map((car) => {
+      cars: roster.map((car) => {
         const telemetry = deps.telemetryStore.get(car.driverGuid);
         return {
           ...car,
@@ -227,38 +232,58 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   });
 
   /**
-   * Catálogo para armar el panel: qué infracciones hay, qué acciones admite cada una y qué
-   * presets existen.
+   * Catálogo para armar el panel: qué infracciones hay y qué acciones admite cada una.
    *
    * Lo manda el backend en vez de duplicarlo en el JavaScript del panel porque la regla de qué
    * tipos aceptan sanción automática es una decisión de producto, no de presentación: si vive en
    * dos lados, tarde o temprano el panel ofrece una opción que el servidor va a rechazar.
+   *
+   * Acá también viajaban los tres presets de torneo, que ya no existen: ver el comentario que los
+   * reemplazó en `incident/catalog.ts`.
    */
   app.get("/api/catalog", (_req, res) => {
     res.json({
       actions: ACTION_LABELS,
       autoPenaltyAllowed: [...AUTO_PENALTY_ALLOWED],
-      presets: Object.entries(PRESETS).map(([name, preset]) => ({
-        name,
-        label: preset.label,
-        description: preset.description,
-      })),
     });
   });
 
-  app.post("/api/config/preset", (req, res) => {
-    const preset = (req.body ?? {}).preset as PresetName;
-    if (!(preset in PRESETS)) {
-      res.status(400).json({ ok: false, error: "Preset desconocido" });
+  /**
+   * Perfiles de carrera: el reglamento completo guardado con un nombre.
+   *
+   * Las dos validaciones —nombre repetido y contenido repetido— viven en `config.ts` y devuelven
+   * 409, que es el código del conflicto con el estado actual del recurso. No son 400: el pedido
+   * está bien formado, lo que pasa es que ese perfil ya está.
+   */
+  app.get("/api/profiles", (_req, res) => {
+    res.json({ profiles: deps.config.ruleProfiles, activeProfileId: deps.config.activeProfileId });
+  });
+
+  app.post("/api/profiles", (req, res) => {
+    const result = saveProfile(deps.config, String((req.body ?? {}).name ?? ""));
+    if ("error" in result) {
+      res.status(409).json({ ok: false, error: result.error });
       return;
     }
-    try {
-      applyPreset(deps.config, preset);
-      res.json(deps.config);
-    } catch (err) {
-      console.error("[admin-api] No se pudo aplicar el preset:", err);
-      res.status(500).json({ ok: false, error: "No se pudo guardar la configuración: " + String(err) });
+    res.json({ ok: true, profile: result, config: deps.config });
+  });
+
+  app.post("/api/profiles/:id/apply", (req, res) => {
+    const result = applyProfile(deps.config, req.params.id);
+    if ("error" in result) {
+      res.status(404).json({ ok: false, error: result.error });
+      return;
     }
+    res.json({ ok: true, profile: result, config: deps.config });
+  });
+
+  app.delete("/api/profiles/:id", (req, res) => {
+    const result = deleteProfile(deps.config, req.params.id);
+    if ("error" in result) {
+      res.status(404).json({ ok: false, error: result.error });
+      return;
+    }
+    res.json({ ok: true, config: deps.config });
   });
 
   /**
@@ -473,9 +498,11 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     return buildReport({
       leagueName: deps.config.leagueName,
       version: APP_VERSION,
-      // `getAll` y no `getConnected`: quien abandonó en la vuelta 3 también va en el informe, con
-      // las sanciones que se haya llevado.
-      cars: deps.stateTracker.getAll(),
+      // `getRoster` y no `getConnected`: quien abandonó en la vuelta 3 también va en el informe,
+      // con las sanciones que se haya llevado. Y es el roster y no `getAll` porque el roster está
+      // indexado por piloto: quien se reconectó y cambió de slot aparecía dos veces en la tabla
+      // de posiciones, una con sus vueltas y otra con las que hizo después.
+      cars: deps.stateTracker.getRoster(),
       sessionType: deps.getSessionType(),
       session: deps.sessionTracker.get(),
       penaltiesByEngine: [

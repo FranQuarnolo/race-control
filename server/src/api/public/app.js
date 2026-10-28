@@ -75,6 +75,10 @@ function post(path, body) {
   });
 }
 
+function del(path) {
+  return api(path, { method: "DELETE" });
+}
+
 // ===================================================================== estado compartido
 
 /** Auto seleccionado. Es UNA sola variable para los dos sentidos de la selección: click en la
@@ -508,48 +512,95 @@ function refreshInfractionState(box) {
   box.classList.toggle("off", $(fieldId(box.dataset.type, "action")).value === "ignore");
 }
 
-function buildPresetsUI() {
-  const list = $("preset-list");
-  clearChildren(list);
-  for (const preset of catalog.presets) {
-    const button = document.createElement("button");
-    button.className = "preset";
-    button.dataset.preset = preset.name;
-    button.setAttribute("aria-pressed", "false");
-    const label = document.createElement("strong");
-    label.textContent = preset.label;
-    const description = document.createElement("span");
-    description.textContent = preset.description;
-    button.appendChild(label);
-    button.appendChild(description);
-    button.addEventListener("click", () => applyPreset(preset.name, preset.label));
-    list.appendChild(button);
+// ===================================================================== perfiles de carrera
+
+/**
+ * Perfiles de carrera: el reglamento completo, guardado con un nombre.
+ *
+ * Reemplazan a los tres tipos de torneo de fábrica. Acá había tres botones que aplicaban un
+ * paquete de valores; el problema no era el paquete sino que no había vuelta: tocabas dos
+ * umbrales para la fecha de resistencia y la configuración de la fecha normal se perdía.
+ *
+ * Las validaciones —nombre repetido, reglas repetidas— las hace el servidor y devuelve 409 con el
+ * texto ya escrito. El panel no las duplica a propósito: una regla de unicidad que vive en el
+ * navegador no es una regla, y acá el mismo backend lo sirve por internet a través del portal.
+ */
+function renderProfiles(config) {
+  const select = $("profile-select");
+  const perfiles = config.ruleProfiles || [];
+  clearChildren(select);
+  for (const perfil of perfiles) {
+    const option = document.createElement("option");
+    option.value = perfil.id;
+    // `textContent` y no innerHTML: el nombre lo escribe el admin.
+    option.textContent = perfil.name;
+    select.appendChild(option);
   }
+  if (config.activeProfileId) select.value = config.activeProfileId;
+
+  const vacio = perfiles.length === 0;
+  select.disabled = vacio;
+  $("btn-apply-profile").disabled = vacio;
+  $("btn-delete-profile").disabled = vacio;
+  $("profile-empty").hidden = !vacio;
 }
 
-async function applyPreset(name, label) {
-  try {
-    const config = await post("/api/config/preset", { preset: name });
-    // El preset toca el catálogo Y las sanciones de largada y pit: se repinta todo el cajón en
-    // vez de solo la sección, si no quedarían campos mostrando los valores anteriores.
-    fillConfigForm(config);
-    toast('Listo: reglas de "' + label + '"');
-  } catch (err) {
-    toast("No se pudo aplicar: " + err.message, 5000);
-  }
-}
+function wireProfiles() {
+  $("btn-save-profile").addEventListener("click", async () => {
+    const input = $("profile-name");
+    const name = input.value.trim();
+    if (!name) {
+      toast("Ponele un nombre al perfil");
+      input.focus();
+      return;
+    }
+    try {
+      const res = await post("/api/profiles", { name });
+      input.value = "";
+      fillConfigForm(res.config);
+      toast('Guardado el perfil "' + res.profile.name + '"');
+    } catch (err) {
+      // El 409 llega acá con el mensaje del servidor, que ya nombra al perfil que choca. Dura más
+      // que un toast normal: hay que leer un nombre, no solo registrar que algo falló.
+      toast(err.message, 6000);
+    }
+  });
 
-function markActivePreset(active) {
-  for (const button of $("preset-list").children) {
-    button.setAttribute("aria-pressed", String(button.dataset.preset === active));
-  }
+  $("btn-apply-profile").addEventListener("click", async () => {
+    const select = $("profile-select");
+    if (!select.value) return;
+    try {
+      const res = await post("/api/profiles/" + encodeURIComponent(select.value) + "/apply");
+      // Un perfil toca el catálogo, las dos sanciones, la zona de pit y la app del piloto: se
+      // repinta el cajón entero y no solo esta sección, si no quedarían campos con lo anterior.
+      fillConfigForm(res.config);
+      toast('Reglas de "' + res.profile.name + '" cargadas');
+    } catch (err) {
+      toast("No se pudo cargar: " + err.message, 5000);
+    }
+  });
+
+  $("btn-delete-profile").addEventListener("click", async () => {
+    const select = $("profile-select");
+    if (!select.value) return;
+    const nombre = select.options[select.selectedIndex].textContent;
+    if (!window.confirm('¿Borrar el perfil "' + nombre + '"?\n\nLas reglas que están puestas ahora no cambian: lo que se pierde es poder volver a cargarlas de una.')) {
+      return;
+    }
+    try {
+      const res = await del("/api/profiles/" + encodeURIComponent(select.value));
+      fillConfigForm(res.config);
+      toast('Perfil "' + nombre + '" borrado');
+    } catch (err) {
+      toast("No se pudo borrar: " + err.message, 5000);
+    }
+  });
 }
 
 async function loadConfigForm() {
   // El catálogo primero: la sección de infracciones se arma con lo que el backend dice que se
   // puede configurar, así que sin eso no hay campos donde volcar los valores.
   catalog = await api("/api/catalog");
-  buildPresetsUI();
   buildInfractionsUI();
   fillConfigForm(await api("/api/config"));
 }
@@ -580,7 +631,7 @@ function fillConfigForm(config) {
     }
     refreshInfractionState($("infractions-list").querySelector('[data-type="' + type + '"]'));
   }
-  markActivePreset(config.preset);
+  renderProfiles(config);
 
   $("pr-enforce").checked = config.presence.enforce;
   $("pr-grace").value = config.presence.graceSeconds;
@@ -609,11 +660,24 @@ const NO_APP_TITLE = "Este dato solo existe en la Shared Memory del juego: hace 
 function renderTiming(cars) {
   const body = $("cars-body");
   $("cars-empty").hidden = cars.length > 0;
-  $("cars-count").textContent = cars.length > 0 ? cars.length + " en pista" : "";
+
+  // El contador cuenta a los que están en pista, no las filas: desde la 1.2 la torre también
+  // muestra a los que se desconectaron, y "26 en pista" con veinte autos girando sería mentira.
+  const enPista = cars.filter((c) => c.connected !== false).length;
+  const afuera = cars.length - enPista;
+  $("cars-count").textContent =
+    cars.length === 0 ? "" : enPista + " en pista" + (afuera > 0 ? " · " + afuera + " fuera" : "");
 
   // Orden de la torre: lo decide el servidor (progreso en carrera, mejor vuelta en práctica y
-  // clasificación) y acá solo se respeta. Quien todavía no tiene posición va al fondo.
-  const ordered = cars.slice().sort((a, b) => (a.position || 999) - (b.position || 999));
+  // clasificación) y acá solo se respeta. Quien todavía no tiene posición va al fondo, y los
+  // desconectados más al fondo todavía: siguen en la tabla para no perder sus tiempos, pero no
+  // compiten contra nadie y mezclarlos entre los que giran haría perder la lectura de la torre.
+  const ordered = cars.slice().sort((a, b) => {
+    const fueraA = a.connected === false ? 1 : 0;
+    const fueraB = b.connected === false ? 1 : 0;
+    if (fueraA !== fueraB) return fueraA - fueraB;
+    return (a.position || 999) - (b.position || 999);
+  });
 
   // Mejor vuelta absoluta de la sesión, para pintarla distinto. Se calcula sobre el conjunto, así
   // que tiene que salir de acá y no de la fila.
@@ -726,7 +790,16 @@ function updateCarRow(row, car, sessionBest) {
   // Velocidad, o el aviso de que no hay dato nuevo. Un auto congelado seguía mostrando su última
   // velocidad como si todavía estuviera girando a esa velocidad — que es lo contrario de lo que
   // pasa: está quieto, desconectándose o con el juego cerrado.
-  if (car.telemetryStale) {
+  if (car.connected === false) {
+    // La fila se queda, pero tiene que decir por qué está apagada. Sin esto, un desconectado se
+    // ve igual que alguien detenido en pista con la señal cortada, que es otra cosa.
+    clearChildren(row.speed);
+    const aviso = document.createElement("span");
+    aviso.className = "sin-conexion";
+    aviso.textContent = "desconectado";
+    aviso.title = "Salió del servidor. La fila queda con sus tiempos de la sesión: si vuelve a entrar, la recupera.";
+    row.speed.appendChild(aviso);
+  } else if (car.telemetryStale) {
     clearChildren(row.speed);
     const aviso = document.createElement("span");
     aviso.className = "sin-senal";
@@ -768,9 +841,17 @@ function updateCarRow(row, car, sessionBest) {
   clearChildren(row.ping);
   row.ping.appendChild(pingBadge(car));
 
-  row.tr.classList.toggle("in-pit", Boolean(car.inPit));
-  row.tr.classList.toggle("stale", Boolean(car.telemetryStale));
+  const fuera = car.connected === false;
+  row.tr.classList.toggle("desconectado", fuera);
+  row.tr.classList.toggle("in-pit", !fuera && Boolean(car.inPit));
+  // Un desconectado tiene la telemetría vencida por definición: marcarlo además como "stale"
+  // apilaría dos grises distintos sobre la misma fila y ninguno de los dos se leería.
+  row.tr.classList.toggle("stale", !fuera && Boolean(car.telemetryStale));
   row.tr.classList.toggle("selected", selectedCarId === car.carId);
+  // Nada que hacerle a alguien que ya no está en el servidor: ni kickearlo ni sancionarlo en
+  // vivo. El menú se deshabilita en vez de esconderse, para que la columna no baile.
+  row.kebab.disabled = fuera;
+  row.kebab.title = fuera ? "El piloto no está conectado" : "Más acciones";
   // El kick vive dentro del menú de tres puntitos, que puede estar cerrado: el punto rojo en los
   // puntitos es lo único que queda a la vista de que hay un kick a medio confirmar.
   row.kebab.classList.toggle("arming", armedKick !== null && armedKick.carId === car.carId);
@@ -962,33 +1043,62 @@ function brandShield(car) {
   return wrap;
 }
 
-/** Colores de las marcas que más aparecen en una liga. El resto no se mantiene a mano: se deriva
- * un tono estable del propio nombre, así un auto mod también tiene su color y siempre el mismo. */
+/**
+ * Colores de marca. **Una sola paleta** para el escudo de la torre y el punto del mapa: si fueran
+ * dos, el mismo auto tendría un color en cada lado y el color dejaría de servir para cruzar una
+ * cosa con la otra, que es justamente para lo que está.
+ *
+ * El criterio es "el color con el que esa marca se reconoce", no el Pantone oficial: sobre un
+ * asfalto gris oscuro y en un punto de 6 px, el rojo Ferrari de catálogo y el rojo Toyota de
+ * catálogo son el mismo punto. Por eso la parrilla GT3 —que es la que corre— se reparte el círculo
+ * cromático a propósito y las marcas que no aparecen en GT3 se quedan con su color real aunque
+ * choquen entre ellas.
+ *
+ * El resto no se mantiene a mano: se deriva un tono estable del propio nombre, así un auto mod
+ * también tiene su color y siempre el mismo.
+ */
 const BRAND_COLORS = {
+  // La parrilla GT3, que es la que se ve en el mapa un domingo.
+  "Ferrari": "#e10600",
+  "BMW": "#0d6ec9",
+  "Porsche": "#53c7f0",
+  "Mercedes-Benz": "#a8b0bd",
+  "Aston Martin": "#118a63",
+  "Lexus": "#9b5cf6",
+  "McLaren": "#ff8000",
+  "Chevrolet Corvette": "#ffd500",
+  "Chevrolet": "#ffd500",
+  "Audi": "#e0218a",
+  "Lamborghini": "#b5e61d",
+  "Honda": "#f0e6d2",
+  "Acura": "#d9c48f",
+  "Nissan": "#ff5e9c",
+  "Alpine": "#3f6fe0",
+  "Bentley": "#16a39a",
+  "Ford": "#8b5a2b",
+  "Cadillac": "#7d1128",
+  "Ginetta": "#1f9ad6",
+  // Fuera de GT3: acá sí manda el color real de la marca.
   "Abarth": "#b01c21",
   "Alfa Romeo": "#9b1b30",
-  "Audi": "#bb0a30",
-  "BMW": "#0066b1",
-  "Chevrolet": "#d1a73a",
-  "Ferrari": "#d40000",
-  "Ford": "#1c3f94",
-  "Honda": "#cc0000",
   "Jaguar": "#1d4a3f",
-  "Lamborghini": "#ddb321",
   "Lancia": "#1b4f9c",
-  "Lotus": "#1c6b3c",
+  "Lotus": "#6aa84f",
   "Maserati": "#15284b",
   "Mazda": "#7b1d2b",
-  "McLaren": "#ff8000",
-  "Mercedes-Benz": "#00a19b",
-  "Nissan": "#c3002f",
   "Pagani": "#2d4a6b",
-  "Porsche": "#b12b28",
   "Renault": "#d6c01d",
   "Subaru": "#0b3d91",
   "Toyota": "#c8102e",
   "Volkswagen": "#0a3d7a",
 };
+
+/** Color del punto del auto en el mapa. Sin marca reconocida vuelve al dorado del acento, que es
+ * como se dibujaba toda la parrilla antes de la 1.2. */
+function carMapColor(car) {
+  const brand = car && (car.brand || car.carModel);
+  return brand ? brandColor(brand) : "#f0b429";
+}
 
 function brandColor(brand) {
   if (BRAND_COLORS[brand]) return BRAND_COLORS[brand];
@@ -1285,12 +1395,21 @@ function drawMap() {
       ctx.lineWidth = 2;
       ctx.stroke();
     } else {
-      // Con el acento en dorado, el auto seleccionado ya no puede ser amarillo: sobre el resto de
-      // la parrilla —que ahora es dorada— se perdería. El blanco es el único color que queda con
-      // contraste propio en el mapa, y es además el más fuerte, que es lo que corresponde a lo
-      // seleccionado. El hover queda en un dorado claro: un escalón, no otro color.
-      ctx.fillStyle = selected ? "#ffffff" : hovered ? "#ffd877" : "#f0b429";
+      // Cada auto del color de su marca (1.2). Antes la parrilla entera era dorada y la única
+      // forma de saber quién era cada punto era pasarle el mouse por encima, uno por uno: con
+      // veinticuatro autos eso no se hace en carrera.
+      //
+      // El blanco del seleccionado le gana al color de marca, y el gris hueco del que perdió
+      // telemetría también: los dos dicen algo que el color de marca no dice, y el color de marca
+      // se puede deducir igual de la torre. El hover ya no cambia el relleno —cambiaría el color
+      // de la marca, que es el dato— sino que se marca con el borde blanco y el radio más grande.
+      ctx.fillStyle = selected ? "#ffffff" : carMapColor(anim.car);
       ctx.fill();
+      // Borde oscuro fino: sin esto un gris Mercedes o un azul Alpine se pierden contra el
+      // asfalto, que es del mismo rango de tono.
+      ctx.strokeStyle = hovered ? "#ffffff" : "rgba(9, 11, 15, 0.85)";
+      ctx.lineWidth = hovered ? 2 : 1.5;
+      ctx.stroke();
     }
     if (selected) {
       ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
@@ -1476,8 +1595,10 @@ function renderMapStatus(state) {
     $("map-empty-sub").textContent = "El dibujo ya viene con Race Control: aparece apenas se conecta el servidor.";
     return;
   }
+  // Conectados, no filas: el circuito lo aprenden los que están girando, y la torre ahora también
+  // lista a los que se fueron.
   $("map-empty-text").textContent =
-    state.cars.length === 0
+    state.cars.filter((c) => c.connected !== false).length === 0
       ? "Esperando que alguien salga a pista para aprender el circuito."
       : "Aprendiendo el circuito: " + Math.round(coverage * 100) + "%";
   $("map-empty-sub").textContent =
@@ -1731,8 +1852,9 @@ function appendCell(tr, text, className) {
   tr.appendChild(td);
 }
 
-/** Las sanciones guardan el guid, no el nombre. Lo resolvemos contra los autos conectados para
- * no mostrarle "Auto 7" a quien quiere saber a quién sancionó. */
+/** Las sanciones guardan el guid, no el nombre. Lo resolvemos contra la torre para no mostrarle
+ * "Auto 7" a quien quiere saber a quién sancionó. Desde la 1.2 la torre lista también a los
+ * desconectados, así que el nombre del que se fue en la vuelta 3 ya no se pierde. */
 function driverLabel(driverGuid, carId) {
   const cars = lastState ? lastState.cars : [];
   const car = cars.find((c) => c.driverGuid === driverGuid);
@@ -2231,6 +2353,11 @@ function renderRaceFlag(state) {
   const racing = state.phase === "race" || state.lightState === "green";
   $("race-flag").classList.toggle("racing", racing);
   $("nav-live").title = racing ? "Carrera en curso" : "La carrera todavía no arrancó";
+
+  // Las posiciones finales, en la torre, apenas cae la bandera a cuadros. Mientras la carrera
+  // corre el link no está: la clasificación se sigue moviendo y un CSV bajado en la vuelta 20 no
+  // es un resultado, es una foto que después nadie sabe de cuándo era.
+  $("btn-report-timing").hidden = state.phase !== "finished";
 }
 
 // ===================================================================== botones de largada
@@ -2361,7 +2488,10 @@ async function refresh() {
   badge.textContent = String(state.pendingIncidents || 0);
   badge.hidden = !state.pendingIncidents;
 
-  updateCarTargets(state.cars);
+  // Al mapa van solo los que están en pista. La torre muestra la jornada entera desde la 1.2,
+  // pero un desconectado no está en ningún lado del circuito: su punto quedaría clavado donde se
+  // le cortó, indistinguible de un auto detenido de verdad.
+  updateCarTargets(state.cars.filter((c) => c.connected !== false));
   pitZone = state.pitZone || null;
   await refreshTrack(state.track ? state.track.coverage : 0);
   renderMapStatus(state);
@@ -2511,19 +2641,23 @@ function wireLogout() {
 // ===================================================================== wizard de primer arranque
 
 /**
- * Asistente de cuatro pasos.
+ * Asistente de tres pasos: bienvenida, conexión y verificación.
  *
  * El de antes pedía solo el nombre de la liga y afirmaba que "el resto se detecta solo", lo cual
  * no era cierto: ni el servidor de AC quedaba conectado ni las reglas quedaban puestas. El admin
  * cerraba el modal creyendo que ya estaba y se enteraba de que faltaba todo el día de la carrera.
  *
- * Los cuatro pasos son, en orden, lo que hay que hacer antes de poder usar el producto. Ninguno
- * de los tres últimos es obligatorio —se puede terminar y arreglarlo después— pero los tres están
- * a la vista, que es la diferencia.
+ * Los pasos son, en orden, lo que hay que hacer antes de poder usar el producto. Ninguno de los
+ * dos últimos es obligatorio —se puede terminar y arreglarlo después— pero están a la vista, que
+ * es la diferencia.
+ *
+ * Eran cuatro hasta la 1.2: el segundo era elegir el tipo de torneo, y era el único obligatorio.
+ * Se fue con los tres modos de fábrica. Pedirle a alguien que todavía no corrió una fecha que
+ * elija entre "casual" y "estricto" era pedirle una decisión que no tenía con qué tomar, y la
+ * respuesta quedaba después contradicha por el primer valor que tocara a mano.
  */
-const WIZARD_LAST_STEP = 4;
+const WIZARD_LAST_STEP = 3;
 let wizardStep = 1;
-let wizardPreset = "";
 /** `null` = todavía no sabemos si es la primera vez; `true` = abierto; `false` = ya se cerró. */
 let wizardOpen = null;
 
@@ -2553,10 +2687,6 @@ function wireWizard() {
 async function advanceWizard() {
   // El paso 1 no guarda nada: es una bienvenida que confirma de qué liga se trata. El nombre ya
   // viene puesto desde el portal cuando el motor arranca.
-  if (wizardStep === 2 && !wizardPreset) {
-    toast("Elegí un tipo de torneo");
-    return;
-  }
   if (wizardStep === WIZARD_LAST_STEP) {
     wizardOpen = false;
     $("wizard-overlay").hidden = true;
@@ -2574,8 +2704,7 @@ function showWizardStep(step) {
   $("wizard-back").hidden = step === 1;
   $("wizard-next").textContent = step === WIZARD_LAST_STEP ? "Listo, empezar" : "Siguiente";
   renderWizardDots();
-  if (step === 2) buildWizardPresets();
-  if (step === 4) $("wizard-test").click();
+  if (step === WIZARD_LAST_STEP) $("wizard-test").click();
 }
 
 function renderWizardDots() {
@@ -2588,39 +2717,11 @@ function renderWizardDots() {
   }
 }
 
-function buildWizardPresets() {
-  const list = $("wizard-presets");
-  if (!catalog || list.children.length > 0) return;
-  for (const preset of catalog.presets) {
-    const button = document.createElement("button");
-    button.className = "preset";
-    button.dataset.preset = preset.name;
-    button.setAttribute("aria-pressed", "false");
-    const label = document.createElement("strong");
-    label.textContent = preset.label;
-    const description = document.createElement("span");
-    description.textContent = preset.description;
-    button.appendChild(label);
-    button.appendChild(description);
-    button.addEventListener("click", async () => {
-      try {
-        fillConfigForm(await post("/api/config/preset", { preset: preset.name }));
-        wizardPreset = preset.name;
-        for (const other of list.children) {
-          other.setAttribute("aria-pressed", String(other.dataset.preset === preset.name));
-        }
-      } catch (err) {
-        toast("No se pudo aplicar: " + err.message, 5000);
-      }
-    });
-    list.appendChild(button);
-  }
-}
-
 wireRouter();
 wireDrawers();
 wireButtons();
 wireMap();
+wireProfiles();
 setupForms();
 renderRoute();
 

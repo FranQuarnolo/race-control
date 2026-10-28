@@ -293,17 +293,30 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   piloto en la bandeja de incidentes, que es donde se los juzga, y los sectores no estaban
   llegando bien —una columna que muestra guiones es peor que no tenerla—.
 
+  Desde la **1.2** la torre es de **toda la jornada**: el que apareció en práctica sigue en la
+  tabla en clasificación y en carrera. Si se desconecta, su fila queda en gris con sus tiempos y
+  sin posición; si vuelve —aunque el servidor le dé otro slot— recupera su fila. Los tiempos y las
+  vueltas se resetean con cada sesión, como siempre. Al terminar la carrera aparece
+  **"Posiciones finales"** en el título de la torre: es el mismo informe que la pestaña Sanciones,
+  a mano cuando hace falta.
+
   Tres de esas columnas —Box, Neum. y Comb.— y el ping **solo las puede llenar la app del
   piloto**: son datos de la Shared Memory del juego y el protocolo UDP del servidor no los
   transporta. Si ningún piloto la tiene, la columna de Ping no se muestra y al lado del título
   aparece una chapa gris que dice **"ningún piloto con la app"**; clickearla abre el diagnóstico.
 - **El mapa en vivo**: el circuito viene dibujado. Desde la **0.8** los trazados viajan con Race
   Control, así que el mapa sale completo apenas el servidor dice en qué pista está, sin esperar a
-  que nadie dé vueltas. Al lado del reloj hay una chapa que dice **P**, **Q** o **R** según el tipo
-  de sesión. Una pista mod que no esté en el catálogo se sigue aprendiendo de la telemetría, como
-  antes, y el cartel lo aclara.
+  que nadie dé vueltas. Al lado del reloj hay una chapa grande que dice **P**, **Q** o **R** según
+  el tipo de sesión —gris, ámbar o verde: el color dice cuánto pesa la sesión—. Desde la **1.2**
+  cada auto del mapa se pinta del color de su marca (Ferrari rojo, BMW azul, Porsche celeste y así
+  con el resto); el seleccionado sigue en blanco y el que perdió telemetría, hueco. Una pista mod
+  que no esté en el catálogo se sigue aprendiendo de la telemetría, como antes, y el cartel lo
+  aclara.
 - **Sanciones**: lo que se aplicó solo y lo que aplicó el comisario, más "Descargar informe de
   carrera" al terminar.
+- **Reglas**: qué se controla en pista y, arriba de todo, los **perfiles de carrera**. Un perfil
+  guarda el reglamento completo con el nombre que la liga use para hablar de él, y cargarlo lo
+  repone entero. No toca nada de la conexión: elegir un perfil no puede desconfigurar el servidor.
 
 **Para las primeras carreras, dejá el modo sombra prendido.** Registra todo y no sanciona a nadie
 de verdad: sirve para mirar un fin de semana entero qué habría hecho el motor antes de confiarle el

@@ -82,69 +82,20 @@ export function defaultInfractions(): InfractionCatalog {
   };
 }
 
-/**
- * Presets por tipo de torneo.
+/*
+ * Acá vivían los tres presets de torneo: "Carrera casual", "Campeonato" y "Simulación estricta",
+ * un patch de reglas cada uno que el admin elegía en el wizard.
  *
- * Existen porque un admin no técnico no tiene forma de saber qué umbral de impacto poner. Elige
- * "campeonato" y todos los números quedan puestos; después puede tocar lo que quiera.
+ * Se eliminaron en la 1.2, reemplazados por los perfiles de carrera (`RuleProfile` en config.ts),
+ * que guardan el reglamento completo con el nombre que le ponga la liga. El motivo no fue que
+ * sobraran sino que mentían: en cuanto el admin tocaba dos valores —que es lo primero que hace—,
+ * el modo que figuraba elegido ya no describía lo que estaba corriendo, y no había forma de
+ * volver a lo que uno tenía la fecha pasada. Un admin nuevo arranca con `defaultInfractions()`,
+ * que son los mismos valores que tenía "Campeonato".
  *
- * Cada preset es un patch sobre los valores por defecto, no un catálogo completo: así, agregar un
- * tipo de infracción nuevo no obliga a tocar los tres presets ni deja huecos silenciosos.
+ * Si alguna vez hiciera falta volver a ofrecer un punto de partida, la forma sería un perfil
+ * sembrado en el primer arranque, no un tipo aparte.
  */
-export type PresetName = "casual" | "campeonato" | "estricto";
-
-export interface Preset {
-  label: string;
-  description: string;
-  infractions: Partial<InfractionCatalog>;
-  /** Qué tan dura es la sanción automática de largada y pit lane. */
-  penalty: { toleranceSeconds: number; graceLaps: number; escalation: "DQ" | "TIME_PENALTY" };
-}
-
-export const PRESETS: Record<PresetName, Preset> = {
-  casual: {
-    label: "Carrera casual",
-    description: "Casi todo queda registrado sin interrumpir la carrera. Para juntadas y amistosos.",
-    infractions: {
-      carContact: { action: "review", minImpactKmh: 60 },
-      envCollision: { action: "ignore", minImpactKmh: 60 },
-      trackLimits: {
-        action: "log",
-        minTyresOut: 4,
-        excursionsForIncident: 5,
-        minDurationMs: 500,
-        reviewTimeGain: false,
-      },
-      wrongWay: { action: "review", minSeconds: 5, minSpeedKmh: 50 },
-      disconnectDuringRace: { action: "log" },
-    },
-    penalty: { toleranceSeconds: 8, graceLaps: 4, escalation: "TIME_PENALTY" },
-  },
-  campeonato: {
-    label: "Campeonato",
-    description: "Los toques y las salidas van a la bandeja del comisario. Es el equilibrio recomendado.",
-    infractions: defaultInfractions(),
-    penalty: { toleranceSeconds: 5, graceLaps: 3, escalation: "DQ" },
-  },
-  estricto: {
-    label: "Simulación estricta",
-    description: "Umbrales bajos y sanción automática por límites de pista. Para ligas de reglamento duro.",
-    infractions: {
-      carContact: { action: "review", minImpactKmh: 20 },
-      envCollision: { action: "review", minImpactKmh: 40 },
-      trackLimits: {
-        action: "penalty",
-        minTyresOut: 2,
-        excursionsForIncident: 3,
-        minDurationMs: 200,
-        reviewTimeGain: true,
-      },
-      wrongWay: { action: "review", minSeconds: 2, minSpeedKmh: 30 },
-      disconnectDuringRace: { action: "review" },
-    },
-    penalty: { toleranceSeconds: 3, graceLaps: 2, escalation: "DQ" },
-  },
-};
 
 /** Etiquetas para el panel. Deliberadamente sin jerga: "revisar" y no "review". */
 export const ACTION_LABELS: Record<InfractionAction, string> = {

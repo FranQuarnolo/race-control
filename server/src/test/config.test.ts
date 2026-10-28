@@ -1,13 +1,32 @@
 import { strict as assert } from "assert";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { test } from "node:test";
-import { applyPresetTo, mergeConfigInto, parseConfig, validateConfig } from "../config";
-import { PRESETS } from "../incident/catalog";
+import {
+  applyProfile,
+  deleteProfile,
+  mergeConfigInto,
+  parseConfig,
+  rulesFingerprint,
+  saveProfile,
+  setConfigDir,
+  snapshotRules,
+  validateConfig,
+} from "../config";
+
+/** Los perfiles se guardan en disco, así que estos tests necesitan una carpeta propia: sin esto
+ * le pisarían el `config.json` real a quien esté desarrollando. */
+function enCarpetaPropia(): void {
+  setConfigDir(fs.mkdtempSync(path.join(os.tmpdir(), "rc-config-test-")));
+}
 
 test("un config.json vacío arranca con el catálogo por defecto", () => {
   const config = parseConfig({});
   assert.equal(config.infractions.carContact.action, "review");
   assert.equal(config.infractions.trackLimits.minTyresOut, 4);
-  assert.equal(config.preset, "");
+  assert.deepEqual(config.ruleProfiles, []);
+  assert.equal(config.activeProfileId, "");
 });
 
 test("un config de una versión anterior se migra al catálogo nuevo", () => {
@@ -74,49 +93,151 @@ test("un bloque del catálogo que llega como basura se reemplaza entero", () => 
   assert.equal(config.infractions.wrongWay.minSeconds, 3);
 });
 
-test("aplicar un preset deja puestos los umbrales y las sanciones", () => {
+test("un perfil guarda el reglamento entero y volver a cargarlo lo repone", () => {
+  enCarpetaPropia();
   const config = parseConfig({});
-  applyPresetTo(config, "estricto");
+  config.infractions.trackLimits.action = "penalty";
+  config.infractions.trackLimits.minTyresOut = 2;
+  config.pit.stopGoSeconds = 45;
+  config.formation.penalty.graceLaps = 1;
+  const guardado = saveProfile(config, "Endurance");
+  assert.ok(!("error" in guardado), "no se pudo guardar el perfil");
 
-  assert.equal(config.preset, "estricto");
-  assert.equal(config.infractions.carContact.minImpactKmh, 20);
+  // El admin cambia las reglas para otra fecha...
+  config.infractions.trackLimits.action = "log";
+  config.infractions.trackLimits.minTyresOut = 4;
+  config.pit.stopGoSeconds = 20;
+  config.formation.penalty.graceLaps = 5;
+
+  // ...y vuelve al perfil de la anterior.
+  const aplicado = applyProfile(config, (guardado as any).id);
+  assert.ok(!("error" in aplicado));
   assert.equal(config.infractions.trackLimits.action, "penalty");
   assert.equal(config.infractions.trackLimits.minTyresOut, 2);
-  assert.equal(config.formation.penalty.graceLaps, PRESETS.estricto.penalty.graceLaps);
-  assert.equal(config.pit.penalty.toleranceSeconds, PRESETS.estricto.penalty.toleranceSeconds);
+  assert.equal(config.pit.stopGoSeconds, 45);
+  assert.equal(config.formation.penalty.graceLaps, 1);
+  assert.equal(config.activeProfileId, (guardado as any).id);
 });
 
-test("el preset no pisa lo que no menciona", () => {
+test("cargar un perfil no toca la instalación", () => {
+  // Es la razón por la que un perfil guarda un subconjunto y no la config entera: si cargar
+  // "Endurance" pudiera cambiar un puerto o la dirección pública, nadie lo apretaría nunca.
+  enCarpetaPropia();
   const config = parseConfig({ leagueName: "Liga del Sur", http: { adminPort: 4000, clientPort: 4001 } });
-  applyPresetTo(config, "casual");
-  assert.equal(config.leagueName, "Liga del Sur");
+  const guardado = saveProfile(config, "Base") as any;
+  config.leagueName = "Otra cosa";
+  config.http.adminPort = 4000;
+  applyProfile(config, guardado.id);
+  assert.equal(config.leagueName, "Otra cosa", "el perfil no puede renombrar la liga");
   assert.equal(config.http.adminPort, 4000);
+  assert.equal(config.shadowMode, true, "ni prender o apagar el modo sombra");
 });
 
-test("el preset muta el catálogo en lugar de reemplazarlo", () => {
-  // Los motores guardan la referencia a `config.infractions`: si el preset reemplazara el objeto,
-  // seguirían leyendo las reglas viejas hasta reiniciar el proceso.
+test("cargar un perfil muta el catálogo en lugar de reemplazarlo", () => {
+  // Los motores guardan la referencia a `config.infractions`: si el perfil reemplazara el objeto,
+  // seguirían leyendo las reglas viejas hasta reiniciar el proceso. El panel diría "cargado" y en
+  // pista no cambiaría nada.
+  enCarpetaPropia();
   const config = parseConfig({});
+  config.infractions.trackLimits.minTyresOut = 2;
+  const guardado = saveProfile(config, "Estricto") as any;
+  config.infractions.trackLimits.minTyresOut = 4;
+
   const catalogRef = config.infractions;
   const trackLimitsRef = config.infractions.trackLimits;
-  applyPresetTo(config, "estricto");
+  const penaltyRef = config.formation.penalty;
+  applyProfile(config, guardado.id);
   assert.equal(config.infractions, catalogRef);
   assert.equal(config.infractions.trackLimits, trackLimitsRef);
+  assert.equal(config.formation.penalty, penaltyRef);
   assert.equal(trackLimitsRef.minTyresOut, 2);
 });
 
-test("cambiar de preset vuelve a dejar los valores del nuevo", () => {
+test("no se pueden guardar dos perfiles con el mismo nombre", () => {
+  enCarpetaPropia();
   const config = parseConfig({});
-  applyPresetTo(config, "estricto");
-  applyPresetTo(config, "casual");
-  assert.equal(config.preset, "casual");
-  assert.equal(config.infractions.trackLimits.action, "log");
-  assert.equal(config.infractions.trackLimits.minTyresOut, 4);
+  saveProfile(config, "Endurance");
+  config.pit.stopGoSeconds = 45; // para que el choque sea por nombre y no por contenido
+
+  const repetido = saveProfile(config, "  endurance ");
+  assert.ok("error" in repetido, "se guardó un segundo perfil con el mismo nombre");
+  assert.match((repetido as any).error, /Endurance/, "el aviso tiene que decir cuál es");
+  assert.equal(config.ruleProfiles.length, 1);
 });
 
-test("un preset inventado en el archivo no se conserva", () => {
-  const config = parseConfig({ preset: "inventado" });
-  assert.equal(config.preset, "");
+test("un perfil con las mismas reglas que otro no se guarda, y el aviso dice cuál es", () => {
+  enCarpetaPropia();
+  const config = parseConfig({});
+  saveProfile(config, "4Fun");
+
+  const igual = saveProfile(config, "Amistosa");
+  assert.ok("error" in igual);
+  assert.match((igual as any).error, /4Fun/);
+  assert.equal(config.ruleProfiles.length, 1);
+});
+
+test("la firma de las reglas no depende del orden de las claves", () => {
+  // Sin ordenar, dos reglamentos idénticos armados por caminos distintos —uno a mano, otro
+  // cargado de un perfil— darían firmas distintas y la validación de contenido repetido no
+  // detectaría nada. Es el modo de falla peor: la validación existe y no hace nada.
+  const a = snapshotRules(parseConfig({}));
+  const b = snapshotRules(parseConfig({}));
+  const desordenado = JSON.parse(JSON.stringify({ presence: b.presence, pit: b.pit, formation: b.formation, infractions: b.infractions }));
+  assert.equal(rulesFingerprint(a), rulesFingerprint(desordenado));
+});
+
+test("borrar un perfil no cambia el reglamento que está corriendo", () => {
+  enCarpetaPropia();
+  const config = parseConfig({});
+  config.pit.stopGoSeconds = 45;
+  const guardado = saveProfile(config, "Endurance") as any;
+  deleteProfile(config, guardado.id);
+  assert.equal(config.ruleProfiles.length, 0);
+  assert.equal(config.activeProfileId, "");
+  assert.equal(config.pit.stopGoSeconds, 45, "borrar una fila de una lista no puede cambiar una carrera en curso");
+});
+
+test("el modo de torneo de una versión anterior se descarta sin dejar restos", () => {
+  // Los tres presets desaparecieron en la 1.2. La clave tiene que irse del archivo: si quedara,
+  // estaría al lado de los perfiles sin hacer nada y confundiendo a cualquiera que lo abra.
+  const config = parseConfig({ preset: "estricto" }) as any;
+  assert.equal(config.preset, undefined);
+  assert.deepEqual(config.ruleProfiles, []);
+});
+
+test("un perfil corrupto en el archivo no tumba el arranque", () => {
+  const config = parseConfig({
+    ruleProfiles: [
+      { id: "ok", name: "Bueno", createdAt: "2026-01-01T00:00:00.000Z", rules: { pit: { stopGoSeconds: 45 } } },
+      { id: "", name: "Sin id" },
+      "basura",
+      { id: "x", name: "   " },
+      { id: "ok", name: "Id repetido" },
+    ],
+    activeProfileId: "fantasma",
+  });
+  assert.equal(config.ruleProfiles.length, 1);
+  assert.equal(config.ruleProfiles[0].name, "Bueno");
+  assert.equal(config.ruleProfiles[0].rules.pit.stopGoSeconds, 45);
+  assert.equal(config.ruleProfiles[0].rules.infractions.trackLimits.minTyresOut, 4, "los huecos se completan con los valores de fábrica");
+  assert.equal(config.activeProfileId, "", "el perfil activo apuntaba a uno que no existe");
+});
+
+test("un perfil no puede meter por la ventana un valor que el panel no deja escribir", () => {
+  const config = parseConfig({
+    ruleProfiles: [
+      {
+        id: "p1",
+        name: "Trucho",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        // "Sancionar solo" no se admite en toques: el servidor sabe que hubo contacto, no quién
+        // tuvo la culpa. Y 3 ruedas afuera no es un criterio que exista.
+        rules: { infractions: { carContact: { action: "penalty" }, trackLimits: { minTyresOut: 3 } } },
+      },
+    ],
+  });
+  assert.equal(config.ruleProfiles[0].rules.infractions.carContact.action, "review");
+  assert.equal(config.ruleProfiles[0].rules.infractions.trackLimits.minTyresOut, 4);
 });
 
 test("los dos puertos HTTP nunca quedan en el mismo número", () => {

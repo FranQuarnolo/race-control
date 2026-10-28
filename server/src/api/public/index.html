@@ -121,6 +121,12 @@
              al medio en cuanto aparecía la chapa. -->
         <span class="h2-derecha">
           <span class="hint" id="cars-count"></span>
+          <!-- La tabla de posiciones finales, donde se la busca. Es el mismo informe que ya está
+               en Sanciones, pero ahí nadie lo encuentra al terminar la carrera: lo que uno mira
+               cuando cae la bandera a cuadros es la torre. Aparece solo con la carrera terminada
+               —antes la clasificación todavía se mueve— y por eso arranca `hidden`. -->
+          <a class="hint-action" id="btn-report-timing" href="api/report.csv" download hidden
+             title="Planilla con la clasificación final, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar posiciones finales</a>
           <!-- Por qué las columnas que dependen de la app están en guiones. Sin esto, "no me
                aparecen los neumáticos ni los sectores" se lee como un producto roto, cuando lo
                que pasa es que esos datos solo existen en la Shared Memory del juego y nadie los
@@ -350,13 +356,31 @@
         <button class="btn-close" data-close-drawer aria-label="Cerrar">&times;</button>
       </header>
 
+      <!-- Acá estaban los tres tipos de torneo de fábrica (casual / campeonato / estricto).
+           Se fueron en la 1.2: en cuanto el admin tocaba dos valores, el modo que figuraba
+           elegido ya no describía lo que estaba corriendo. Ahora la liga guarda sus propios
+           reglamentos, con el nombre que use para hablar de ellos. -->
       <section>
-        <h3>Tipo de torneo</h3>
+        <h3>Perfiles de carrera</h3>
         <p class="muted">
-          Elegí uno y todos los umbrales quedan puestos de una vez. Después podés cambiar lo que
-          quieras: el tipo de torneo es un punto de partida, no un candado.
+          Un perfil guarda <strong>todas las reglas de esta pantalla de una vez</strong>, con el
+          nombre que le pongas: "Endurance", "4Fun", lo que uses. Cargarlo las repone todas juntas.
+          No toca nada de la conexión ni del servidor.
         </p>
-        <div class="preset-list" id="preset-list"></div>
+        <div class="row">
+          <label for="profile-select">Cargar un perfil</label>
+          <select id="profile-select"></select>
+        </div>
+        <div class="profile-actions">
+          <button class="secondary" id="btn-apply-profile">Cargar</button>
+          <button class="secondary peligro" id="btn-delete-profile">Borrar</button>
+        </div>
+        <div class="row">
+          <label for="profile-name">Guardar lo que está puesto como</label>
+          <input type="text" id="profile-name" maxlength="60" placeholder="Endurance" />
+        </div>
+        <button id="btn-save-profile">Guardar como perfil</button>
+        <p class="muted" id="profile-empty">Todavía no guardaste ningún perfil.</p>
       </section>
 
       <section>
@@ -462,28 +486,24 @@
       <div class="wizard-step" data-step="1">
         <h2>Bienvenido a Race Control</h2>
         <p class="muted">
-          En cuatro pasos queda listo para tu primera carrera. Empecemos por lo más fácil.
+          En tres pasos queda listo para tu primera carrera. Empecemos por lo más fácil.
         </p>
         <p>Tu liga es <b id="wizard-name">--</b>.</p>
         <p class="muted">Si el nombre no es ese, pedíselo a quien te dio el acceso.</p>
       </div>
 
-      <!-- Paso 2: tipo de torneo -->
-      <div class="wizard-step" data-step="2" hidden>
-        <h2>¿Qué tipo de torneo vas a correr?</h2>
-        <p class="muted">
-          Esto deja puestos todos los umbrales de una vez. Después podés cambiar lo que quieras
-          desde el botón "Reglas".
-        </p>
-        <div class="preset-list" id="wizard-presets"></div>
-      </div>
+      <!-- Acá estaba el paso del tipo de torneo, que era obligatorio para seguir. Se fue con los
+           tres modos de fábrica en la 1.2: ahora se arranca con los valores por defecto —los
+           mismos que traía "Campeonato"— y la liga guarda su reglamento como perfil cuando ya
+           sabe cuál es. Preguntárselo a alguien que todavía no corrió una fecha era pedirle una
+           decisión que no tenía con qué tomar. -->
 
-      <!-- Paso 3: conexión.
+      <!-- Paso 2: conexión.
            Mismo cambio que en el cajón de Conexión: el camino es pedírselo al soporte del hosting,
            no buscar un campo que en la mayoría de los paneles no está dibujado. El renglón con la
            dirección sigue a la vista porque acá sí es lo primero que el admin quiere ver —"¿esto
            ya tiene una dirección de verdad?"—, pero dejó de ser una instrucción. -->
-      <div class="wizard-step" data-step="3" hidden>
+      <div class="wizard-step" data-step="2" hidden>
         <h2>Conectá tu servidor de Assetto Corsa</h2>
         <p class="muted">
           Lo hace el soporte de tu hosting: hay que decirles que apunten el servidor de Assetto
@@ -503,8 +523,8 @@
         </p>
       </div>
 
-      <!-- Paso 4: verificación -->
-      <div class="wizard-step" data-step="4" hidden>
+      <!-- Paso 3: verificación -->
+      <div class="wizard-step" data-step="3" hidden>
         <h2>Probemos que todo llega</h2>
         <p class="muted">
           Revisamos las cuatro cosas que tienen que funcionar. Si alguna falla, te decimos
