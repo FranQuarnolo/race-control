@@ -3,6 +3,43 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.4] — 2026-10-28
+
+**La lista que dejó la 1.1, tercera y última tanda: el panel del operador.** Las dos primeras
+tandas se miran desde la cabina o arriba del auto; esta se mira desde el escritorio de quien vende
+el servicio y tiene que responder "¿esta liga corrió de verdad esta semana?" sin pedirle una
+captura al admin.
+
+### No había forma de saber si una liga corría de verdad
+
+**Síntoma:** el operador veía el motor "en marcha" y la cuota al día, pero nada le decía si detrás
+de eso había carreras reales. Para enterarse tenía que escribirle al admin y confiar en la
+respuesta.
+
+**Causa:** el portal (`portal/store.ts`) guarda usuarios, ligas y membresías, y nada de las
+sesiones que corrió cada una. El dato existía un instante —`sessionInfo`, los motores de sanción,
+el `IncidentEngine`— y se perdía apenas terminaba la carrera, salvo que el admin bajara el informe
+a mano.
+
+**Decisión:** cada worker escribe su propio `events.json` en la carpeta de datos de la liga, con
+una entrada por sesión —práctica, clasificación o carrera— y el mismo informe que ya arma
+`buildReport` para la descarga de posiciones finales. Vive en disco, a nivel de archivo, igual que
+`config.json`: el portal lo lee por el supervisor cuando hace falta, así que el historial sigue
+visible aunque el worker esté parado o la liga desactivada. En `/operador`, el ojito de cada fila
+muestra el detalle completo y la basurita borra con doble confirmación; un evento en curso no se
+puede borrar, porque el worker lo sigue escribiendo.
+
+### Cuatro botones sueltos por fila eran un click fallido esperando a pasar
+
+**Síntoma:** la tabla de admins tenía Editar, Cobré, Desactivar/Reactivar y Clave nueva como
+botones sueltos en la misma fila, con "Desactivar" —una acción que corta el motor de la liga de
+alguien— al lado de todos los demás.
+
+**Decisión:** las cinco acciones (se sumó "Ver historial") pasan a un menú de tres puntitos, mismo
+patrón que ya usa el panel de carrera para el kick del piloto y por el mismo motivo: una acción
+destructiva suelta en una fila es un accidente esperando, y agruparla detrás de un click extra es
+la fricción mínima que lo evita.
+
 ## [1.3] — 2026-10-28
 
 **La lista que dejó la 1.1, segunda tanda: la pista y el auto.** Lo que la 1.2 arregló se mira

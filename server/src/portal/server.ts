@@ -12,6 +12,7 @@ import {
   hashPassword,
   verifyWithDecoy,
 } from "./auth";
+import { LeagueEventsStore } from "../history/leagueEvents";
 import { askWorker, proxyToWorker } from "./proxy";
 import { League, PortalStore, User, normalizeEmail, toSlug } from "./store";
 import { Supervisor, assignPorts } from "./supervisor";
@@ -544,6 +545,38 @@ export function createPortal(config: PortalConfig): Portal {
 
     const actualizada = store.findLeague(league.id)!;
     res.json({ ok: true, league: { slug: actualizada.slug, name: actualizada.name } });
+  });
+
+  /**
+   * Historial de sesiones de una liga: lo escribe el worker en su propio `dataDir` (ver
+   * `history/leagueEvents.ts`), y acá se lee directo de disco en vez de pedírselo al worker por
+   * `askWorker`. A propósito: una liga desactivada no tiene worker corriendo, y es justo el caso en
+   * que más falta hace poder revisar qué pasó la última vez que corrió.
+   */
+  operadorApi.get("/ligas/:id/eventos", (req, res) => {
+    const league = store.findLeague(req.params.id);
+    if (!league) {
+      res.status(404).json({ ok: false, error: "No existe esa liga." });
+      return;
+    }
+    const eventos = new LeagueEventsStore(supervisor.dataDirOf(league.id)).list();
+    res.json({ ok: true, eventos });
+  });
+
+  /** Borra una entrada del historial. La que está en curso no se puede borrar — ver `remove` en
+   * `LeagueEventsStore`. */
+  operadorApi.delete("/ligas/:id/eventos/:eventId", (req, res) => {
+    const league = store.findLeague(req.params.id);
+    if (!league) {
+      res.status(404).json({ ok: false, error: "No existe esa liga." });
+      return;
+    }
+    const borrado = new LeagueEventsStore(supervisor.dataDirOf(league.id)).remove(req.params.eventId);
+    if (!borrado) {
+      res.status(404).json({ ok: false, error: "No existe ese evento, o todavía está en curso." });
+      return;
+    }
+    res.json({ ok: true });
   });
 
   app.use("/api/operador", operadorApi);

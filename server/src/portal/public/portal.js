@@ -14,12 +14,14 @@ function $(id) {
  * puede agregar headers propios, así que sin esta marca el pedido se rechaza. La otra mitad es
  * la cookie `SameSite=Strict` y el chequeo de `Origin` del lado del servidor.
  */
-async function api(path, body) {
+async function api(path, body, method) {
   const options = { headers: { "X-RC-Request": "1" } };
   if (body !== undefined) {
-    options.method = "POST";
+    options.method = method || "POST";
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body);
+  } else if (method) {
+    options.method = method;
   }
   const res = await fetch(path, options);
   let data = null;

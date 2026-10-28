@@ -5,6 +5,7 @@ import * as os from "os";
 import * as path from "path";
 import { after, before, test } from "node:test";
 import { createPortal, Portal } from "../portal/server";
+import { LeagueEventsStore } from "../history/leagueEvents";
 
 /**
  * El portal es lo único que da a internet, así que lo que se verifica acá es quién pasa y quién
@@ -582,6 +583,99 @@ test("el operador puede elegir la contraseña en vez de que se la generen", asyn
   assert.equal(vieja.status, 401);
   const cookie = await entrar("declave@example.com", "la-que-yo-elijo");
   assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
+});
+
+// --- Historial de eventos --------------------------------------------------------------------------
+
+test("el historial de una liga no existe para quien no es operador", async () => {
+  const liga = portal.store.findLeagueBySlug("liga-a")!;
+  assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieA })).status, 404);
+  assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`)).status, 404);
+});
+
+test("una liga que no existe tampoco tiene historial", async () => {
+  assert.equal((await pedir("GET", "/api/operador/ligas/no-existe/eventos", { cookie: cookieOp })).status, 404);
+  assert.equal(
+    (
+      await pedir("DELETE", "/api/operador/ligas/no-existe/eventos/E1", {
+        cookie: cookieOp,
+        headers: { "x-rc-request": "1" },
+      })
+    ).status,
+    404
+  );
+});
+
+test("el operador lee el historial de una liga directo del disco, sin pasar por el worker", async () => {
+  const { liga, admin } = await altaDePrueba("Copa Con Historial", "historial@example.com");
+  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(liga.id));
+  store.startSession({
+    track: "ks_barcelona",
+    trackConfig: "layout_gp",
+    sessionType: 3,
+    sessionTypeLabel: "Carrera",
+    sessionName: "Carrera",
+  });
+  store.closeCurrent({
+    generatedAt: new Date().toISOString(),
+    leagueName: "Copa Con Historial",
+    version: "1.4",
+    track: "Barcelona · GP",
+    sessionName: "Carrera",
+    sessionType: "Carrera",
+    classification: [],
+    penalties: [],
+    incidents: [],
+  });
+
+  const res = await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieOp });
+  assert.equal(res.status, 200, res.body);
+  const eventos = res.json().eventos;
+  assert.equal(eventos.length, 1);
+  assert.equal(eventos[0].status, "terminado");
+  assert.equal(eventos[0].track, "ks_barcelona");
+  assert.equal(eventos[0].report.track, "Barcelona · GP");
+
+  // Sigue viéndose aunque la liga esté desactivada: el historial vive en disco, a nivel de
+  // archivo, igual que `config.json` — no detrás de un worker que podría estar parado.
+  await pedir("POST", `/api/operador/admins/${admin.id}`, {
+    cookie: cookieOp,
+    body: { active: false },
+    headers: { "x-rc-request": "1" },
+  });
+  const tras = await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieOp });
+  assert.equal(tras.status, 200);
+  assert.equal(tras.json().eventos.length, 1);
+});
+
+test("un evento en curso no se puede borrar, y uno terminado sí", async () => {
+  const { liga } = await altaDePrueba("Copa Para Borrar", "borrar@example.com");
+  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(liga.id));
+  store.startSession({
+    track: "ks_monza",
+    trackConfig: "",
+    sessionType: 1,
+    sessionTypeLabel: "Práctica",
+    sessionName: "Práctica",
+  });
+  const enCurso = store.list()[0].id;
+
+  const headers = { "x-rc-request": "1" };
+
+  // Mientras está en curso, ni el operador lo puede borrar: el worker lo sigue escribiendo.
+  const intento = await pedir("DELETE", `/api/operador/ligas/${liga.id}/eventos/${enCurso}`, { cookie: cookieOp, headers });
+  assert.equal(intento.status, 404);
+
+  store.closeCurrent(null);
+  const borrado = await pedir("DELETE", `/api/operador/ligas/${liga.id}/eventos/${enCurso}`, { cookie: cookieOp, headers });
+  assert.equal(borrado.status, 200, borrado.body);
+
+  const eventos = (await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieOp })).json().eventos;
+  assert.equal(eventos.length, 0);
+
+  // Un id que no existe también es 404, y no un 200 que no borró nada.
+  const inexistente = await pedir("DELETE", `/api/operador/ligas/${liga.id}/eventos/no-existe`, { cookie: cookieOp, headers });
+  assert.equal(inexistente.status, 404);
 });
 
 test("las pantallas del portal salen con sus cabeceras de seguridad", async () => {

@@ -363,16 +363,19 @@ que cuente para el campeonato.
 
 ## 8. El mes a mes
 
+Las acciones de cada fila están en el menú **⋮** de `/operador`.
+
 | Cuándo | Qué |
 |---|---|
-| Cuando alguien paga | "Cobré" en `/operador`: suma un mes desde donde venía |
+| Cuando alguien paga | "Cobré": suma un mes desde donde venía |
 | Cuando alguien no paga | "Desactivar". Para su liga y le corta el acceso. **No borra nada** |
 | Cuando vuelve a pagar | "Reactivar". La liga arranca con todo adentro |
 | Si pierde la contraseña | "Clave nueva". Se le cierran todas las sesiones abiertas |
 | Si hay que corregir algo | "Editar": nombre de la liga, dirección, email y contraseña. Ver abajo |
+| Si hay que ver qué corrió | "Ver historial": una fila por sesión, con el detalle y la opción de borrarla |
 | Antes de algo riesgoso | `fly volumes snapshots create <volume-id>` |
 
-El botón **"Editar"** manda solo lo que cambiaste. Dos de los cuatro campos tienen consecuencias y
+"Editar" manda solo lo que cambiaste. Dos de los cuatro campos tienen consecuencias y
 el panel las avisa antes de guardar: cambiar el **nombre** reinicia el motor de esa liga —unos
 segundos sin telemetría, así que no lo hagas en mitad de una carrera— y cambiar la **dirección**
 mata el link anterior, el del panel y el de los pilotos. El email y la contraseña no reinician

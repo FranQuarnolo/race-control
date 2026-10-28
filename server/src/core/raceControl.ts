@@ -1,7 +1,7 @@
 import * as path from "path";
 import { performance } from "perf_hooks";
 import { saveConfig, AppConfig } from "../config";
-import { createAdminApi } from "../api/adminApi";
+import { createAdminApi, APP_VERSION } from "../api/adminApi";
 import { createClientApi } from "../api/clientApi";
 import { FormationStart } from "../instances/formationStart";
 import { PitComplianceTracker, PitSpeedMonitor } from "../instances/pitSpeeding";
@@ -17,7 +17,7 @@ import { ObservedFact, WrongWayWatcher } from "../incident/raceWatchers";
 import { ConnectivityManager, buildSendAddress } from "../net/connectivity";
 import { findFreePort } from "../net/ports";
 import { SessionPhaseTracker } from "../session/phase";
-import { SessionTracker } from "../session/sessionInfo";
+import { SessionTracker, labelForSessionType } from "../session/sessionInfo";
 import { Journal, RawCapture, pruneOldLogs } from "../log/journal";
 import { restoreState } from "../log/restore";
 import { LightEventTracker } from "../instances/lightEventTracker";
@@ -26,6 +26,8 @@ import { TrackLearner } from "../track/trackLearner";
 import { TrackLimitsIncident, TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { PilotTokenIssuer } from "../security/pilotToken";
+import { LeagueEventsStore } from "../history/leagueEvents";
+import { buildReport } from "../report/raceReport";
 
 export interface RaceControl {
   config: AppConfig;
@@ -112,6 +114,11 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   pruneOldLogs(logDir, retencion);
 
   const journal = new Journal(logDir);
+
+  // Historial de eventos para el panel del operador: vive en su propio archivo, a nivel de disco,
+  // para seguir legible aunque la liga esté desactivada o el worker se haya caído.
+  const leagueEvents = new LeagueEventsStore(dataDir);
+  leagueEvents.recoverStaleInProgress();
 
   const stateTracker = new StateTracker();
   const udpClient = new AcUdpClient(config.acUdp, options.udpBindAddress);
@@ -295,6 +302,10 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
    * `finished` una fase que nunca fue `race` ofrecería un informe de una carrera que no se corrió.
    */
   udpClient.on("END_SESSION", () => {
+    // El historial se cierra pase lo que pase con la fase: una práctica o una clasificación
+    // también son una entrada del historial, aunque nunca lleguen a `finished` (eso es solo de la
+    // carrera, ver el comentario de abajo).
+    cerrarEventoActual();
     if (phaseTracker.get() !== "race") return;
     journal.log("ac.endSession", {});
     phaseTracker.set("finished");
@@ -309,6 +320,17 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     sessionTracker.onSessionInfo(data);
     udpClient.setRealtimePosInterval(200);
     sessionType = data.sessionType;
+    // Si el `END_SESSION` de la sesión anterior nunca llegó (pasa: no todos los hostings lo mandan
+    // para practica/clasificación), se la cierra acá, ANTES de los resets de abajo — que es lo
+    // último que todavía tiene las sanciones y los incidentes de esa sesión a mano.
+    cerrarEventoActual();
+    leagueEvents.startSession({
+      track: data.track,
+      trackConfig: data.trackConfig,
+      sessionType: data.sessionType,
+      sessionTypeLabel: labelForSessionType(data.sessionType),
+      sessionName: data.name,
+    });
     incidentEngine.resetSessionState();
     // Las sanciones tampoco se arrastran entre sesiones: un DT pendiente de la clasificación
     // escalaba a DQ en la carrera, por vueltas de gracia que el piloto nunca supo que corrían.
@@ -488,6 +510,35 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     // cumple no expulsa a nadie: un DQ lo decide el comisario, no un contador de vueltas.
     escalation: "TIME_PENALTY",
   });
+
+  /**
+   * Cierra la entrada del historial en curso, con el mismo informe que arma la descarga de
+   * posiciones finales (`GET /api/report`) — así el detalle que ve el operador no inventa un
+   * segundo formato para las mismas sanciones e incidentes.
+   *
+   * Los incidentes se filtran por fecha porque el `IncidentEngine` NO se resetea entre sesiones
+   * (ver su comentario de `resetSessionState`): sin el filtro, la segunda sesión del día arrastraría
+   * los incidentes de la primera en su propio informe.
+   */
+  const cerrarEventoActual = (): void => {
+    const startedAt = leagueEvents.currentStartedAt();
+    if (startedAt === null) return;
+    const report = buildReport({
+      leagueName: config.leagueName,
+      version: APP_VERSION,
+      cars: stateTracker.getRoster(),
+      sessionType,
+      session: sessionTracker.get(),
+      penaltiesByEngine: [
+        ["formation", formationPenaltyEngine.getAll()],
+        ["pit", pitPenaltyEngine.getAll()],
+        ["steward", stewardPenaltyEngine.getAll()],
+      ],
+      incidents: incidentEngine.getAll().filter((i) => i.createdAt >= startedAt),
+      now: Date.now(),
+    });
+    leagueEvents.closeCurrent(report);
+  };
 
   // Los tres motores: una sanción de largada o del comisario también se cumple pasando por el pit.
   new PitComplianceTracker(

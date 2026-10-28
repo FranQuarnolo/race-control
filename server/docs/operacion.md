@@ -73,14 +73,19 @@ Arriba hay cuatro números: ligas activas, cuántas tienen la cuota vencida, cu�
 semana y **cuántos lugares libres quedan** — ese último es el cupo de puertos UDP, y conviene
 mirarlo antes de prometerle una liga a alguien.
 
+Las acciones de cada fila están detrás del menú **⋮** — mismo criterio que el kick del panel de
+carrera: "Desactivar" corta el motor de la liga de alguien, y suelta al lado de los demás botones
+era un click fallido esperando a pasar.
+
 | Qué | Cómo |
 |---|---|
 | Dar de alta una liga y su admin | "Dar de alta una liga". Pide nombre, email y, opcional, hasta cuándo pagó. Devuelve la contraseña **una sola vez**, con un botón para copiar los tres datos juntos |
-| Corregir el nombre, la dirección, el email o la contraseña | "Editar" — ver abajo |
+| Corregir el nombre, la dirección, el email o la contraseña | Menú ⋮ → "Editar" — ver abajo |
 | Ver quién entró y cuándo | La columna "Último ingreso" |
-| Marcar que pagó | "Cobré": suma un mes desde donde venía, o desde hoy si estaba vencida |
-| Cortarle el acceso | "Desactivar". Para sus ligas y le cierra el paso al panel |
-| Contraseña nueva | "Clave nueva" |
+| Marcar que pagó | Menú ⋮ → "Cobré": suma un mes desde donde venía, o desde hoy si estaba vencida |
+| Cortarle el acceso | Menú ⋮ → "Desactivar". Para sus ligas y le cierra el paso al panel |
+| Contraseña nueva | Menú ⋮ → "Clave nueva" |
+| Ver las sesiones que corrió una liga | Menú ⋮ → "Ver historial" — ver abajo |
 | Entrar al panel de esa liga | El nombre de la liga es un enlace a `/l/<slug>/` |
 
 La tabla viene ordenada por lo que requiere atención: primero lo vencido, después lo que vence en
@@ -96,7 +101,7 @@ reiniciar el servidor sería la forma de saltearse la baja.
 
 ## Editar una liga o su cuenta
 
-El botón **"Editar"** de cada fila abre los cuatro datos que se pueden corregir sin tocar el
+"Editar", en el menú ⋮ de cada fila, abre los cuatro datos que se pueden corregir sin tocar el
 volumen por SSH. Se manda solo lo que cambiaste: lo que dejes igual, queda igual.
 
 | Campo | Qué pasa al guardarlo |
@@ -117,6 +122,19 @@ próximo reinicio y después volvería solo.
 
 Una liga de una cuenta desactivada **no se enciende por renombrarla**: el reinicio solo ocurre si
 estaba corriendo.
+
+## Ver el historial de una liga
+
+"Ver historial", en el menú ⋮, abre una fila por sesión de esa liga —práctica, clasificación o
+carrera—, con fecha, circuito y estado. El ojito 👁 abre el mismo informe que ya baja
+`/api/report.csv`: clasificación, sanciones e incidentes. La basurita 🗑 borra una sesión, con doble
+confirmación —primer click arma, segundo ejecuta—; una sesión en curso no se puede borrar, porque
+el worker la sigue escribiendo.
+
+El historial vive en disco, en la carpeta de datos de la liga, igual que `config.json`: sigue
+visible aunque el worker esté parado o la cuenta desactivada. Cada fila sale del UDP del propio
+servidor de Assetto Corsa —no de la app del piloto—, así que aparece aunque nadie la tenga
+instalada.
 
 ## El CLI: lo mismo, con el portal apagado
 

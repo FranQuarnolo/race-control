@@ -19,6 +19,16 @@ const ETIQUETAS_CUOTA = {
 
 let admins = [];
 
+// Menú de tres puntitos de la tabla de admins. Mismo patrón que el panel de carrera (`app.js`,
+// `.btn-kebab`): un solo menú vivo para toda la tabla, colgado del `<body>` y no de la celda.
+let openMenu = null;
+
+// Historial de eventos de la liga que se esté mirando, y el borrado de a dos clicks: igual
+// criterio que el kick del panel, porque borrar un evento tampoco se puede deshacer.
+let historialAdmin = null;
+let eventos = [];
+let armedDelete = null;
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -53,6 +63,8 @@ function textoCuota(sub) {
 // --------------------------------------------------------------------------------- la tabla
 
 function pintar() {
+  // La tabla se reconstruye entera: un menú abierto apuntaría a un botón que ya no existe.
+  closeRowMenu();
   const cuerpo = $("filas");
   cuerpo.textContent = "";
   $("sin-admins").hidden = admins.length > 0;
@@ -110,16 +122,17 @@ function pintar() {
 
     tr.appendChild(el("td", "muted", fechaHora(admin.lastLoginAt)));
 
-    // --- acciones
+    // --- acciones: antes eran cuatro botones sueltos en la fila; con "Ver historial" sumado iban
+    // a ser cinco, y una acción destructiva (Desactivar) suelta ahí es un click perdido esperando
+    // a pasar. Mismo menú kebab que ya usa el panel de carrera para el mismo motivo.
     const tdAcciones = el("td", "acciones");
-    tdAcciones.appendChild(boton("Editar", "secundario", () => abrirEdicion(admin)));
-    tdAcciones.appendChild(boton("Cobré", "secundario", () => cobrar(admin)));
-    tdAcciones.appendChild(
-      boton(admin.active ? "Desactivar" : "Reactivar", admin.active ? "peligro" : "secundario", () =>
-        alternar(admin)
-      )
-    );
-    tdAcciones.appendChild(boton("Clave nueva", "secundario", () => nuevaClave(admin)));
+    const kebab = el("button", "btn-kebab", "⋮");
+    kebab.type = "button";
+    kebab.setAttribute("aria-haspopup", "true");
+    kebab.setAttribute("aria-expanded", "false");
+    kebab.title = "Acciones";
+    kebab.addEventListener("click", () => toggleRowMenu(admin, kebab));
+    tdAcciones.appendChild(kebab);
     tr.appendChild(tdAcciones);
 
     cuerpo.appendChild(tr);
@@ -131,6 +144,54 @@ function boton(texto, clase, onClick) {
   b.type = "button";
   b.addEventListener("click", onClick);
   return b;
+}
+
+function toggleRowMenu(admin, anchor) {
+  const yaEstaba = openMenu !== null && openMenu.adminId === admin.id;
+  closeRowMenu();
+  if (yaEstaba) return;
+
+  const menu = el("div", "menu-fila");
+  menu.setAttribute("role", "menu");
+
+  const item = (texto, clase, onClick, deshabilitado) => {
+    const b = el("button", "menu-item" + (clase ? " " + clase : ""), texto);
+    b.type = "button";
+    b.setAttribute("role", "menuitem");
+    if (deshabilitado) {
+      b.disabled = true;
+    } else {
+      b.addEventListener("click", () => {
+        closeRowMenu();
+        onClick();
+      });
+    }
+    menu.appendChild(b);
+  };
+
+  item("Editar", "", () => abrirEdicion(admin));
+  item("Cobré", "", () => cobrar(admin));
+  item(admin.active ? "Desactivar" : "Reactivar", admin.active ? "peligro" : "", () => alternar(admin));
+  item("Clave nueva", "", () => nuevaClave(admin));
+  item("Ver historial", "", () => abrirHistorial(admin), admin.leagues.length === 0);
+
+  document.body.appendChild(menu);
+  const r = anchor.getBoundingClientRect();
+  // Alineado a la derecha del botón y debajo, salvo que no entre: ahí sube por encima.
+  const abajo = r.bottom + 4;
+  const arriba = r.top - menu.offsetHeight - 4;
+  menu.style.top = (abajo + menu.offsetHeight <= window.innerHeight - 8 || arriba < 8 ? abajo : arriba) + "px";
+  menu.style.left = Math.max(8, r.right - menu.offsetWidth) + "px";
+
+  anchor.setAttribute("aria-expanded", "true");
+  openMenu = { adminId: admin.id, el: menu, anchor };
+}
+
+function closeRowMenu() {
+  if (!openMenu) return;
+  openMenu.el.remove();
+  openMenu.anchor.setAttribute("aria-expanded", "false");
+  openMenu = null;
 }
 
 function pintarResumen(udpLibres) {
@@ -201,6 +262,7 @@ async function nuevaClave(admin) {
 let editando = null;
 
 function abrirEdicion(admin) {
+  cerrarHistorial();
   // Una cuenta tiene una liga. El modelo admite varias y por eso esto toma la primera en vez de
   // asumir que existe: sin liga, la mitad de arriba del formulario no tiene qué editar.
   const liga = admin.leagues[0] || null;
@@ -271,6 +333,189 @@ async function guardarEdicion() {
   }
 }
 
+// --------------------------------------------------------------------------------- historial
+
+const PREFIJOS_PISTA = /^(ks_|acu_|rt_|at_|pm_|tcl_|vrc_)/i;
+
+/** `ks_barcelona` + `layout_gp` → `Barcelona · GP`. Mismo criterio que `prettyTrack`/`prettyLayout`
+ * en `report/raceReport.ts`: no hay un paquete compartido entre servidor y portal, así que se
+ * repite acá la versión mínima que necesita esta tabla. */
+function prettyPista(ev) {
+  const base = ev.track.replace(PREFIJOS_PISTA, "").replace(/[_-]+/g, " ").trim();
+  const nombre = base ? base.charAt(0).toUpperCase() + base.slice(1) : ev.track;
+  if (!ev.trackConfig) return nombre;
+  const layout = ev.trackConfig.replace(/^layout_/i, "").replace(/[_-]+/g, " ").trim();
+  if (!layout) return nombre;
+  const capa = layout.length <= 4 ? layout.toUpperCase() : layout.charAt(0).toUpperCase() + layout.slice(1);
+  return nombre + " · " + capa;
+}
+
+function etiquetaSesion(ev) {
+  if (ev.sessionName && ev.sessionName !== ev.sessionTypeLabel) return ev.sessionTypeLabel + " · " + ev.sessionName;
+  return ev.sessionTypeLabel;
+}
+
+/** mm:ss.mmm, igual que `formatLap` en `report/raceReport.ts`. */
+function formatLap(ms) {
+  if (ms === null || ms === undefined || ms <= 0) return "—";
+  const minutos = Math.floor(ms / 60000);
+  const segundos = Math.floor((ms % 60000) / 1000);
+  const milis = ms % 1000;
+  return minutos + ":" + String(segundos).padStart(2, "0") + "." + String(milis).padStart(3, "0");
+}
+
+async function abrirHistorial(admin) {
+  const liga = admin.leagues[0];
+  if (!liga) return;
+  cerrarEdicion();
+  $("form-alta").hidden = true;
+  historialAdmin = { admin, liga };
+  $("historial-liga").textContent = liga.name;
+  $("historial").hidden = false;
+  $("historial").scrollIntoView({ block: "center" });
+  const data = await api("/api/operador/ligas/" + liga.id + "/eventos");
+  eventos = data.eventos;
+  pintarHistorial();
+}
+
+function cerrarHistorial() {
+  $("historial").hidden = true;
+  historialAdmin = null;
+  eventos = [];
+  desarmarBorrado();
+}
+
+function pintarHistorial() {
+  const cuerpo = $("filas-historial");
+  cuerpo.textContent = "";
+  $("sin-eventos").hidden = eventos.length > 0;
+  $("tabla-historial").hidden = eventos.length === 0;
+
+  for (const ev of eventos) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "muted", fechaHora(ev.startedAt)));
+    tr.appendChild(el("td", "", prettyPista(ev)));
+    tr.appendChild(el("td", "", etiquetaSesion(ev)));
+
+    const tdEstado = el("td");
+    const enCurso = ev.status === "en-progreso";
+    tdEstado.appendChild(el("span", "pastilla " + (enCurso ? "en-progreso" : "terminado"), enCurso ? "en curso" : "terminado"));
+    tr.appendChild(tdEstado);
+
+    const tdAcciones = el("td", "acciones");
+    const ojito = el("button", "btn-icono", "👁");
+    ojito.type = "button";
+    ojito.title = "Ver el detalle";
+    ojito.addEventListener("click", () => verDetalle(ev));
+    tdAcciones.appendChild(ojito);
+
+    const basurita = el("button", "btn-icono peligro", "🗑");
+    basurita.type = "button";
+    if (enCurso) {
+      basurita.disabled = true;
+      basurita.title = "Todavía está en curso";
+    } else {
+      basurita.title = "Borrar";
+      basurita.addEventListener("click", () => clickBorrar(ev, basurita));
+    }
+    tdAcciones.appendChild(basurita);
+    tr.appendChild(tdAcciones);
+
+    cuerpo.appendChild(tr);
+  }
+}
+
+/**
+ * Primer click arma, segundo ejecuta. Se desarma solo a los 4 segundos.
+ *
+ * Igual motivo que el kick del panel: borrar un evento no se puede deshacer, y un `confirm()`
+ * nativo bloquearía el hilo justo en una pantalla que puede tener otra pestaña del operador
+ * mirando la misma liga.
+ */
+function clickBorrar(ev, btn) {
+  if (armedDelete && armedDelete.id === ev.id) {
+    desarmarBorrado();
+    ejecutarBorrado(ev);
+    return;
+  }
+  desarmarBorrado();
+  const timer = setTimeout(desarmarBorrado, 4000);
+  armedDelete = { id: ev.id, btn, timer };
+  btn.classList.add("arming");
+  btn.title = "¿Seguro? Confirmá para borrar";
+}
+
+function desarmarBorrado() {
+  if (!armedDelete) return;
+  clearTimeout(armedDelete.timer);
+  armedDelete.btn.classList.remove("arming");
+  armedDelete.btn.title = "Borrar";
+  armedDelete = null;
+}
+
+async function ejecutarBorrado(ev) {
+  await api("/api/operador/ligas/" + historialAdmin.liga.id + "/eventos/" + ev.id, undefined, "DELETE");
+  eventos = eventos.filter((e) => e.id !== ev.id);
+  pintarHistorial();
+}
+
+function verDetalle(ev) {
+  const report = ev.report;
+  $("evento-titulo").textContent = prettyPista(ev);
+  $("evento-subtitulo").textContent = report
+    ? [report.sessionType, fechaHora(ev.startedAt)].filter(Boolean).join(" · ")
+    : "Todavía en curso: el informe se arma al terminar la sesión.";
+
+  const clasificacion = report ? report.classification : [];
+  $("evento-sin-clasificacion").hidden = clasificacion.length > 0;
+  $("tabla-evento-clasificacion").hidden = clasificacion.length === 0;
+  const filasClasificacion = $("filas-evento-clasificacion");
+  filasClasificacion.textContent = "";
+  for (const r of clasificacion) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "", r.position !== null ? String(r.position) : "—"));
+    tr.appendChild(el("td", "", r.driverName));
+    tr.appendChild(el("td", "", r.carModel));
+    tr.appendChild(el("td", "", String(r.laps)));
+    tr.appendChild(el("td", "", formatLap(r.bestLapMs)));
+    tr.appendChild(el("td", "", r.timePenaltySeconds ? r.timePenaltySeconds + " s" : "—"));
+    tr.appendChild(el("td", "", r.disqualified ? "Descalificado" : r.finished ? "" : "Abandonó"));
+    filasClasificacion.appendChild(tr);
+  }
+
+  const sanciones = report ? report.penalties : [];
+  $("evento-sin-sanciones").hidden = sanciones.length > 0;
+  $("tabla-evento-sanciones").hidden = sanciones.length === 0;
+  const filasSanciones = $("filas-evento-sanciones");
+  filasSanciones.textContent = "";
+  for (const p of sanciones) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "", p.driverName));
+    tr.appendChild(el("td", "", p.engine));
+    tr.appendChild(el("td", "", p.type + (p.timePenaltySeconds ? " (" + p.timePenaltySeconds + " s)" : "")));
+    tr.appendChild(el("td", "", p.status));
+    tr.appendChild(el("td", "", p.reason));
+    filasSanciones.appendChild(tr);
+  }
+
+  const incidentes = report ? report.incidents : [];
+  $("evento-sin-incidentes").hidden = incidentes.length > 0;
+  $("tabla-evento-incidentes").hidden = incidentes.length === 0;
+  const filasIncidentes = $("filas-evento-incidentes");
+  filasIncidentes.textContent = "";
+  for (const i of incidentes) {
+    const tr = el("tr");
+    tr.appendChild(el("td", "", i.kind));
+    tr.appendChild(el("td", "", i.drivers));
+    tr.appendChild(el("td", "", String(i.lap)));
+    tr.appendChild(el("td", "", i.detail));
+    tr.appendChild(el("td", "", i.resolution));
+    filasIncidentes.appendChild(tr);
+  }
+
+  $("modal-evento").showModal();
+}
+
 // -------------------------------------------------------------------------------- credenciales
 
 function mostrarCredenciales(creds) {
@@ -309,6 +554,7 @@ async function iniciar() {
 
   $("btn-nueva").addEventListener("click", () => {
     cerrarEdicion();
+    cerrarHistorial();
     $("form-alta").hidden = !$("form-alta").hidden;
     if (!$("form-alta").hidden) $("leagueName").focus();
   });
@@ -316,6 +562,34 @@ async function iniciar() {
     $("form-alta").hidden = true;
   });
   $("btn-cancelar-editar").addEventListener("click", cerrarEdicion);
+  $("btn-cerrar-historial").addEventListener("click", cerrarHistorial);
+
+  $("btn-cerrar-modal-evento").addEventListener("click", () => $("modal-evento").close());
+  // Click en el fondo oscuro del modal nativo: con padding, un click afuera del contenido cae en
+  // el propio <dialog>, no en lo de adentro.
+  $("modal-evento").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) $("modal-evento").close();
+  });
+
+  // Cierre del menú de tres puntitos: mismo criterio que el panel de carrera. Va en fase de
+  // captura para correr antes que el click del propio kebab, así un click en otro botón cierra
+  // el menú viejo y abre el nuevo en vez de que el segundo click quede comido.
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!openMenu) return;
+      if (openMenu.el.contains(e.target) || openMenu.anchor.contains(e.target)) return;
+      closeRowMenu();
+    },
+    true
+  );
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && openMenu) closeRowMenu();
+  });
+  // El menú está en `position: fixed`: sin esto quedaría flotando apuntando a una fila que ya no
+  // está ahí si la tabla scrollea por abajo.
+  document.addEventListener("scroll", closeRowMenu, true);
+  window.addEventListener("resize", closeRowMenu);
 
   // Los dos avisos aparecen solo si el campo de verdad cambió: una advertencia que está siempre
   // en pantalla deja de leerse, y estos dos cambios sí tienen consecuencias que conviene ver.

@@ -112,6 +112,28 @@
       </p>
     </div>
 
+    <!-- Historial de sesiones de una liga. Se abre desde "Ver historial" en el menú de la fila. -->
+    <div class="sub-caja" id="historial" hidden>
+      <h2>Historial de <span id="historial-liga"></span></h2>
+      <p class="muted">Una fila por sesión del servidor: práctica, clasificación o carrera.</p>
+      <table class="tabla" id="tabla-historial">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Circuito</th>
+            <th>Sesión</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="filas-historial"></tbody>
+      </table>
+      <p class="muted" id="sin-eventos" hidden>Todavía no hay ninguna sesión registrada.</p>
+      <div class="botonera">
+        <button type="button" id="btn-cerrar-historial" class="secundario">Cerrar</button>
+      </div>
+    </div>
+
     <table class="tabla" id="tabla">
       <thead>
         <tr>
@@ -130,6 +152,63 @@
 
   <p class="error" id="error" hidden></p>
   <p class="pie">Race Control <span id="version"></span></p>
+
+  <!-- Detalle de una sesión: lo mismo que ya baja /api/report, mostrado en lugar de descargado. -->
+  <dialog id="modal-evento">
+    <h2 id="evento-titulo"></h2>
+    <p class="muted" id="evento-subtitulo"></p>
+
+    <h3>Clasificación</h3>
+    <table class="tabla" id="tabla-evento-clasificacion">
+      <thead>
+        <tr>
+          <th>Pos.</th>
+          <th>Piloto</th>
+          <th>Auto</th>
+          <th>Vueltas</th>
+          <th>Mejor vuelta</th>
+          <th>Penalización</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="filas-evento-clasificacion"></tbody>
+    </table>
+    <p class="muted" id="evento-sin-clasificacion" hidden>Sin clasificación todavía.</p>
+
+    <h3>Sanciones</h3>
+    <table class="tabla" id="tabla-evento-sanciones">
+      <thead>
+        <tr>
+          <th>Piloto</th>
+          <th>Origen</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Motivo</th>
+        </tr>
+      </thead>
+      <tbody id="filas-evento-sanciones"></tbody>
+    </table>
+    <p class="muted" id="evento-sin-sanciones" hidden>Sin sanciones.</p>
+
+    <h3>Incidentes</h3>
+    <table class="tabla" id="tabla-evento-incidentes">
+      <thead>
+        <tr>
+          <th>Tipo</th>
+          <th>Pilotos</th>
+          <th>Vuelta</th>
+          <th>Detalle</th>
+          <th>Resolución</th>
+        </tr>
+      </thead>
+      <tbody id="filas-evento-incidentes"></tbody>
+    </table>
+    <p class="muted" id="evento-sin-incidentes" hidden>Sin incidentes.</p>
+
+    <div class="botonera">
+      <button type="button" id="btn-cerrar-modal-evento" class="secundario">Cerrar</button>
+    </div>
+  </dialog>
 
   <script src="/portal.js"></script>
   <script src="/operador.js"></script>
