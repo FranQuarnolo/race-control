@@ -1,24 +1,34 @@
 /*
-  Panel de Race Control.
+  Panel de Race Control — pantalla fusionada para incrustar en fslmanager.vercel.app.
 
   Regla de oro del layout: TODO entra en una sola pantalla, sin scroll de página. Durante una
-  carrera el admin mira dos cosas —la torre de tiempos y el mapa— y no puede estar scrolleando
-  para encontrarlas.
+  carrera el admin mira una sola cosa —la torre de tiempos, con la largada y las sanciones ya
+  adentro— y no puede estar scrolleando para encontrarla. El mapa en vivo, los tiempos de vuelta y
+  los neumáticos no están en esta pantalla: siguen intactos en el panel completo de la rama main.
 
   Dos excepciones deliberadas, las dos adentro de su propia caja y nunca en la página:
 
-  1. Las tablas scrollean con el encabezado fijo. Con 24 pilotos en parrilla no hay layout que
-     entre sin eso, y la alternativa —achicar la fuente hasta que entre— es peor.
-  2. Los cajones laterales (Reglas, Conexión) scrollean. Cinco secciones de configuración no
-     entran en 768 px de alto en ninguna resolución realista. Son una capa flotante POR ENCIMA de
-     la pantalla de carrera, no parte de ella: que scrolleen no rompe lo que la regla protege.
+  1. La tabla scrollea con el encabezado fijo. Con 24 pilotos en parrilla no hay layout que entre
+     sin eso, y la alternativa —achicar la fuente hasta que entre— es peor.
+  2. Los cajones y modales (Reglas, Conexión, Sanciones aplicadas) scrollean. Seis secciones de
+     configuración no entran en 768 px de alto en ninguna resolución realista. Son una capa
+     flotante POR ENCIMA de la pantalla de carrera, no parte de ella: que scrolleen no rompe lo
+     que la regla protege.
+
+  Paleta: tomada de fslmanager.vercel.app (navy oscuro, acentos ámbar, cards con marca de esquina
+  y tipografía condensada en mayúscula) para que esta pantalla, embebida en esa página, no se note
+  como un cuerpo extraño.
 */
 
 :root {
   color-scheme: dark;
-  --bg: #0f1115;
-  --panel: #171a21;
-  --panel-border: #272b35;
+  /* Más oscuro que la primera pasada: comparado contra fslmanager.vercel.app en vivo el fondo
+     quedaba más claro que el admin real. Si todavía no coincide pixel a pixel, el valor exacto
+     sale con el selector de color del inspector de esa página, acá fue a ojo sobre una captura. */
+  --bg: #0a0b10;
+  --panel: #12141c;
+  --panel-raised: #161925;
+  --panel-border: #232733;
   --text: #e6e8ec;
   --muted: #8b93a3;
   --accent: #f0b429;
@@ -87,10 +97,9 @@ body {
   50% { opacity: 0.25; }
 }
 
-/* Sin contacto, los datos de la torre y del mapa son viejos. Atenuarlos es la mitad del aviso:
-   la banda dice qué pasa y esto dice a qué alcanza. */
-body.link-down #card-timing,
-body.link-down #card-map {
+/* Sin contacto, toda la tarjeta de carrera es dato viejo. Atenuarla es la mitad del aviso: la
+   banda dice qué pasa y esto dice a qué alcanza. */
+body.link-down #card-race {
   opacity: 0.55;
   filter: saturate(0.5);
   transition: opacity 0.3s, filter 0.3s;
@@ -98,133 +107,45 @@ body.link-down #card-map {
 
 @media (prefers-reduced-motion: reduce) {
   #link-down .dot { animation: none; }
-  body.link-down #card-timing,
-  body.link-down #card-map { transition: none; }
+  body.link-down #card-race { transition: none; }
 }
 
-/* ---------------------------------------------------------------- barra superior */
+/* ---------------------------------------------------------------- controles flotantes
 
-.topbar {
-  flex: 0 0 auto;
+   Acá vivía la barra superior entera: marca, nombre de liga, bandera a cuadros y el botón de
+   salir. Esta pantalla vive incrustada dentro de fslmanager.vercel.app, que ya resuelve todo eso
+   con su propio header — repetirlo acá era redundante y le robaba alto a la tabla. Lo único que
+   queda son dos grupos de botones flotantes, repartidos a los costados para no taparle nada a la
+   página anfitriona. El panel completo con el header de marca sigue intacto en la rama main.
+*/
+.floating {
+  position: fixed;
+  top: 14px;
+  z-index: 15;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 2.5%;
-  border-bottom: 1px solid var(--panel-border);
-  background: var(--panel);
+  gap: 8px;
 }
+.floating-left { left: 2.5%; }
+.floating-right { right: 2.5%; }
 
-.topbar .brand { display: flex; align-items: center; gap: 9px; }
-.topbar .brand img { width: 26px; height: 26px; display: block; }
-.topbar h1 { font-size: 15px; margin: 0; letter-spacing: 0.01em; white-space: nowrap; }
-.topbar .version { color: var(--muted); font-size: 12px; }
-.topbar .league {
-  color: var(--muted);
-  font-size: 13px;
-  padding-left: 10px;
-  border-left: 1px solid var(--panel-border);
-  max-width: 28ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.topbar .spacer { flex: 1 1 auto; }
-
-/* Control segmentado: las dos secciones del panel.
-   Reglas, Conexión y Salir son acciones y se dibujan como botones sueltos y elevados
-   (`.status-button`, más abajo). Estas dos cambian la pantalla entera, así que van al revés:
-   un hueco hundido —más oscuro que la barra— con la pestaña activa levantada adentro. La
-   diferencia es de relieve, no de color, y por eso se lee sin tener que comparar: un grupo
-   está metido en la barra y el otro apoyado encima.
-   Antes las dos pestañas eran texto gris con el mismo fondo `#20242e` del hover de los botones,
-   o sea que la pestaña activa y un botón cualquiera se dibujaban exactamente igual. */
-nav.views {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 9px;
-  background: #11131a;
-  border: 1px solid #22262f;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-nav.views a {
-  color: var(--muted);
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 13px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-}
-nav.views a:hover { color: var(--text); }
-nav.views a[aria-current="page"] {
-  background: #272c38;
-  color: var(--text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-/* El ícono de la pestaña —el mazo de Sanciones— sigue al color del texto, igual que la bandera
-   cuando no hay carrera. Así la pestaña entera se enciende de una sola pieza al activarse. */
-.nav-icon { display: flex; flex: 0 0 auto; color: inherit; }
-.nav-icon svg { width: 15px; height: 15px; display: block; }
-
-.count-badge {
-  background: var(--red);
-  color: #1a0505;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 6px;
-  min-width: 18px;
-  text-align: center;
-}
-.count-badge[hidden] { display: none; }
-
-/* Bandera a cuadros que ondea solo cuando la carrera está en curso. Es el indicador que faltaba:
-   antes había que deducir si la carrera arrancó mirando el semáforo de la tarjeta de largada. */
-.flag-icon { display: flex; flex: 0 0 auto; }
-.flag-icon svg { width: 15px; height: 15px; display: block; overflow: visible; }
-.flag-icon .mast { stroke: var(--muted); stroke-width: 1.4; stroke-linecap: round; }
-.flag-icon .cloth { fill: var(--muted); transform-origin: 4px 5px; }
-.flag-icon .cloth-bg { fill: rgba(139, 147, 163, 0.25); }
-
-.flag-icon.racing .mast { stroke: var(--green); }
-.flag-icon.racing .cloth { fill: var(--green); animation: flag-wave 0.75s ease-in-out infinite alternate; }
-.flag-icon.racing .cloth-bg { fill: rgba(53, 199, 110, 0.28); }
-
-@keyframes flag-wave {
-  from { transform: skewY(-7deg) scaleX(1); }
-  to { transform: skewY(7deg) scaleX(0.9); }
-}
-
-/* Un indicador de estado no puede depender solo del movimiento: con el movimiento apagado el
-   color sigue diciendo lo mismo. */
-@media (prefers-reduced-motion: reduce) {
-  .flag-icon.racing .cloth { animation: none; }
-}
-
-/* El botón de conexión se pinta solo: verde si hay servidor confirmado y entra telemetría, rojo
-   si falta algo. Es el estado que el admin necesita mirar de reojo, no uno que deba ocupar un
-   cuarto de la pantalla como antes. */
 .status-button {
   display: flex;
   align-items: center;
   gap: 7px;
   border: 1px solid var(--panel-border);
-  background: #20242e;
+  background: var(--panel-raised);
   color: var(--text);
   border-radius: 7px;
   padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
 }
-.status-button:hover { border-color: #39404f; }
+.status-button:hover { border-color: var(--accent); color: var(--accent); }
 .status-button .dot {
   width: 9px;
   height: 9px;
@@ -232,13 +153,15 @@ nav.views a[aria-current="page"] {
   background: var(--muted);
   flex: 0 0 auto;
 }
+/* El botón de conexión se pinta solo: verde si hay servidor confirmado y entra telemetría, rojo
+   si falta algo. Es el estado que el admin necesita mirar de reojo. */
 .status-button.ok { border-color: rgba(53, 199, 110, 0.45); color: var(--green); }
 .status-button.ok .dot { background: var(--green); box-shadow: 0 0 7px rgba(53, 199, 110, 0.7); }
 .status-button.bad { border-color: rgba(224, 85, 85, 0.45); color: var(--red); }
 .status-button.bad .dot { background: var(--red); box-shadow: 0 0 7px rgba(224, 85, 85, 0.7); }
 
-/* Switch de modo. Antes era un checkbox dentro de una tarjeta entera; se podía correr una
-   carrera completa sin notar que el motor no estaba sancionando. Ahora está siempre visible. */
+/* Switch de modo. Vive entero adentro del cajón de Conexión: el interruptor y el aviso. En los
+   controles flotantes no queda nada, ni el control ni el cartel. */
 .mode-switch {
   display: flex;
   align-items: center;
@@ -246,9 +169,10 @@ nav.views a[aria-current="page"] {
   border: 1px solid var(--panel-border);
   border-radius: 7px;
   padding: 5px 11px 5px 12px;
-  background: #20242e;
+  background: var(--panel-raised);
   cursor: pointer;
   user-select: none;
+  width: fit-content;
 }
 .mode-switch .mode-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
 .mode-switch.shadow { border-color: rgba(239, 142, 60, 0.45); }
@@ -279,83 +203,22 @@ nav.views a[aria-current="page"] {
 }
 .mode-switch.live .track { background: var(--green); }
 .mode-switch.live .track::after { transform: translateX(16px); }
-
-/* Adentro del cajón la sección es un bloque, así que sin esto el interruptor se estiraría a los
-   460 px de ancho y el texto quedaría flotando lejos de la perilla. */
-.drawer .mode-switch { width: fit-content; }
-
 .mode-switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/*
-  Salir: solo el ícono, en rojo.
-
-  Es la única acción de la barra que no se puede deshacer con otro click —cierra la sesión y te
-  devuelve a la pantalla de ingreso—, así que se dibuja distinto de los otros botones a propósito:
-  sin texto, sin fondo, y en el rojo que en todo el panel significa "esto termina algo". Al lado de
-  Reglas y Conexión, que son dos puertas que se abren y se cierran, conviene que no se parezca.
-
-  Sin texto, el nombre accesible lo pone el `aria-label` del HTML. El área de click se mantiene en
-  30×30 aunque el ícono mida 16: un objetivo de 16 px es imposible de acertar con el mouse.
-*/
-.btn-salir {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--red);
-  cursor: pointer;
-}
-.btn-salir svg { width: 16px; height: 16px; display: block; }
-.btn-salir:hover {
-  background: rgba(224, 85, 85, 0.14);
-  border-color: rgba(224, 85, 85, 0.45);
-}
-/* `[hidden]` explícito: el `display: flex` de arriba le gana al atributo y el botón quedaría
-   visible en el modo sin portal, prometiendo una sesión que no existe. Este archivo ya tuvo ese
-   bug exacto con un modal. Una línea de seguro. */
-.btn-salir[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- vistas */
 
 main {
   flex: 1 1 auto;
-  min-height: 0; /* sin esto el grid desborda el flex y reaparece el scroll de página */
+  min-height: 0; /* sin esto el flex desborda y reaparece el scroll de página */
   width: 95%;
   margin: 0 auto;
-  padding: 12px 0;
-  display: grid;
-  gap: 12px;
+  padding: 50px 0 12px 0; /* el padding-top le deja aire a los controles flotantes de arriba */
+  display: flex;
 }
 
 main[hidden] { display: none; }
 
-/* Largada como banda horizontal arriba, y debajo la torre de tiempos con el mapa al costado.
-   El mapa a 1fr contra 2fr de la torre: la mitad del ancho, que es todo lo que necesita.
-
-   La largada va ARRIBA y no abajo porque es lo único de la pantalla que es secuencial — se usa
-   una vez, al principio, y después no se toca. Dejarla abajo obligaría a bajar la vista en el
-   único momento de la carrera en que el admin no puede distraerse. */
-#view-live {
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
-  grid-template-areas:
-    "start  start"
-    "timing map";
-}
-#card-start { grid-area: start; }
-#card-timing { grid-area: timing; }
-#card-map { grid-area: map; }
-
-#view-sanciones {
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-}
+#card-race { flex: 1 1 auto; min-height: 0; }
 
 .card {
   background: var(--panel);
@@ -366,6 +229,22 @@ main[hidden] { display: none; }
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  position: relative;
+}
+
+/* La marca de esquina de fslmanager: un ángulo fino en ámbar apagado, decorativo y nada más. Se
+   repite en cada tarjeta y en cada modal para que esta pantalla, embebida ahí adentro, no se note
+   como un cuerpo extraño. */
+.card::before, .modal::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 9px;
+  height: 9px;
+  border-top: 1px solid rgba(240, 180, 41, 0.55);
+  border-left: 1px solid rgba(240, 180, 41, 0.55);
+  pointer-events: none;
 }
 
 .card > h2 {
@@ -383,7 +262,7 @@ main[hidden] { display: none; }
 .card > h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; }
 
 /* Acción secundaria dentro del encabezado de una tarjeta: se lee como enlace, no compite con los
-   botones de la bandeja de incidentes, que son los que deciden una sanción. */
+   botones que deciden una sanción. */
 .hint-action {
   text-transform: none;
   letter-spacing: 0;
@@ -399,60 +278,134 @@ main[hidden] { display: none; }
 .hint-action:hover { border-color: var(--accent); }
 .hint-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-/* ---------------------------------------------------------------- largada (banda) */
+/* ---------------------------------------------------------------- cabecera de carrera
 
-#card-start {
-  flex-direction: row;
+   Una sola fila con las tres cosas que importan antes de que la tabla arranque: en qué sesión
+   está el servidor y cuánto le queda, el semáforo de largada —igual al que ve el piloto en su
+   propia app— y los controles para largar. Antes la largada era su propia banda, arriba de todo;
+   ahora comparte la fila con la sesión y el semáforo porque las tres son la misma pregunta
+   ("¿en qué momento de la carrera estamos?") contestada de tres formas distintas.
+*/
+.race-head {
+  display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 9px 15px;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--panel-border);
+  flex: 0 0 auto;
 }
-#card-start > h2 { margin: 0; flex: 0 0 auto; }
-#card-start .semaforo { margin: 0; flex: 0 0 auto; }
-#card-start .btn-row { flex: 0 0 auto; }
-#card-start .start-hint { color: var(--muted); font-size: 12px; margin-left: auto; text-align: right; }
 
-/* Fuera de la sesión de carrera. El semáforo se apaga y la tarjeta se corre al fondo visual: los
-   botones ya están deshabilitados por `disabled`, pero una tarjeta que se ve igual de viva que
-   siempre invita a clickearla y después no explica nada. El texto de ayuda queda en pie —es el
-   único que dice por qué— así que no se le baja la opacidad junto con el resto. */
-#card-start.off-session .semaforo,
-#card-start.off-session .btn-row { opacity: 0.4; }
-#card-start.off-session > h2 { color: var(--muted); }
-
-.semaforo {
+.session-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.session-type {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: rgba(240, 180, 41, 0.14);
+  border: 1px solid rgba(240, 180, 41, 0.4);
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.session-clock {
   font-size: 19px;
   font-weight: 700;
-  text-align: center;
-  padding: 8px 0;
-  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* Los 5 discos replican exactamente lo que ve el piloto en su propia app: apagados en espera,
+   parpadeando en rojo durante la formación, y 3 segundos en verde sólido al largar. */
+.lights-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 140px;
+}
+.lights { display: flex; gap: 8px; }
+.light {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #2a2f3a;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.lights.formation .light {
+  background: var(--red);
+  box-shadow: 0 0 8px rgba(224, 85, 85, 0.75);
+  animation: light-blink 0.5s step-end infinite;
+}
+.lights.green .light {
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(53, 199, 110, 0.8);
+}
+@keyframes light-blink {
+  50% { opacity: 0.2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lights.formation .light { animation: none; }
+}
+
+/* Texto equivalente de las cinco luces (que son `aria-hidden`), para lector de pantalla o para
+   quien prefiera leerlo. Antes era la pieza más grande de la banda de largada; ahora es una
+   chapa chica al lado de los discos, que son el indicador de verdad. */
+.semaforo {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
   letter-spacing: 0.04em;
-  min-width: 170px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 .semaforo.idle { background: #1d2029; color: var(--muted); }
 .semaforo.formation { background: rgba(239, 142, 60, 0.15); color: var(--yellow); }
-.semaforo.green { background: rgba(53, 199, 110, 0.15); color: var(--green); }
+.semaforo.green { background: rgba(53, 199, 110, 0.18); color: var(--green); }
 
-/* Carrera largada. La banda entera se enciende: borde verde, barra lateral y un aviso que late.
-   Es lo único de la pantalla que se mueve solo, así que se detecta por el rabillo del ojo sin
-   tener que leer nada — que es justo lo que se necesita con el panel en una segunda pantalla. */
-#card-start.racing {
-  border-color: rgba(53, 199, 110, 0.45);
-  box-shadow: inset 3px 0 0 var(--green);
+.start-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
 }
-#card-start.racing .semaforo.green {
-  background: rgba(53, 199, 110, 0.24);
-  box-shadow: inset 0 0 0 1px rgba(53, 199, 110, 0.45);
+.start-controls h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0;
 }
+.start-controls .btn-row { flex: 0 0 auto; }
+.start-controls .start-hint { color: var(--muted); font-size: 12px; max-width: 22ch; }
+
+/* Fuera de la sesión de carrera los botones ya están deshabilitados por `disabled`, pero una
+   fila que se ve igual de viva que siempre invita a clickearla y después no explica nada. El
+   texto de ayuda queda en pie —es el único que dice por qué— así que no se le baja la opacidad
+   junto con el resto. */
+.start-controls.off-session .btn-row { opacity: 0.4; }
+.start-controls.off-session h2 { color: var(--muted); }
+
 .race-live {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 9px;
   color: var(--green);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -468,8 +421,6 @@ main[hidden] { display: none; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(53, 199, 110, 0.55); }
   60% { box-shadow: 0 0 0 8px rgba(53, 199, 110, 0); }
 }
-/* Mismo criterio que la bandera de la barra: sin animación, el estado sigue comunicándose por
-   color y por texto. Nadie se entera menos por tener el sistema en modo reducido. */
 @media (prefers-reduced-motion: reduce) {
   .race-live .dot { animation: none; }
 }
@@ -503,6 +454,37 @@ button.saved:disabled {
   cursor: default;
 }
 
+/* ---------------------------------------------------------------- metadatos de la tabla */
+
+.table-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  flex: 0 0 auto;
+}
+.table-meta .hint { color: var(--muted); font-size: 12px; }
+
+/* Aviso de que ningún piloto tiene la app. Gris y no rojo a propósito: no es una falla del
+   sistema, es una pieza que todavía no está instalada, y la mitad de las ligas van a correr así.
+   Abre el cajón de conexión, donde está el diagnóstico. */
+.chapa-sin-app {
+  text-transform: none;
+  letter-spacing: 0;
+  background: rgba(139, 147, 163, 0.14);
+  border: 1px solid rgba(139, 147, 163, 0.4);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chapa-sin-app:hover { background: rgba(139, 147, 163, 0.24); color: var(--text); }
+.chapa-sin-app[hidden] { display: none; }
+
 /* ---------------------------------------------------------------- tablas */
 
 .table-wrap {
@@ -530,12 +512,6 @@ th {
 th.num, td.num { text-align: right; }
 td.num { font-variant-numeric: tabular-nums; }
 th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
-
-tbody tr.selectable { cursor: pointer; }
-tbody tr.selectable:hover { background: #1d2029; }
-/* Selección compartida con el mapa, en los dos sentidos: click acá resalta el auto allá. */
-tbody tr.selected, tbody tr.selected:hover { background: rgba(239, 142, 60, 0.14); }
-tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 
 .empty {
   display: flex;
@@ -579,7 +555,37 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
    al piloto en el acto y no pueden salir de un click fallido en una tabla que se mueve sola. */
 .btn-mini.arming { background: var(--red); color: #1a0505; }
 
-/* ---------------------------------------------------------------- menú de fila (⋮) */
+/* ---------------------------------------------------------------- menú de fila (⋮) y detalle (▾) */
+
+.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
+
+.btn-expand {
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  line-height: 1;
+  font-size: 13px;
+  padding: 0;
+  position: relative;
+}
+.btn-expand:hover, .btn-expand[aria-expanded="true"] { background: #343a47; color: var(--text); }
+/* Punto ámbar cuando este piloto tiene incidentes sin revisar: con la fila cerrada es lo único
+   que queda a la vista de que hay una decisión pendiente ahí adentro. */
+.btn-expand.has-pending::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* La cuenta de incidentes también se resalta: no hay que abrir la fila para notar que algo
+   quedó pendiente de revisión. */
+td.num.has-pending { color: var(--accent); font-weight: 700; }
 
 .btn-kebab {
   background: transparent;
@@ -644,7 +650,7 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 
   La columna del piloto tenía `width: 100%`, el truco clásico para que absorba todo el espacio
   sobrante y los nombres largos se corten con puntos suspensivos. El efecto secundario es el que se
-  ve en un monitor ancho: el piloto se queda con TODO el aire y las otras trece columnas quedan
+  ve en un monitor ancho: el piloto se queda con TODO el aire y las otras columnas quedan
   apretadas contra el borde derecho, con un hueco en el medio. Con la tabla vacía es peor todavía,
   porque no hay ni un nombre que justifique ese ancho.
 
@@ -653,51 +659,23 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
   una. El `max-width: 0` del `td` se queda: es lo que deja que el `text-overflow` recorte el nombre
   largo en vez de ensanchar la columna, y ahora el ancho que manda es el del `th`.
 */
-#timing-table { font-size: 12.5px; }
+/* `table-layout: auto` (el default) reparte el ancho sobrante mirando el contenido, y acá el único
+ * ancho explícito era el de Piloto: con la tabla vacía o con el embed ocupando ~1800px en
+ * fslmanager, el navegador estiraba las demás columnas de cualquier manera (imagen "tablarota" en
+ * la tarea). Con `fixed` el ancho de cada columna lo deciden estos porcentajes, no el contenido. */
+#timing-table { font-size: 12.5px; table-layout: fixed; width: 100%; }
 #timing-table th, #timing-table td { padding: 5px 5px; white-space: nowrap; }
-#timing-table th.c-driver { width: 20ch; }
-
-/* Aviso de que ningún piloto tiene la app, al lado del título de la torre. Gris y no rojo a
-   propósito: no es una falla del sistema, es una pieza que todavía no está instalada, y la mitad
-   de las ligas van a correr así. Abre el cajón de conexión, donde está el diagnóstico. */
-.h2-derecha { display: flex; align-items: center; gap: 8px; }
-
-.chapa-sin-app {
-  text-transform: none;
-  letter-spacing: 0;
-  background: rgba(139, 147, 163, 0.14);
-  border: 1px solid rgba(139, 147, 163, 0.4);
-  color: var(--muted);
-  border-radius: 7px;
-  padding: 3px 9px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.chapa-sin-app:hover { background: rgba(139, 147, 163, 0.24); color: var(--text); }
-/* Mismo seguro que `.btn-salir[hidden]`: cualquier `display` propio le gana al atributo. */
-.chapa-sin-app[hidden] { display: none; }
-
-/* La columna de Ping se saca entera cuando ningún piloto tiene la app reportando: sin app no hay
-   ping posible —el UDP de Assetto Corsa no lo transporta— y una columna de "sin app" en rojo en
-   cada fila hacía parecer roto algo que simplemente no aplica. El panel lo dice donde corresponde,
-   en "La app de los pilotos" del cajón de conexión. */
-#timing-table.sin-ping .c-ping { display: none; }
-
-/* "PIT" en la columna de velocidad. Mismo ámbar que la fila en boxes, para que se lean juntos. */
-#timing-table td .en-pit { color: var(--yellow); font-weight: 700; letter-spacing: 0.04em; }
+#timing-table th:nth-child(1) { width: 5%; }
+#timing-table th:nth-child(2) { width: 8%; }
+#timing-table th:nth-child(3) { width: 28%; }
+#timing-table th:nth-child(4) { width: 12%; }
+#timing-table th:nth-child(5) { width: 12%; }
+#timing-table th:nth-child(6) { width: 10%; }
+#timing-table th:nth-child(7) { width: 8%; }
+#timing-table th:nth-child(8) { width: 8%; }
+#timing-table th:nth-child(9) { width: 9%; }
 
 #timing-table td.c-driver { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
-.c-pos {
-  color: var(--muted);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-  width: 1%;
-}
-tbody tr.selected .c-pos { color: var(--yellow); }
 
 /* Logo de marca de la biblioteca que viene empaquetada con la app (`brands/`, ver `renderCarBadge`
    en app.js). Fondo claro tenue porque son logos a color pensados para imprimirse sobre fondo
@@ -737,344 +715,74 @@ tbody tr.selected .c-pos { color: var(--yellow); }
    queda ópticamente bajo. */
 .brand-shield > span { transform: translateY(-1px); }
 .brand-shield.empty { clip-path: none; background: none; color: var(--muted); font-size: 11px; }
-td.c-car { width: 1%; }
+/* Acá vivía `td.c-car { width: 1% }`: con `table-layout: fixed` el ancho de columna lo define el
+ * `th` (ver las reglas `#timing-table th:nth-child`, más arriba), así que esta regla ya no hacía
+ * nada. */
 
 /* Acá estaban `.sectors` y `.c-cuts`. Las dos columnas se sacaron de la torre en la 1.1: ver el
    comentario del `<thead>` en index.html. */
 
-/* Columna de intervalo. El ancho fijo es lo que la hace legible: con celdas que se encogen según
-   el contenido, "+0.412" y "+12.8" no arrancan en la misma columna y la pregunta que se contesta
-   de un vistazo —quién está cerca— vuelve a ser trabajo de leer número por número. 6.5ch entra
-   `+12.345` y deja respirar a `+1:02.4`. */
-td.c-gap {
-  width: 1%;
-  min-width: 6.5ch;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-/* El líder y el doblado no son números y no tienen por qué pesar como uno: lo que el ojo busca en
-   esta columna son los intervalos chicos. */
-td.c-gap.lider,
-td.c-gap.doblado { color: var(--muted); font-weight: 400; }
-
-/* El encabezado es un botón que alterna entre intervalo e diferencia con el líder. Se pinta como
-   el texto de cualquier `th` —no como un botón— porque un botón con borde en una fila de
-   encabezados se lee como un control de la tabla entera y no como el título de su columna. El
-   subrayado punteado es la única pista de que se puede clickear, que es la dosis justa. */
-#btn-gap-mode {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-}
-#btn-gap-mode:hover { color: var(--text); }
-
-.lap-time { font-variant-numeric: tabular-nums; }
-/* Mejor vuelta absoluta de la sesión. Es el dato que se busca primero en cualquier torre de
-   tiempos, y encontrarlo entre 24 números iguales sin un color es trabajo manual. */
-.lap-time.session-best { color: var(--purple); font-weight: 700; }
-.lap-time.personal-best { color: var(--green); }
-
 /* Fila de quien está en el pit lane ahora. El tinte vale más que la columna: se ve de un vistazo
    quién está parado sin leer número por número. */
 tbody tr.in-pit { background: rgba(240, 180, 41, 0.07); }
-tbody tr.in-pit.selected { background: rgba(239, 142, 60, 0.14); }
 
 /* Auto cuya telemetría se congeló: el backend lo marca con `telemetryStale` cuando pasaron más de
    dos segundos sin un CAR_UPDATE suyo. Pasa cuando el piloto crashea el juego, pierde la red o se
    está desconectando.
 
    El backend venía mandando este campo desde siempre y el panel no lo leía, así que un auto
-   muerto se veía idéntico a uno corriendo: su última velocidad, su última posición, su punto en el
-   mapa, todo quieto pero con el mismo aspecto que el resto. La fila entera se apaga —no solo una
-   celda— porque lo que quedó viejo no es un dato sino todos. */
+   muerto se veía idéntico a uno corriendo: su última velocidad, su última posición, todo quieto
+   pero con el mismo aspecto que el resto. La fila entera se apaga —no solo una celda— porque lo
+   que quedó viejo no es un dato sino todos. */
 tbody tr.stale td { color: #5a6273; }
 tbody tr.stale .c-driver { color: var(--muted); }
 tbody tr.stale .car-badge,
 tbody tr.stale .brand-shield { opacity: 0.4; }
-tbody tr.stale .lap-time.session-best,
-tbody tr.stale .lap-time.personal-best { color: #5a6273; font-weight: 400; }
-tbody tr.stale .sin-senal { color: var(--red); font-weight: 600; }
 
-/* Piloto que salió del servidor. Desde la 1.2 la fila no se borra: se apaga.
+/* Piloto que salió del servidor. La fila no se borra: se apaga.
 
    Es más fuerte que `.stale` a propósito —aquello es "no llega el dato", esto es "no está"— y por
-   eso baja la opacidad de la fila entera en vez de recolorear celda por celda. Los colores de
-   mejor vuelta se apagan con ella: una vuelta morada en una fila fantasma se lee como que esa
-   persona sigue girando.
+   eso baja la opacidad de la fila entera en vez de recolorear celda por celda.
 
    Lo que NO se apaga es el nombre, que queda legible: la fila existe justamente para poder decir
    "a Fulano se le cortó en la vuelta 12". */
 tbody tr.desconectado { opacity: 0.45; }
 tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
-tbody tr.desconectado .lap-time.session-best,
-tbody tr.desconectado .lap-time.personal-best { color: inherit; font-weight: 400; }
-tbody tr.desconectado.selected { opacity: 0.75; }
-.sin-conexion { color: var(--muted); font-style: italic; }
 
 /* Columnas que solo existen con la app del piloto instalada. El guion es deliberado: el UDP de
    Assetto Corsa no transporta estos datos, no hay forma de completarlos desde el servidor. */
 .nodata { color: #4d5564; }
 
-/* ---------------------------------------------------------------- mapa */
+/* Acá vivía la sección entera del mapa del circuito: la banda de condiciones de sesión, el canvas
+   y su tooltip. Esta pantalla fusiona Control de carrera y Sanciones para incrustarla en
+   fslmanager.vercel.app, y el mapa no entra en esa fusión — la rama main lo conserva intacto. */
 
-/* Banda de condiciones, arriba del trazado. `flex: 0 0 auto` para que no le robe alto al mapa:
-   el mapa es el que absorbe lo que sobra (`flex: 1 1 auto`), no al revés. */
-#session-bar {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-bottom: 8px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--panel-border);
-  font-size: 12px;
-}
-#session-bar[hidden] { display: none; }
-.session-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: baseline;
-}
-.session-line:empty,
-.session-line > span:empty { display: none; }
-#ses-track { font-size: 14px; }
+/* ---------------------------------------------------------------- detalle expandible de fila
 
-/* El reloj de carrera: lo que el director mira de reojo. Tipografía tabular para que el número no
-   bailotee de ancho a cada segundo, que es lo que vuelve ilegible un cronómetro. */
-/* Lectura del punto de la vuelta del auto seleccionado. Es una herramienta de calibración, no un
-   dato de carrera: por eso es chica, gris y solo aparece con algo seleccionado. El `[hidden]`
-   explícito está porque este contenedor es flex, y `display: flex` le gana al atributo. */
-#map-readout {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: 12px;
-}
-#map-readout[hidden] { display: none; }
-#map-readout .label {
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-#map-readout .value {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--yellow);
-}
-#map-readout .muted { color: var(--muted); }
-
-#session-clock {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--panel-border);
-}
-#session-clock[hidden] { display: none; }
-#session-clock .label {
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-/* El reloj bajó de 26 px a 18 px en la 1.2. No porque sobrara espacio: al lado de una chapa de
-   13 px era lo más grande del renglón, y la primera pregunta frente al panel no es cuánto falta
-   sino qué sesión se está corriendo. El que dirige mira el reloj cuando lo busca; la sesión la
-   tiene que leer sin buscarla. */
-#session-clock .value {
-  font-size: 18px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-/* Último minuto: el aviso que importa cuando hay que decidir si entra una vuelta más.
-   Acá decía `var(--warn)`, que no está definida en ningún lado. Una variable inexistente hace
-   inválida la propiedad entera y el navegador la descarta en silencio: la clase `.ending` se
-   aplicaba bien y el reloj seguía del mismo color de siempre. Mismo modo de falla que el `--` del
-   ícono — todo correcto salvo que no pasa nada. Los colores de este archivo son --green/--yellow/
-   --red; el aviso es naranja y no rojo porque es una decisión a tomar, no una falla. */
-#session-clock.ending .value { color: var(--yellow); }
-#session-clock .label[hidden], #session-clock .value[hidden] { display: none; }
-
-/*
-  La chapa P / Q / R, al lado del reloj.
-
-  El color codifica cuánto pesa la sesión, no el tipo por el tipo mismo: gris en práctica porque no
-  cuenta nada, ámbar en clasificación porque ahí se define la parrilla, verde en carrera porque es
-  la única donde se reparten puntos —y la única donde los botones de largada hacen algo—.
-
-  `align-self: center` porque el contenedor alinea por `baseline` para que la etiqueta y el número
-  grande del reloj compartan la línea de base; una chapa con fondo alineada así queda colgando.
-
-  Pasó de 13 px a 22 px en la 1.2: el color estaba bien elegido pero sobre 13 px no se leía como
-  color, se leía como una letra que casualmente no era blanca. `min-width` para que la P y la R
-  ocupen lo mismo que la TA y el renglón no se mueva al cambiar de sesión.
+   Por piloto, no en una bandeja global. Antes "Incidentes a revisar" era una lista aparte con una
+   tarjeta por hecho de TODOS los pilotos mezclados; ahora cada fila de la torre abre su propio
+   detalle con sus propios incidentes — la misma tarjeta (`.incident`) y el mismo formulario de
+   sanción (`.penalty-form`) de siempre, ahora anidados adentro de la torre en vez de al costado.
 */
-.chapa-sesion {
-  align-self: center;
-  border-radius: 7px;
-  padding: 5px 13px;
-  min-width: 46px;
-  text-align: center;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1;
-  border: 1px solid transparent;
+.car-detail-row td {
+  background: #14161c;
+  padding: 0;
 }
-.chapa-sesion[hidden] { display: none; }
-/* Los fondos y bordes se subieron de saturación junto con el tamaño: en 13 px un fondo al 14 %
-   alcanzaba para teñir la chapa, en 22 px se perdía contra el panel. */
-.chapa-sesion.practica {
-  background: rgba(148, 163, 184, 0.2);
-  border-color: rgba(148, 163, 184, 0.55);
-  color: #b9c2d0; /* más claro que --muted: en gris sobre gris, a 22 px, el muted se apaga */
-}
-.chapa-sesion.qualy {
-  background: rgba(239, 142, 60, 0.24);
-  border-color: rgba(239, 142, 60, 0.75);
-  color: #ffa857;
-}
-.chapa-sesion.carrera {
-  background: rgba(53, 199, 110, 0.24);
-  border-color: rgba(53, 199, 110, 0.75);
-  color: #4fe089;
-}
-
-#map-host {
-  flex: 1 1 auto;
-  min-height: 0;
-  position: relative;
-}
-#map-canvas { display: block; width: 100%; height: 100%; }
-
-#map-tooltip {
-  position: absolute;
-  pointer-events: none;
-  background: #0c0e12;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  padding: 5px 9px;
-  font-size: 12px;
-  white-space: nowrap;
-  transform: translate(-50%, -140%);
-  z-index: 2;
-}
-#map-tooltip[hidden] { display: none; }
-#map-tooltip .car-number { color: var(--muted); }
-
-#map-empty {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  text-align: center;
-  padding: 0 24px;
-}
-#map-empty[hidden] { display: none; }
-#map-progress {
-  width: 200px;
-  height: 5px;
-  border-radius: 999px;
-  background: #272b35;
-  overflow: hidden;
-}
-#map-progress > div { height: 100%; background: var(--accent); width: 0; transition: width 0.4s; }
+.car-detail { padding: 10px 14px 14px 14px; }
 
 /* ---------------------------------------------------------------- incidentes
 
-   Agrupados por piloto, con el resumen siempre a la vista y el detalle plegado.
-
-   Antes era una tarjeta por hecho, en una sola lista plana. Un trompo en una práctica genera
-   diez cuts y nueve choques, así que la bandeja se llenaba de diecinueve tarjetas iguales de un
-   solo piloto y había que contarlas a ojo para saber qué había pasado. Ahora el encabezado
-   contesta eso de una ("Cuts: 10 · Incidentes: 9") y las tarjetas están abajo, para cuando haya
-   que sancionar una.
-
-   Es `<details>` nativo y no un acordeón a mano: entra con teclado, lo anuncia el lector de
-   pantalla y no hay estado que mantener. Cuál quedó abierto sí lo recuerda el JS, porque la
-   lista se repinta sola cada vez que entra un incidente nuevo. */
-
-.grupo-incidentes {
-  border: 1px solid var(--panel-border);
-  border-radius: 8px;
-  margin-bottom: 9px;
-  background: var(--panel);
-}
-.grupo-incidentes > summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 9px 12px;
-  cursor: pointer;
-  list-style: none;
-  border-radius: 8px;
-}
-/* El triángulo de WebKit se dibuja aparte del `list-style` y hay que sacarlo por separado, o
-   queda un marcador suelto a la izquierda del nombre. */
-.grupo-incidentes > summary::-webkit-details-marker { display: none; }
-.grupo-incidentes > summary:hover { background: #1b1d25; }
-.grupo-incidentes > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.grupo-incidentes > summary .piloto { font-weight: 600; flex: 1 1 auto; }
-/* Flecha propia: gira al abrir y deja claro que el grupo se despliega. */
-.grupo-incidentes > summary::after {
-  content: "›";
-  color: var(--muted);
-  font-size: 16px;
-  line-height: 1;
-  transform: rotate(90deg);
-  transition: transform 0.15s;
-}
-.grupo-incidentes[open] > summary::after { transform: rotate(-90deg); }
-@media (prefers-reduced-motion: reduce) {
-  .grupo-incidentes > summary::after { transition: none; }
-}
-/* Las tarjetas de adentro, despegadas del borde del grupo. */
-.grupo-incidentes > .incident { margin: 0 10px 9px 10px; }
-
-/* Las cuentas del encabezado. Cada una con su color: ámbar lo que es una decisión a tomar
-   —irse de pista es la infracción más común y la menos grave—, rojo lo que es contacto. */
-.chip-cuenta {
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.chip-cuenta.cuts { background: rgba(239, 142, 60, 0.16); color: var(--yellow); }
-.chip-cuenta.choques { background: rgba(224, 85, 85, 0.16); color: var(--red); }
-/* Celeste para los dos excesos de velocidad: no es una decisión del comisario —el límite ya se
-   pasó o no— así que no comparte el ámbar de lo que hay que juzgar ni el rojo del contacto. */
-.chip-cuenta.velocidad { background: rgba(93, 173, 226, 0.16); color: #5dade2; }
-.chip-cuenta.otros { background: rgba(139, 147, 163, 0.16); color: var(--muted); }
-.chip-cuenta.pendiente { background: rgba(240, 180, 41, 0.16); color: var(--accent); }
+   Tarjeta por hecho, con la lógica de agrupado (`agruparPorPiloto`) resuelta en JS antes de
+   llegar acá: lo que entra en `.car-detail` ya es la lista de incidentes de un solo piloto. */
 
 .incident {
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 10px 12px;
   margin-bottom: 9px;
-  background: #1b1d25;
+  background: var(--panel-raised);
 }
+.incident:last-child { margin-bottom: 0; }
 .incident.resolved { opacity: 0.55; }
 .incident .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
 .incident .who { font-weight: 600; }
@@ -1091,7 +799,7 @@ tbody tr.desconectado.selected { opacity: 0.75; }
 }
 .penalty-form select,
 .penalty-form input.seconds {
-  background: #15181f;
+  background: #0c0e12;
   color: var(--text);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
@@ -1102,44 +810,102 @@ tbody tr.desconectado.selected { opacity: 0.75; }
 .penalty-form input.seconds[hidden] { display: none; }
 .penalty-form select:disabled { opacity: 0.7; }
 
-/* ---------------------------------------------------------------- cajones laterales */
+/* ---------------------------------------------------------------- modales
 
-.drawer-backdrop {
+   Una sola capa flotante por encima de la pantalla de carrera, centrada: Conexión, Sanciones
+   aplicadas y Reglas son las tres un `.modal`. Antes Conexión era un cajón colgado del borde
+   derecho (su contenido era un manual de pasos, de lectura de arriba hacia abajo) pero al
+   incrustar esta pantalla en fslmanager.vercel.app convenía que las tres capas se abrieran y
+   cerraran igual, así que el cajón se dio de baja. Si hace falta reponerlo, era básicamente este
+   mismo bloque con `justify-content: flex-end` en el backdrop y `border-left` en vez de centrado. */
+
+.modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(5, 6, 9, 0.6);
   z-index: 20;
   display: flex;
-  justify-content: flex-end;
+  /* `safe center` centra si entra entero y, si no entra, se comporta como `flex-start` en vez de
+     recortar el borde de arriba contra el techo de la ventana. Lo necesita Conexión: es el único
+     modal sin pestañas y sin scroll interno (ver `#modal-network`), así que si su contenido no
+     entra en la ventana, lo que tiene que ceder es el centrado, no el contenido. */
+  align-items: safe center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
 }
-.drawer-backdrop[hidden] { display: none; }
+.modal-backdrop[hidden] { display: none; }
 
-.drawer {
-  width: min(460px, 92vw);
-  height: 100%;
+.modal {
+  width: min(760px, 94vw);
+  max-height: 88vh;
   background: var(--panel);
-  border-left: 1px solid var(--panel-border);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  /* Excepción deliberada a la regla de oro, ver la cabecera del archivo: el cajón es una capa
-     flotante por encima de la pantalla de carrera, no parte de ella. `overscroll-behavior`
-     impide que al llegar al final el scroll se propague a la página de atrás. */
+  overflow: hidden;
+}
+.modal header { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.modal header h2 { flex: 1 1 auto; font-size: 15px; margin: 0; }
+.modal .table-wrap { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; }
+
+/* Conexión no tiene pestañas ni una tabla que reparta el alto sobrante: es una sucesión de
+   secciones de alto fijo, así que pedirle "sin scroll" es pedirle que no se recorte, no que quepa
+   en 88vh como sea. Por eso se le saca el techo de alto y el `overflow: hidden` del `.modal` base:
+   si no entra en la ventana, la crece el `overflow-y: auto` del `.modal-backdrop`, no un scroll
+   propio adentro de la caja. */
+#modal-network { max-height: none; overflow: visible; }
+
+/* El modal de Reglas es más angosto y se achica a un formulario con pestañas, no a una tabla
+   ancha: 760 px de "Sanciones aplicadas" se vería como un formulario perdido en el medio.
+   El alto es fijo (no `max-height` nada más) para que cambiar de pestaña no cambie el tamaño del
+   modal: antes cada pestaña tenía su propio alto de contenido y la caja saltaba al click. */
+.modal-tabs { width: min(620px, 94vw); height: 600px; max-height: 86vh; }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--panel-border);
+  flex: 0 0 auto;
+}
+.tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.drawer header { display: flex; align-items: center; justify-content: space-between; }
-.drawer h2 { font-size: 15px; margin: 0; }
-.drawer h3 {
+.tab-panel[hidden] { display: none; }
+
+.modal h3 {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
   margin: 0 0 8px 0;
 }
-.drawer section { border-top: 1px solid var(--panel-border); padding-top: 13px; }
-.drawer section:first-of-type { border-top: none; padding-top: 0; }
+.modal section { border-top: 1px solid var(--panel-border); padding-top: 13px; }
+.modal section:first-of-type { border-top: none; padding-top: 0; }
 
 /*
   El manual de tres pasos del cajón de Conexión.
@@ -1203,6 +969,38 @@ ol.pasos button { margin-top: 2px; }
 .row span.bad { color: var(--red); font-weight: 600; }
 .row span.ok { color: var(--green); font-weight: 600; }
 
+/* El único checkbox que queda sin disfrazar de interruptor (el de "app pilotos" usa el tildado del
+   navegador tal cual, que desentona al lado del toggle de Modo de funcionamiento). Es un checkbox
+   de verdad, no una réplica como `.mode-switch` —no necesita el `<span class="track">` porque acá
+   alcanza con re-pintar el control nativo con `appearance: none`. Dos puntos de especificidad
+   (`.row input`) para no pisar ni ser pisado por `.mode-switch input`, que es otro checkbox con
+   otro disfraz. */
+.row input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: #3a3f4c;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.row input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s;
+}
+.row input[type="checkbox"]:checked { background: var(--green); }
+.row input[type="checkbox"]:checked::after { transform: translateX(16px); }
+.row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 input[type="number"], input[type="text"], select {
   background: #0c0e12;
   border: 1px solid var(--panel-border);
@@ -1215,10 +1013,10 @@ input[type="number"], input[type="text"], select {
 }
 /* Los números entran en 130 px; las opciones de sanción ("Drive-Through (pasar por pits sin
    parar)") no, y cortadas a la mitad dejan de explicar lo que la etiqueta larga venía a explicar. */
-.drawer select { width: 230px; }
-.drawer input.wide { width: 230px; }
-.drawer .row { align-items: baseline; }
-.drawer .row > label { flex: 1 1 auto; }
+.modal select { width: 230px; }
+.modal input.wide { width: 230px; }
+.modal .row { align-items: baseline; }
+.modal .row > label { flex: 1 1 auto; }
 input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 
 pre.snippet {
@@ -1318,8 +1116,8 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
 #wizard-overlay[hidden] { display: none; }
 #wizard-overlay .card { max-width: 480px; width: 92vw; }
 #wizard-overlay .card h2 { margin-bottom: 8px; }
-/* Tercera (y última) excepción a "sin scroll": el paso de los cuatro chequeos no entra en 768 px
-   de alto. Scrollea la tarjeta, no la página. */
+/* Excepción a "sin scroll": el paso de los cuatro chequeos no entra en 768 px de alto. Scrollea
+   la tarjeta, no la página. */
 .wizard { max-height: 88vh; overflow-y: auto; }
 .wizard .row { align-items: baseline; }
 .wizard .row > label { flex: 1 1 auto; }
@@ -1357,21 +1155,17 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
 }
 #toast.show { opacity: 1; }
 
-/* Pantallas bajas (portátiles de 768 px de alto): la banda de largada se compacta todavía más
-   para cederle alto a la torre y al mapa, que es donde el alto sí hace falta. */
+/* Pantallas bajas (portátiles de 768 px de alto): la cabecera de carrera se compacta para
+   cederle alto a la tabla, que es donde el alto sí hace falta. */
 @media (max-height: 820px) {
   .card { padding: 10px 12px; }
-  #card-start { padding: 7px 12px; gap: 12px; }
-  .semaforo { font-size: 17px; padding: 6px 0; min-width: 150px; }
+  .race-head { padding-bottom: 8px; margin-bottom: 8px; gap: 14px; }
+  .session-clock { font-size: 16px; }
 }
 
-/* Pantallas angostas: el mapa no entra al costado sin ahogar la torre, así que pasa abajo. */
-@media (max-width: 1180px) {
-  #view-live {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1.4fr) minmax(0, 1fr);
-    grid-template-areas: "start" "timing" "map";
-  }
-  #view-sanciones { grid-template-columns: minmax(0, 1fr); }
-  .topbar .league { display: none; }
+/* Pantallas angostas: la cabecera de carrera pasa a dos filas en vez de achicar todo hasta lo
+   ilegible — sesión y largada arriba, el semáforo centrado abajo. */
+@media (max-width: 760px) {
+  .race-head { justify-content: space-between; }
+  .lights-wrap { order: 3; flex-basis: 100%; justify-content: flex-start; }
 }

@@ -81,29 +81,12 @@ function del(path) {
 
 // ===================================================================== estado compartido
 
-/** Auto seleccionado. Es UNA sola variable para los dos sentidos de la selección: click en la
- * tabla y click en el mapa escriben acá, y los dos renders leen de acá. Sincronizarlos de a
- * pares (tabla→mapa y mapa→tabla por separado) es la forma segura de que se desincronicen. */
-let selectedCarId = null;
-
 let lastState = null;
-let trackOutline = null;
-let lastTrackCoverage = -1;
-
-/** La zona de pit configurada, tal como la usa el motor. Llega en cada `/api/state` para que el
- * mapa la pueda pintar sin depender de que alguien haya abierto el cajón de Reglas. */
-let pitZone = null;
 
 /** Sugerencia de `PitZoneLearner` para el circuito actual (o `null` si todavía nadie con la app
  * pasó por boxes). Se guarda acá para que el botón "Usar esta calibración" la tenga disponible
  * sin tener que pedirla de nuevo al servidor. */
 let pitZoneSuggestion = null;
-
-/** Qué muestra la columna de intervalo: `"ahead"` el hueco con el auto de adelante, `"leader"` el
- * acumulado contra el líder. Son las dos preguntas distintas que se hacen mirando una torre —"¿lo
- * alcanzo?" y "¿en qué carrera estoy?"— y no entran en una sola columna sin que una de las dos
- * quede mal. En memoria y nada más: es una preferencia de un rato, no de una cuenta. */
-let gapMode = "ahead";
 
 /** Cuándo llegó el último `/api/state` bueno, y qué dijo el error del último fallido. Los mira la
  * banda de contacto perdido: ver `renderLinkState`. */
@@ -118,105 +101,76 @@ const LINK_DOWN_AFTER_MS = 3000;
 /** Si el backend no encontró Assetto Corsa, no tiene sentido pedir un logo por auto para cobrar
  * 24 respuestas 404: se va directo a la marca en texto. */
 
-// ===================================================================== router
-
-const VIEWS = {
-  "/": { main: "view-live", nav: "nav-live" },
-  "/sanciones": { main: "view-sanciones", nav: "nav-sanciones" },
-};
-
-/** Alias histórico del plan. Apunta a la misma vista para que un link viejo no caiga en blanco. */
-const PATH_ALIASES = { "/historialSanciones": "/sanciones" };
-
-function currentPath() {
-  // La ruta del router es siempre la de adentro del panel: en el portal hay que sacarle el
-  // `/l/<slug>` de adelante, que es del portal y no una vista.
-  const sinBase = window.location.pathname.slice(BASE.length) || "/";
-  const path = PATH_ALIASES[sinBase] || sinBase;
-  return VIEWS[path] ? path : "/";
-}
-
-function renderRoute() {
-  const path = currentPath();
-  for (const [p, view] of Object.entries(VIEWS)) {
-    const active = p === path;
-    $(view.main).hidden = !active;
-    const nav = $(view.nav);
-    if (active) nav.setAttribute("aria-current", "page");
-    else nav.removeAttribute("aria-current");
-  }
-  // El canvas estuvo oculto hasta recién y midió 0×0: hay que volver a dimensionarlo.
-  if (path === "/") resizeCanvas();
-}
-
-function navigate(path) {
-  const destino = BASE + path;
-  if (window.location.pathname === destino) return;
-  history.pushState({}, "", destino);
-  renderRoute();
-}
-
-function wireRouter() {
-  for (const view of Object.values(VIEWS)) {
-    const nav = $(view.nav);
-    // Los href del HTML son absolutos desde la raíz del panel; bajo el portal hay que
-    // prefijarlos para que un click con el botón del medio (abrir en otra pestaña) también caiga
-    // en la liga correcta y no en la raíz del portal.
-    if (BASE) nav.setAttribute("href", BASE + nav.getAttribute("href"));
-    nav.addEventListener("click", (e) => {
-      e.preventDefault();
-      navigate(e.currentTarget.getAttribute("href").slice(BASE.length) || "/");
-    });
-  }
-  window.addEventListener("popstate", renderRoute);
-}
+// Esta rama fusiona Control de carrera y Sanciones en una sola pantalla —pedido para incrustarla
+// en fslmanager.vercel.app sin iframe—, así que no hay más de una vista y no hace falta router. La
+// versión completa, con el mapa y las dos pestañas, sigue viva tal cual en la rama main.
 
 // ===================================================================== cajones laterales
 
-/** Qué cajón abre cada `#ancla`. Los cajones no son vistas del router —se abren encima de lo que
+/** Qué modal abre cada `#ancla`. Ninguno es una vista del router —se abren encima de lo que
  * haya— pero sí tienen que ser enlazables: así el aviso de "revisá la conexión" puede mandar
- * directo al lugar donde se revisa, en vez de describir dónde está el botón. */
-const DRAWER_HASHES = { "#conexion": "drawer-network", "#reglas": "drawer-rules" };
+ * directo al lugar donde se revisa, en vez de describir dónde está el botón.
+ *
+ * Acá vivía `DRAWER_HASHES` y el cajón lateral de Conexión: pasó a ser un modal más, igual que
+ * Reglas y Sanciones aplicadas, para que los tres se comporten y se cierren igual. */
+const MODAL_HASHES = { "#conexion": "modal-network", "#reglas": "modal-rules", "#sanciones": "modal-penalties" };
 
-function openDrawer(id) {
+function openModal(id) {
   $(id).hidden = false;
 }
 
-function closeDrawers() {
-  $("drawer-network").hidden = true;
-  $("drawer-rules").hidden = true;
+function closeModals() {
+  $("modal-network").hidden = true;
+  $("modal-penalties").hidden = true;
+  $("modal-rules").hidden = true;
   // Sin esto, cerrar y volver a tocar el mismo botón no haría nada: el hash seguiría puesto y el
   // navegador no dispara `hashchange` si no cambió.
   if (window.location.hash) history.replaceState({}, "", window.location.pathname);
 }
 
-function applyDrawerHash() {
-  const id = DRAWER_HASHES[window.location.hash];
-  if (id) openDrawer(id);
+function applyOverlayHash() {
+  const modalId = MODAL_HASHES[window.location.hash];
+  if (modalId) openModal(modalId);
+}
+
+/** Pestañas del modal de Reglas: una sección a la vez, sin perder los ids de cada campo. */
+function wireRulesTabs() {
+  const tabs = document.querySelectorAll("#modal-rules .tab");
+  for (const tab of tabs) {
+    tab.addEventListener("click", () => {
+      for (const t of tabs) t.setAttribute("aria-selected", String(t === tab));
+      for (const panel of document.querySelectorAll("#modal-rules .tab-panel")) {
+        panel.hidden = panel.dataset.panel !== tab.dataset.tab;
+      }
+    });
+  }
 }
 
 function wireDrawers() {
-  $("btn-network").addEventListener("click", () => openDrawer("drawer-network"));
-  $("btn-rules").addEventListener("click", () => openDrawer("drawer-rules"));
-  window.addEventListener("hashchange", applyDrawerHash);
-  applyDrawerHash();
-  for (const btn of document.querySelectorAll("[data-close-drawer]")) {
-    btn.addEventListener("click", closeDrawers);
+  $("btn-network").addEventListener("click", () => openModal("modal-network"));
+  $("btn-rules").addEventListener("click", () => openModal("modal-rules"));
+  $("btn-penalties").addEventListener("click", () => openModal("modal-penalties"));
+  window.addEventListener("hashchange", applyOverlayHash);
+  applyOverlayHash();
+  wireRulesTabs();
+
+  for (const btn of document.querySelectorAll("[data-close-modal]")) {
+    btn.addEventListener("click", closeModals);
   }
-  // Click en el fondo oscuro, no dentro del cajón.
-  for (const id of ["drawer-network", "drawer-rules"]) {
+  // Click en el fondo oscuro, no dentro del modal.
+  for (const id of ["modal-network", "modal-penalties", "modal-rules"]) {
     $(id).addEventListener("click", (e) => {
-      if (e.target === e.currentTarget) closeDrawers();
+      if (e.target === e.currentTarget) closeModals();
     });
   }
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    // El menú de fila primero: si hay uno abierto, Escape lo cierra a él y no el cajón de atrás.
+    // El menú de fila primero: si hay uno abierto, Escape lo cierra a él y no lo que hay detrás.
     if (openMenu) {
       closeRowMenu();
       return;
     }
-    closeDrawers();
+    closeModals();
   });
 
   // Cierre del menú de tres puntitos. Va en fase de captura para correr antes que el handler del
@@ -366,8 +320,9 @@ function setupForms() {
     () => ({ presence: { enforce: $("pr-enforce").checked, graceSeconds: num("pr-grace") } })
   );
 
-  // El nombre de la liga no se registra como formulario: lo administra el portal y acá solo se
-  // muestra. Ver la nota del campo en index.html.
+  // Acá vivía el registro del campo "Liga" (solo lectura, lo administraba el portal). Esta
+  // pantalla no tiene portal propio —vive incrustada en fslmanager.vercel.app— así que la pestaña
+  // entera se fue. Ver el comentario en index.html, donde vivía el tab-panel.
 }
 
 // ===================================================================== catálogo de infracciones
@@ -683,8 +638,6 @@ function fillConfigForm(config) {
   $("pr-enforce").checked = config.presence.enforce;
   $("pr-grace").value = config.presence.graceSeconds;
 
-  $("league-input").value = config.leagueName;
-
   for (const name of Object.keys(forms)) markFormSaved(name);
 }
 
@@ -703,6 +656,28 @@ const KICK_ARM_MS = 4000;
  * no transporta nada de esto —solo la Shared Memory del juego lo tiene— así que sin la app del
  * piloto quedan en guiones. No hay forma de completarlas desde el servidor. */
 const NO_APP_TITLE = "Este dato solo existe en la Shared Memory del juego: hace falta que el piloto tenga la app de Race Control.";
+
+/** Los incidentes agrupados por piloto (ver `agruparPorPiloto`), recalculados en cada `refresh()`.
+ * Antes alimentaban una bandeja aparte ("Incidentes a revisar"); en esta pantalla fusionada cada
+ * fila de la tabla lee de acá los números de Cuts/Insi y el contenido de su propio detalle. */
+let incidentGroups = new Map();
+
+function groupKeyFor(car) {
+  return car.driverGuid || "car-" + car.carId;
+}
+
+/** El grupo de incidentes de un auto, buscado por `carId` contra el último estado conocido. Lo
+ * usan los botones del detalle expandido (cancelar, descartar) para repintar sin esperar un poll. */
+function groupForCarId(carId) {
+  const car = (lastState ? lastState.cars : []).find((c) => c.carId === carId);
+  if (!car) return null;
+  return incidentGroups.get(groupKeyFor(car)) || null;
+}
+
+function updateIncidentGroups(incidents) {
+  incidentGroups = new Map();
+  for (const grupo of agruparPorPiloto(incidents)) incidentGroups.set(grupo.clave, grupo);
+}
 
 function renderTiming(cars) {
   const body = $("cars-body");
@@ -726,13 +701,6 @@ function renderTiming(cars) {
     return (a.position || 999) - (b.position || 999);
   });
 
-  // Mejor vuelta absoluta de la sesión, para pintarla distinto. Se calcula sobre el conjunto, así
-  // que tiene que salir de acá y no de la fila.
-  const sessionBest = ordered.reduce(
-    (best, car) => (car.bestLapMs !== null && (best === null || car.bestLapMs < best) ? car.bestLapMs : best),
-    null
-  );
-
   const seen = new Set();
   for (const car of ordered) {
     seen.add(car.carId);
@@ -741,62 +709,56 @@ function renderTiming(cars) {
       row = createCarRow(car.carId);
       carRows.set(car.carId, row);
     }
-    updateCarRow(row, car, sessionBest);
-    body.appendChild(row.tr); // appendChild reordena si ya estaba: mantiene el orden de la torre
+    updateCarRow(row, car);
+    // appendChild reordena si ya estaba: mantiene el orden de la torre. El detalle va siempre
+    // pegado atrás de su propia fila, aunque las dos se muevan juntas en cada repintado.
+    body.appendChild(row.tr);
+    body.appendChild(row.detailTr);
   }
 
   for (const [carId, row] of carRows) {
     if (seen.has(carId)) continue;
     row.tr.remove();
+    row.detailTr.remove();
     carRows.delete(carId);
-    if (selectedCarId === carId) selectedCarId = null;
     if (armedKick && armedKick.carId === carId) disarmKick();
     if (openMenu && openMenu.carId === carId) closeRowMenu();
   }
 
-  // La columna de Ping desaparece entera cuando nadie la puede llenar.
-  //
-  // El ping no viene del servidor de Assetto Corsa: el protocolo UDP no lo transporta. Es el
-  // round-trip de la app del piloto contra Race Control, así que sin la app no hay dato posible.
-  // Mostrar veinte "sin app" en rojo en una columna propia no informaba nada que el panel no
-  // diga mejor en "La app de los pilotos", y hacía parecer roto algo que simplemente no aplica.
-  $("timing-table").classList.toggle("sin-ping", !cars.some(tienePing));
-}
-
-function tienePing(car) {
-  return car.pingMs !== null && car.pingMs !== undefined;
 }
 
 function createCarRow(carId) {
   const tr = document.createElement("tr");
-  tr.className = "selectable";
-  tr.addEventListener("click", (e) => {
-    if (e.target.closest("button")) return; // el kick no debe además seleccionar
-    selectedCarId = selectedCarId === carId ? null : carId;
-    applySelectionToRows();
-  });
 
+  // Acá vivían el intervalo, las vueltas y la última/mejor vuelta: la torre de tiempos completa de
+  // la rama main. Esta pantalla fusiona Control de carrera y Sanciones para incrustarla en
+  // fslmanager.vercel.app, y suma en cambio Cuts e Insi —que antes vivían en una bandeja aparte—
+  // directo en la fila de cada piloto.
   const cells = {
-    pos: cell("c-pos"),
+    pos: cell("num"),
     car: cell("c-car"),
     name: cell("c-driver"),
-    gap: cell("num c-gap"),
     speed: cell("num"),
-    laps: cell("num"),
-    // Acá estaban "Fuera" (las vueltas invalidadas) y "Sectores". Las dos se sacaron en la 1.1:
-    // los sectores porque no funcionaban —solo los tiene la app del piloto y no llegaban—, y
-    // "Fuera" porque ese número ahora vive donde se usa, en el resumen por piloto de la bandeja
-    // de incidentes ("Cuts: 10"). El `cuts` del backend sigue viajando en `/api/state`.
-    last: cell("num lap-time"),
-    best: cell("num lap-time"),
     pits: cell("num"),
-    tyre: cell(""),
     fuel: cell("num"),
-    ping: cell("num c-ping"),
-    actions: cell("actions"),
+    cuts: cell("num"),
+    incidents: cell("num"),
+    actions: cell("c-actions"),
   };
 
-  for (const key of ["pits", "tyre", "fuel"]) cells[key].title = NO_APP_TITLE;
+  for (const key of ["pits", "fuel"]) cells[key].title = NO_APP_TITLE;
+
+  // El detalle de este piloto —sus incidentes, con el formulario de sanción adentro— no se arma
+  // hasta que se abre: por eso `expanded` empieza en `false` y `updateCarDetail` no hace nada
+  // mientras tanto. Antes esto vivía en una tarjeta suelta por piloto, en una bandeja aparte.
+  const expand = document.createElement("button");
+  expand.className = "btn-expand";
+  expand.title = "Ver los incidentes y sanciones de este piloto";
+  expand.setAttribute("aria-label", "Ver detalle del piloto");
+  expand.setAttribute("aria-expanded", "false");
+  expand.textContent = "▾";
+  expand.addEventListener("click", () => toggleCarDetail(carId));
+  cells.actions.appendChild(expand);
 
   // Las acciones destructivas viven detrás de los tres puntitos, no sueltas en la fila. Un botón
   // "Kick" visible en veinte filas de una tabla que se reordena sola es un accidente esperando
@@ -812,7 +774,64 @@ function createCarRow(carId) {
   cells.actions.appendChild(kebab);
 
   for (const key of Object.keys(cells)) tr.appendChild(cells[key]);
-  return Object.assign({ tr, kebab }, cells);
+
+  const detailTr = document.createElement("tr");
+  detailTr.className = "car-detail-row";
+  detailTr.hidden = true;
+  const detailTd = document.createElement("td");
+  detailTd.colSpan = Object.keys(cells).length;
+  const detailBody = document.createElement("div");
+  detailBody.className = "car-detail";
+  detailTd.appendChild(detailBody);
+  detailTr.appendChild(detailTd);
+
+  return Object.assign(
+    { tr, detailTr, detailBody, kebab, expand, carId, expanded: false, detailSignature: "" },
+    cells
+  );
+}
+
+/** Abre o cierra el detalle de un piloto. Se construye recién al abrir —`updateCarDetail` corta
+ * en seco si `expanded` es `false`— así que cerrarlo y abrirlo de nuevo no tiene costo: el
+ * contenido real se arma una sola vez por cambio real en sus incidentes. */
+function toggleCarDetail(carId) {
+  const row = carRows.get(carId);
+  if (!row) return;
+  row.expanded = !row.expanded;
+  row.detailTr.hidden = !row.expanded;
+  row.expand.textContent = row.expanded ? "▴" : "▾";
+  row.expand.setAttribute("aria-expanded", String(row.expanded));
+  if (row.expanded) {
+    row.detailSignature = ""; // forzar el primer dibujo
+    updateCarDetail(row, groupForCarId(carId));
+  }
+}
+
+/**
+ * El contenido del detalle: los incidentes de este piloto, más nuevo arriba, cada uno con su
+ * propio formulario de sanción — es la misma `incidentCard` que antes vivía en la bandeja global,
+ * ahora filtrada a un solo piloto.
+ *
+ * La firma evita reconstruir el DOM en cada poll mientras el admin está leyendo o completando un
+ * formulario de sanción: sin esto, cada segundo se perdería lo que estuviera tipeado.
+ */
+function updateCarDetail(row, grupo) {
+  if (!row.expanded) return;
+  const filas = grupo ? grupo.filas : [];
+  const signature = filas.map((f) => f.incident.id + f.incident.status + f.incident.impactCount).join("|");
+  if (signature === row.detailSignature) return;
+  row.detailSignature = signature;
+
+  clearChildren(row.detailBody);
+  if (filas.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Sin incidentes para este piloto en esta sesión.";
+    row.detailBody.appendChild(empty);
+    return;
+  }
+  const ordenadas = filas.slice().sort((a, b) => b.incident.createdAt - a.incident.createdAt);
+  for (const fila of ordenadas) row.detailBody.appendChild(incidentCard(fila.incident, fila.propio, row));
 }
 
 function cell(className) {
@@ -821,80 +840,41 @@ function cell(className) {
   return td;
 }
 
-function updateCarRow(row, car, sessionBest) {
+function updateCarRow(row, car) {
   const telemetry = car.telemetry || null;
-
-  row.pos.textContent = car.position === null || car.position === undefined ? "--" : String(car.position);
 
   const label = car.driverName || "Auto " + car.carId;
   if (row.name.textContent !== label) row.name.textContent = label;
   row.name.title = label;
 
+  setText(row.pos, car.position != null ? String(car.position) : null);
   renderCarBadge(row.car, car);
-
-  renderGap(row.gap, car);
-
-  // Velocidad, o el aviso de que no hay dato nuevo. Un auto congelado seguía mostrando su última
-  // velocidad como si todavía estuviera girando a esa velocidad — que es lo contrario de lo que
-  // pasa: está quieto, desconectándose o con el juego cerrado.
-  if (car.connected === false) {
-    // La fila se queda, pero tiene que decir por qué está apagada. Sin esto, un desconectado se
-    // ve igual que alguien detenido en pista con la señal cortada, que es otra cosa.
-    clearChildren(row.speed);
-    const aviso = document.createElement("span");
-    aviso.className = "sin-conexion";
-    aviso.textContent = "desconectado";
-    aviso.title = "Salió del servidor. La fila queda con sus tiempos de la sesión: si vuelve a entrar, la recupera.";
-    row.speed.appendChild(aviso);
-  } else if (car.telemetryStale) {
-    clearChildren(row.speed);
-    const aviso = document.createElement("span");
-    aviso.className = "sin-senal";
-    aviso.textContent = "sin señal";
-    aviso.title = "Hace más de dos segundos que no llega telemetría de este auto. Los datos de esta fila son los últimos que recibimos.";
-    row.speed.appendChild(aviso);
-  } else if (car.inPit) {
-    // En boxes la velocidad no dice nada —va a 40 o a 0— y lo que el admin necesita saber de un
-    // vistazo es por qué ese auto se descolgó de la clasificación. El backend lo resuelve con la
-    // app del piloto si la hay y con la zona de pit configurada si no; ver `estaEnPit`.
-    clearChildren(row.speed);
-    const pit = document.createElement("span");
-    pit.className = "en-pit";
-    pit.textContent = "PIT";
-    pit.title = "En el pit lane";
-    row.speed.appendChild(pit);
-  } else {
-    row.speed.textContent = Math.round(car.speedKmh) + " km/h";
-  }
-  // "L" adelante: en una columna de números sueltos entre tiempos y velocidades, un "4" pelado no
-  // se lee como vueltas hasta que uno mira el encabezado.
-  row.laps.textContent = "L" + car.lapCount;
-
-  setText(row.last, formatLapTime(car.lastLapMs));
-  setText(row.best, formatLapTime(car.bestLapMs));
-  // Morado la mejor de todos, verde la mejor propia: es el código de color de cualquier torre de
-  // tiempos de sim racing, así que no hay que explicarlo.
-  row.best.classList.toggle("session-best", car.bestLapMs !== null && car.bestLapMs === sessionBest);
-  row.best.classList.toggle("personal-best", car.bestLapMs !== null && car.bestLapMs !== sessionBest);
-  row.last.classList.toggle("personal-best", car.lastLapMs !== null && car.lastLapMs === car.bestLapMs);
-
+  // La velocidad sale del propio UDP del servidor (CAR_UPDATE), no de la app del piloto: por eso
+  // no lleva `NO_APP_TITLE` como box y combustible, y nunca queda en "--" salvo sin dato todavía.
+  setText(row.speed, typeof car.speedKmh === "number" ? Math.round(car.speedKmh) + " km/h" : null);
   renderPits(row.pits, telemetry);
-  setText(row.tyre, telemetry ? tyreLabel(telemetry.tyreCompound) : null, NO_APP_TITLE);
-  // El nombre completo no se pierde: va al tooltip, por si alguna vez hace falta el compuesto
-  // exacto y no solo el código.
-  row.tyre.title = telemetry && telemetry.tyreCompound ? telemetry.tyreCompound : NO_APP_TITLE;
   setText(row.fuel, telemetry && telemetry.fuelLiters !== null ? telemetry.fuelLiters.toFixed(1) + " L" : null, NO_APP_TITLE);
 
-  clearChildren(row.ping);
-  row.ping.appendChild(pingBadge(car));
+  // Cuts y incidentes salen del mismo agrupado por piloto que antes alimentaba la bandeja aparte
+  // (`agruparPorPiloto`): la lógica de que solo cuentan en clasificación y carrera no cambió, vive
+  // en el motor que decide si crear el incidente, no acá.
+  const grupo = incidentGroups.get(groupKeyFor(car)) || null;
+  const cuts = grupo ? grupo.cuts : 0;
+  const incidentesCount = grupo ? grupo.choques + grupo.pit + grupo.largada + grupo.otros : 0;
+  row.cuts.textContent = String(cuts);
+  row.incidents.textContent = String(incidentesCount);
+  row.incidents.classList.toggle("has-pending", Boolean(grupo && grupo.pendientes > 0));
+  row.expand.classList.toggle("has-pending", Boolean(grupo && grupo.pendientes > 0));
 
+  // Sin columna de posición ni de velocidad visibles de lejos no hay dónde escribir "desconectado"
+  // o "sin señal": estas tres clases de fila son todo el aviso que le queda a esta pantalla
+  // simplificada, y alcanzan — la atenúan entera en vez de marcar una sola celda.
   const fuera = car.connected === false;
   row.tr.classList.toggle("desconectado", fuera);
   row.tr.classList.toggle("in-pit", !fuera && Boolean(car.inPit));
   // Un desconectado tiene la telemetría vencida por definición: marcarlo además como "stale"
   // apilaría dos grises distintos sobre la misma fila y ninguno de los dos se leería.
   row.tr.classList.toggle("stale", !fuera && Boolean(car.telemetryStale));
-  row.tr.classList.toggle("selected", selectedCarId === car.carId);
   // Nada que hacerle a alguien que ya no está en el servidor: ni kickearlo ni sancionarlo en
   // vivo. El menú se deshabilita en vez de esconderse, para que la columna no baile.
   row.kebab.disabled = fuera;
@@ -902,6 +882,8 @@ function updateCarRow(row, car, sessionBest) {
   // El kick vive dentro del menú de tres puntitos, que puede estar cerrado: el punto rojo en los
   // puntitos es lo único que queda a la vista de que hay un kick a medio confirmar.
   row.kebab.classList.toggle("arming", armedKick !== null && armedKick.carId === car.carId);
+
+  updateCarDetail(row, grupo);
 }
 
 /** Un valor ausente nunca se dibuja como vacío: un hueco se lee como "cero" o como un bug, y acá
@@ -920,79 +902,10 @@ function setText(td, value, missingTitle) {
   if (td.textContent !== value) td.textContent = value;
 }
 
-/**
- * La celda de intervalo.
- *
- * Tiene cuatro estados y los cuatro significan cosas distintas, así que ninguno puede quedar como
- * una celda vacía: "líder" (no hay nadie adelante), "+N vta" (doblado, y ahí las décimas no
- * significan nada), un número, o `--` cuando todavía no hay con qué calcularlo —la primera curva
- * de la largada, antes de que alguien cierre una vuelta—.
- */
-function renderGap(td, car) {
-  const lapsDown = car.lapsDown || 0;
-  const ms = gapMode === "leader" ? car.gapLeaderMs : car.gapAheadMs;
-
-  clearChildren(td);
-  td.classList.toggle("lider", car.position === 1);
-  td.classList.toggle("doblado", lapsDown >= 1);
-
-  if (car.position === 1) {
-    td.textContent = "líder";
-    td.title = "Va primero: no hay nadie adelante.";
-    return;
-  }
-  if (lapsDown >= 1) {
-    td.textContent = "+" + lapsDown + (lapsDown === 1 ? " vta" : " vtas");
-    td.title = "Está a " + lapsDown + (lapsDown === 1 ? " vuelta" : " vueltas") + " del líder.";
-    return;
-  }
-  if (ms === null || ms === undefined) {
-    const span = document.createElement("span");
-    span.className = "nodata";
-    span.textContent = "--";
-    span.title = "Todavía no hay una vuelta de referencia con la que estimar el intervalo.";
-    td.appendChild(span);
-    return;
-  }
-  td.textContent = formatGap(ms);
-  td.title =
-    gapMode === "leader"
-      ? "Diferencia estimada con el líder."
-      : "Diferencia estimada con el auto de adelante.";
-}
-
-/** El encabezado dice cuál de las dos cuentas está mostrando. Sin esto la columna es ambigua: los
- * dos modos se ven igual —un número con un `+` adelante— y un intervalo mal leído manda a un
- * director de carrera a tomar una decisión equivocada. */
-function renderGapHeader() {
-  const th = $("th-gap");
-  const btn = $("btn-gap-mode");
-  if (gapMode === "leader") {
-    btn.textContent = "Líder";
-    th.title = "Diferencia con el líder. Clickeá para ver el intervalo con el auto de adelante.";
-  } else {
-    btn.textContent = "Int.";
-    th.title = "Intervalo con el auto de adelante. Clickeá para ver la diferencia con el líder.";
-  }
-  btn.setAttribute("aria-label", th.title);
-}
-
-/** ms → `+1.423`, y `+1:02.4` cuando pasa del minuto. El signo va siempre: un intervalo es una
- * distancia hacia atrás, nunca un tiempo absoluto, y sin el `+` se confunde con una vuelta. */
-function formatGap(ms) {
-  if (ms < 60000) return "+" + (ms / 1000).toFixed(3);
-  const minutes = Math.floor(ms / 60000);
-  const seconds = (ms % 60000) / 1000;
-  return "+" + minutes + ":" + (seconds < 10 ? "0" : "") + seconds.toFixed(1);
-}
-
-/** ms → `m:ss.mmm`, la notación de cualquier torre de tiempos. */
-function formatLapTime(ms) {
-  if (ms === null || ms === undefined) return null;
-  const minutes = Math.floor(ms / 60000);
-  const seconds = (ms % 60000) / 1000;
-  return minutes + ":" + (seconds < 10 ? "0" : "") + seconds.toFixed(3);
-}
+// Acá vivían `renderGap`, `renderGapHeader`, `formatGap` y `formatLapTime`: el intervalo, la
+// última y la mejor vuelta. Es la pantalla fusionada para fslmanager.vercel.app, no el panel
+// completo — ese live timing ya lo tiene la página del admin por otro lado. La rama main conserva
+// las cuatro funciones intactas.
 
 // Acá vivía `renderSectors`. La columna de sectores se sacó de la torre en la 1.1 porque en pista
 // nunca mostró un número: los tiempos por sector solo existen en la Shared Memory del juego y los
@@ -1009,20 +922,6 @@ function renderPits(td, telemetry) {
   // distintas para un solo estado hacen dudar de si son dos estados.
   const label = telemetry.inPitLane ? telemetry.pitStops + " · PIT" : String(telemetry.pitStops);
   if (td.textContent !== label) td.textContent = label;
-}
-
-/**
- * El compuesto, corto.
- *
- * El juego manda el nombre comercial completo —"Michelin S8M"— y en una columna de tabla eso entra
- * cortado o estira la fila. Lo único que el comisario mira es el código, que es justo lo que los
- * mods ponen entre paréntesis: "Michelin S8M (S8M)" → "S8M". Sin paréntesis se deja tal cual, que
- * es el caso de los autos de fábrica ("Street", "Semislick"), donde el nombre YA es corto.
- */
-function tyreLabel(compound) {
-  if (!compound) return null;
-  const m = /\(([^)]+)\)/.exec(compound);
-  return m ? m[1].trim() : compound;
 }
 
 /**
@@ -1140,13 +1039,6 @@ const BRAND_COLORS = {
   "Volkswagen": "#0a3d7a",
 };
 
-/** Color del punto del auto en el mapa. Sin marca reconocida vuelve al dorado del acento, que es
- * como se dibujaba toda la parrilla antes de la 1.2. */
-function carMapColor(car) {
-  const brand = car && (car.brand || car.carModel);
-  return brand ? brandColor(brand) : "#f0b429";
-}
-
 function brandColor(brand) {
   if (BRAND_COLORS[brand]) return BRAND_COLORS[brand];
   // Hash determinístico del nombre a un tono. Lo importante no es acertarle al color real de la
@@ -1176,30 +1068,6 @@ function monogramOf(brand) {
       .toUpperCase();
   }
   return brand.slice(0, 3).toUpperCase();
-}
-
-/**
- * Qué mide realmente esta columna: el round-trip de la app del piloto contra Race Control. El
- * protocolo UDP de AC no expone el ping del piloto al servidor de carrera, así que esto NO es
- * eso. Sirve igual para lo que el admin quiere saber: quién tiene conexión inestable.
- */
-function pingBadge(car) {
-  const span = document.createElement("span");
-  if (car.pingMs === null || car.pingMs === undefined) {
-    span.className = "badge bad";
-    span.textContent = "sin app";
-    span.title = "Este piloto no tiene la app de Race Control reportando.";
-    return span;
-  }
-  span.className = "badge " + (car.pingMs < 120 ? "ok" : car.pingMs < 300 ? "warn" : "bad");
-  span.textContent = car.pingMs + " ms";
-  return span;
-}
-
-function applySelectionToRows() {
-  for (const [carId, row] of carRows) {
-    row.tr.classList.toggle("selected", selectedCarId === carId);
-  }
 }
 
 // --------------------------------------------------------------- menú de fila (tres puntitos)
@@ -1303,487 +1171,11 @@ async function executeKick(carId) {
   }
 }
 
-// ===================================================================== mapa del circuito
-
-const canvas = $("map-canvas");
-const ctx = canvas.getContext("2d");
-
-/** Posición dibujada de cada auto, interpolada. El poll llega 1 vez por segundo: sin interpolar,
- * los autos avanzarían a saltos de un segundo. Clave: carId. */
-const carAnim = new Map();
-
-/** Auto bajo el cursor. Separado de `selectedCarId`: hover es efímero, selección es deliberada. */
-let hoveredCarId = null;
-let mousePos = null;
-
-function resizeCanvas() {
-  const host = $("map-host");
-  const ratio = window.devicePixelRatio || 1;
-  const w = host.clientWidth;
-  const h = host.clientHeight;
-  if (w === 0 || h === 0) return;
-  canvas.width = Math.round(w * ratio);
-  canvas.height = Math.round(h * ratio);
-  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-}
-
-/** Proyección mundo → canvas. Conserva la proporción: un circuito largo y angosto no debe salir
- * estirado hasta llenar el cuadro. El eje Z se invierte para que el dibujo no quede espejado. */
-function projector() {
-  if (!trackOutline) return null;
-  const b = trackOutline.bounds;
-  const pad = 22;
-  const w = $("map-host").clientWidth;
-  const h = $("map-host").clientHeight;
-  const spanX = Math.max(1, b.maxX - b.minX);
-  const spanZ = Math.max(1, b.maxZ - b.minZ);
-  const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanZ);
-  const offsetX = (w - spanX * scale) / 2;
-  const offsetY = (h - spanZ * scale) / 2;
-  return (x, z) => ({
-    x: offsetX + (x - b.minX) * scale,
-    y: offsetY + (b.maxZ - z) * scale,
-  });
-}
-
-function updateCarTargets(cars) {
-  const now = performance.now();
-  const alive = new Set();
-  for (const car of cars) {
-    alive.add(car.carId);
-    const prev = carAnim.get(car.carId);
-    if (!prev) {
-      carAnim.set(car.carId, { fromX: car.posX, fromZ: car.posZ, toX: car.posX, toZ: car.posZ, at: now, car });
-      continue;
-    }
-    const current = interpolate(prev, now);
-    // Un salto grande es un teletransporte real (reset a boxes, cambio de sesión): interpolar
-    // eso dibujaría el auto cruzando el circuito en línea recta por el medio del dibujo.
-    const jumped = Math.hypot(car.posX - current.x, car.posZ - current.z) > 150;
-    carAnim.set(car.carId, {
-      fromX: jumped ? car.posX : current.x,
-      fromZ: jumped ? car.posZ : current.z,
-      toX: car.posX,
-      toZ: car.posZ,
-      at: now,
-      car,
-    });
-  }
-  for (const carId of carAnim.keys()) {
-    if (!alive.has(carId)) carAnim.delete(carId);
-  }
-}
-
-function interpolate(anim, now) {
-  const t = Math.min(1, (now - anim.at) / POLL_MS);
-  return { x: anim.fromX + (anim.toX - anim.fromX) * t, z: anim.fromZ + (anim.toZ - anim.fromZ) * t };
-}
-
-function drawMap() {
-  const project = projector();
-  if (!project) return;
-
-  const w = $("map-host").clientWidth;
-  const h = $("map-host").clientHeight;
-  ctx.clearRect(0, 0, w, h);
-
-  // Trazado.
-  ctx.beginPath();
-  const pts = trackOutline.points;
-  for (let i = 0; i < pts.length; i++) {
-    const p = project(pts[i].x, pts[i].z);
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  }
-  // Solo se cierra el circuito si el trazado está completo; con huecos, cerrarlo dibuja una
-  // recta falsa de punta a punta que parece parte de la pista.
-  //
-  // `closed === false` es el otro caso donde no hay que cerrar, y no tiene nada que ver con estar
-  // incompleto: hay pistas que no son un circuito. Una subida de montaña (Trento-Bondone) o una
-  // ruta punto a punto terminan a kilómetros de donde arrancaron, y cerrarlas dibujaría una recta
-  // cruzando el mapa entero. El campo lo pone el catálogo; lo aprendido no lo trae y asume cerrado,
-  // que es lo que era hasta ahora.
-  if (trackOutline.closed !== false && trackOutline.coverage > 0.95) ctx.closePath();
-  ctx.strokeStyle = "#2f3545";
-  ctx.lineWidth = 13;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
-  ctx.strokeStyle = "#1b1f28";
-  ctx.lineWidth = 9;
-  ctx.stroke();
-
-  // La zona de pit, encima del asfalto y debajo de los autos.
-  drawPitZone(project);
-
-  // Autos.
-  const now = performance.now();
-  let closest = null;
-  for (const [carId, anim] of carAnim) {
-    const pos = interpolate(anim, now);
-    const p = project(pos.x, pos.z);
-    const selected = carId === selectedCarId;
-    const hovered = carId === hoveredCarId;
-
-    if (mousePos) {
-      const d = Math.hypot(p.x - mousePos.x, p.y - mousePos.y);
-      if (d < 16 && (!closest || d < closest.d)) closest = { d, carId, p, car: anim.car };
-    }
-
-    // Un auto sin telemetría fresca se dibuja hueco: el punto queda como un anillo gris en el
-    // último lugar donde se lo vio, en vez de como un auto más girando. Sin esto, el punto de
-    // alguien que crasheó el juego se quedaba clavado en el mapa, del mismo dorado que el resto,
-    // indistinguible de un auto detenido en pista — que es una situación muy distinta.
-    const stale = Boolean(anim.car && anim.car.telemetryStale);
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, selected || hovered ? 8 : 6, 0, Math.PI * 2);
-    if (stale) {
-      ctx.strokeStyle = "#5a6273";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    } else {
-      // Cada auto del color de su marca (1.2). Antes la parrilla entera era dorada y la única
-      // forma de saber quién era cada punto era pasarle el mouse por encima, uno por uno: con
-      // veinticuatro autos eso no se hace en carrera.
-      //
-      // El blanco del seleccionado le gana al color de marca, y el gris hueco del que perdió
-      // telemetría también: los dos dicen algo que el color de marca no dice, y el color de marca
-      // se puede deducir igual de la torre. El hover ya no cambia el relleno —cambiaría el color
-      // de la marca, que es el dato— sino que se marca con el borde blanco y el radio más grande.
-      ctx.fillStyle = selected ? "#ffffff" : carMapColor(anim.car);
-      ctx.fill();
-      // Borde oscuro fino: sin esto un gris Mercedes o un azul Alpine se pierden contra el
-      // asfalto, que es del mismo rango de tono.
-      ctx.strokeStyle = hovered ? "#ffffff" : "rgba(9, 11, 15, 0.85)";
-      ctx.lineWidth = hovered ? 2 : 1.5;
-      ctx.stroke();
-    }
-    if (selected) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.45)";
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 13, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  hoveredCarId = closest ? closest.carId : null;
-  updateTooltip(closest);
-  renderMapReadout();
-}
-
-/**
- * El tramo de vuelta que el motor considera pit lane.
- *
- * Es la única regla del producto que se configura con dos números abstractos —0.97 y 0.995— y
- * hasta la 0.5 no había ninguna forma de ver a qué pedazo de pista correspondían. El texto de
- * Reglas mandaba a "mirar el mapa mientras alguien maneja por boxes", y el mapa no mostraba ni la
- * zona ni el punto de la vuelta de nadie: era pedirle a alguien que calibre a ciegas.
- *
- * Se dibuja con exactamente el mismo criterio que `isInPitZone` (`s >= inicio && s <= fin`,
- * sin dar la vuelta al cruzar la meta). Si el dibujo fuera más piadoso que el motor —por ejemplo,
- * envolviendo cuando el inicio es mayor que el fin— el mapa mostraría una zona que no sanciona a
- * nadie, que es la peor forma posible de equivocarse acá.
- */
-function drawPitZone(project) {
-  if (!pitZone || !trackOutline) return;
-  const { splineStart, splineEnd } = pitZone;
-  if (!(splineEnd > splineStart)) return; // zona vacía: el motor tampoco marcaría a nadie
-
-  const tramo = trackOutline.points.filter((p) => p.s >= splineStart && p.s <= splineEnd);
-  if (tramo.length < 2) return; // el trazado todavía no tiene puntos aprendidos ahí
-
-  ctx.beginPath();
-  for (let i = 0; i < tramo.length; i++) {
-    const p = project(tramo[i].x, tramo[i].z);
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  }
-  // El mismo ámbar del tinte de "está en boxes" en la torre de tiempos: es la misma cosa dicha en
-  // dos lugares, y usar dos colores distintos obligaría a aprender dos códigos.
-  ctx.strokeStyle = "rgba(240, 180, 41, 0.75)";
-  ctx.lineWidth = 7;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
-}
-
-/**
- * El punto de la vuelta del auto seleccionado, que es el número que hay que escribir en Reglas.
- *
- * Con tres decimales porque esa es la precisión de los campos del formulario: mostrar más dígitos
- * sería sugerir una exactitud que el campo no acepta.
- */
-function renderMapReadout() {
-  const box = $("map-readout");
-  const car = lastState && selectedCarId !== null ? lastState.cars.find((c) => c.carId === selectedCarId) : null;
-  if (!car) {
-    box.hidden = true;
-    return;
-  }
-  box.hidden = false;
-  const s = car.normalizedSplinePosition;
-  $("map-spline").textContent = typeof s === "number" ? s.toFixed(3) : "--";
-
-  const hint = $("map-zone-hint");
-  if (!pitZone || !(pitZone.splineEnd > pitZone.splineStart)) {
-    // Un inicio mayor que el fin no sanciona a nadie, y el panel no lo decía en ningún lado.
-    hint.textContent = pitZone ? "La zona de pit está mal definida: el inicio tiene que ser menor que el fin." : "";
-    return;
-  }
-  const dentro = s >= pitZone.splineStart && s <= pitZone.splineEnd;
-  hint.textContent = dentro
-    ? "dentro de la zona de pit (" + pitZone.splineStart + " – " + pitZone.splineEnd + ")"
-    : "fuera de la zona de pit (" + pitZone.splineStart + " – " + pitZone.splineEnd + ")";
-}
-
-function updateTooltip(closest) {
-  const tip = $("map-tooltip");
-  if (!closest) {
-    tip.hidden = true;
-    return;
-  }
-  clearChildren(tip);
-  const name = document.createElement("span");
-  name.textContent = closest.car.driverName || "Auto " + closest.carId;
-  const number = document.createElement("span");
-  number.className = "car-number";
-  number.textContent = " #" + closest.carId;
-  tip.appendChild(name);
-  tip.appendChild(number);
-  tip.style.left = closest.p.x + "px";
-  tip.style.top = closest.p.y + "px";
-  tip.hidden = false;
-}
-
-function animate() {
-  if (trackOutline && !$("view-live").hidden) drawMap();
-  requestAnimationFrame(animate);
-}
-
-function wireMap() {
-  const host = $("map-host");
-  host.addEventListener("mousemove", (e) => {
-    const rect = host.getBoundingClientRect();
-    mousePos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-  });
-  host.addEventListener("mouseleave", () => {
-    mousePos = null;
-    hoveredCarId = null;
-    $("map-tooltip").hidden = true;
-  });
-  host.addEventListener("click", () => {
-    // Click en un auto lo selecciona (y lo resalta también en la tabla); click al vacío limpia.
-    selectedCarId = hoveredCarId !== null && hoveredCarId !== selectedCarId ? hoveredCarId : null;
-    applySelectionToRows();
-  });
-
-  if (window.ResizeObserver) new ResizeObserver(resizeCanvas).observe(host);
-  window.addEventListener("resize", resizeCanvas);
-  resizeCanvas();
-  requestAnimationFrame(animate);
-}
-
-/**
- * Baja el trazado del circuito cuando creció la cobertura.
- *
- * Son ~600 puntos y el poll corre una vez por segundo, así que no se vuelve a pedir mientras el
- * circuito ya aprendido no cambie. Lo delicado es CUÁNDO se da por bajada una cobertura.
- *
- * Acá `lastTrackCoverage` se marcaba antes del `await`, y eso dejaba el reintento muerto: bastaba
- * un fallo —o un 204, el backend todavía sin trazado suficiente— para que el próximo poll trajera
- * la misma cobertura, entrara por el `return` de la primera línea y no volviera a pedir nunca más.
- * El comentario que había prometía justo lo contrario de lo que hacía el código.
- *
- * Y el caso que lo disparaba era el normal, no uno raro: una liga que ya aprendió su circuito
- * arranca con cobertura 1.0 y no crece más en toda la carrera. Un solo error transitorio al
- * arrancar —el worker todavía levantándose— y la tarjeta del mapa se quedaba en "esperando
- * telemetría" hasta que alguien recargara la página.
- *
- * Ahora la cobertura se marca recién con el trazado en la mano, que es lo único que de verdad
- * significa "esta cobertura ya la tengo".
- */
-async function refreshTrack(coverage) {
-  if (coverage <= lastTrackCoverage) return;
-  try {
-    const outline = await api("/api/track");
-    // 204: hay telemetría pero todavía no alcanza para dibujar. No es un error, pero tampoco es un
-    // trazado — darlo por bajado congelaría el pedido para siempre.
-    if (!outline) return;
-    trackOutline = outline;
-    lastTrackCoverage = coverage;
-  } catch (_) {
-    // `lastTrackCoverage` quedó como estaba, así que el próximo poll vuelve a intentar de verdad.
-  }
-}
-
-/**
- * El cartel de "todavía no hay mapa", que dice dos cosas distintas según de dónde salga el trazado.
- *
- * Con catálogo no hay nada que esperar: el dibujo está completo antes de que arranque nadie, y lo
- * único que falta es que el servidor diga en qué circuito está. Prometer ahí un aprendizaje que no
- * va a pasar deja al admin esperando una barra que nunca se mueve.
- *
- * Sin catálogo —una pista mod que no está en el paquete— sigue valiendo el texto viejo, porque
- * sigue valiendo el mecanismo viejo.
- */
-function renderMapStatus(state) {
-  const coverage = state.track ? state.track.coverage : 0;
-  const catalogued = state.track ? state.track.catalogued : false;
-  const ready = trackOutline !== null;
-  $("map-empty").hidden = ready;
-  $("map-hint").textContent =
-    ready && !catalogued && coverage < 0.95 ? "aprendiendo: " + Math.round(coverage * 100) + "%" : "";
-  $("map-progress").hidden = catalogued;
-  $("map-progress").firstElementChild.style.width = Math.round(coverage * 100) + "%";
-
-  if (catalogued) {
-    $("map-empty-text").textContent = "Cargando el trazado del circuito.";
-    $("map-empty-sub").textContent = "El dibujo ya viene con Race Control: aparece apenas se conecta el servidor.";
-    return;
-  }
-  // Conectados, no filas: el circuito lo aprenden los que están girando, y la torre ahora también
-  // lista a los que se fueron.
-  $("map-empty-text").textContent =
-    state.cars.filter((c) => c.connected !== false).length === 0
-      ? "Esperando que alguien salga a pista para aprender el circuito."
-      : "Aprendiendo el circuito: " + Math.round(coverage * 100) + "%";
-  $("map-empty-sub").textContent =
-    "Este circuito no está en el catálogo, así que el trazado se dibuja solo a medida que los autos dan vueltas. Se aprende una vez y queda guardado.";
-}
-
-/**
- * Condiciones de la sesión y reloj de carrera, arriba y abajo del trazado.
- *
- * Viento y hora del juego no están porque **Assetto Corsa no los expone**: son campos de ACC.
- * Ni el UDP ni la Shared Memory de AC los tienen. Una columna que dijera "--" para siempre sería
- * peor que no tenerla. Ver server/src/session/sessionInfo.ts.
- */
-function renderSession(session) {
-  const bar = $("session-bar");
-  const clock = $("session-clock");
-  if (!session) {
-    bar.hidden = true;
-    clock.hidden = true;
-    return;
-  }
-  bar.hidden = false;
-
-  const layout = prettyLayout(session.trackConfig);
-  $("ses-track").textContent = prettyTrackName(session.track) + (layout ? " · " + layout : "");
-  $("ses-track").title = session.serverName || "";
-  $("ses-weather").textContent = session.weatherLabel || "";
-
-  // El nombre que el admin le puso a la sesión en el server_cfg manda sobre el tipo: "Quali 20'"
-  // dice más que "Clasificación". El tipo queda de respaldo si no la nombró.
-  const name = session.name && session.name.trim().length > 0 ? session.name : session.typeLabel;
-  const length =
-    session.durationMinutes > 0
-      ? session.durationMinutes + " min"
-      : session.laps > 0
-        ? session.laps + " vueltas"
-        : "";
-  $("ses-type").textContent = length ? name + " · " + length : name;
-  $("ses-temps").textContent =
-    "Aire " + Math.round(session.ambientTemp) + "° · Pista " + Math.round(session.roadTemp) + "°";
-
-  // El agarre lo reporta la app del piloto, no el servidor. Sin nadie con la app no hay dato, y
-  // se deja el renglón vacío en vez de mostrar un 0 que se leería como pista helada.
-  $("ses-grip").textContent =
-    session.surfaceGrip === null ? "" : "Agarre de pista " + Math.round(session.surfaceGrip * 100) + "%";
-
-  renderSessionChip(session);
-
-  // El renglón del reloj ya no se esconde entero cuando no hay cronómetro: la chapa del tipo de
-  // sesión vive adentro y siempre tiene algo que decir. Lo que se esconde es el par label/valor.
-  clock.hidden = false;
-  const label = $("ses-clock-label");
-  const value = $("ses-clock-value");
-
-  if (session.remainingMs === null) {
-    // Sesión por vueltas: no hay cronómetro, hay un número de vueltas.
-    const sinDato = session.laps <= 0;
-    label.hidden = sinDato;
-    value.hidden = sinDato;
-    clock.classList.remove("ending");
-    label.textContent = "Vueltas";
-    value.textContent = String(session.laps);
-    return;
-  }
-  label.hidden = false;
-  value.hidden = false;
-  label.textContent = "Restan";
-  value.textContent = formatClock(session.remainingMs);
-  clock.classList.toggle("ending", session.remainingMs <= 60000);
-}
-
-/**
- * La letra del tipo de sesión: P, Q o R.
- *
- * Son los códigos que usa todo el automovilismo y que un director de carrera lee sin traducir. El
- * color no es decorativo: dice cuánto pesa lo que se está mirando. En práctica no cuenta nada, en
- * clasificación se define la parrilla y en carrera se reparten los puntos — y es el único de los
- * tres donde los botones de largada hacen algo.
- *
- * Sale de `sessionType`, que es un número del protocolo, y no del nombre que el admin le puso a la
- * sesión: ese nombre es texto libre y puede decir "Tanda 3" o "Domingo".
- */
-const SESSION_CHIPS = {
-  0: { code: "B", kind: "practica", label: "Reserva" },
-  1: { code: "P", kind: "practica", label: "Práctica" },
-  2: { code: "Q", kind: "qualy", label: "Clasificación" },
-  3: { code: "R", kind: "carrera", label: "Carrera" },
-  4: { code: "H", kind: "qualy", label: "Hotlap" },
-  5: { code: "TA", kind: "qualy", label: "Time attack" },
-  6: { code: "D", kind: "practica", label: "Deriva" },
-  7: { code: "RP", kind: "practica", label: "Repetición" },
-};
-
-function renderSessionChip(session) {
-  const chip = $("ses-chip");
-  const spec = SESSION_CHIPS[session.sessionType];
-  if (!spec) {
-    // Un tipo que el protocolo no define: antes que inventar una letra, no se muestra ninguna.
-    chip.hidden = true;
-    return;
-  }
-  chip.hidden = false;
-  chip.textContent = spec.code;
-  chip.className = "chapa-sesion " + spec.kind;
-  // El título lleva la palabra entera: la letra se entiende de reojo, pero quien nunca vio una
-  // planilla de tiempos no tiene por qué saber que Q es clasificación.
-  chip.title = spec.label + (session.typeLabel && session.typeLabel !== spec.label ? " · " + session.typeLabel : "");
-}
-
-/** ms → `mm:ss`, o `h:mm:ss` en una carrera de resistencia. */
-function formatClock(ms) {
-  const total = Math.max(0, Math.round(ms / 1000));
-  const pad = (n) => (n < 10 ? "0" + n : String(n));
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const seconds = total % 60;
-  return hours > 0 ? hours + ":" + pad(minutes) + ":" + pad(seconds) : pad(minutes) + ":" + pad(seconds);
-}
-
-/** Los nombres de pista de AC son nombres de carpeta (`ks_barcelona`). El prefijo es del paquete
- * de contenido, no del circuito, y no le dice nada a nadie. */
-function prettyTrackName(raw) {
-  if (!raw) return "Circuito desconocido";
-  const cleaned = raw
-    .replace(/^(ks|acu|rt|at|pm|tcl|vrc)_/i, "")
-    .replace(/[_-]+/g, " ")
-    .trim();
-  if (!cleaned) return raw;
-  return cleaned.replace(/(^|\s)([a-záéíóúñ])/g, (m, pre, ch) => pre + ch.toUpperCase());
-}
-
-/** `layout_gp` → "GP". La variante se muestra como la nombra el circuito, en mayúsculas: casi
- * siempre son siglas ("GP", "GP24", "Moto"). */
-function prettyLayout(raw) {
-  if (!raw) return "";
-  const cleaned = raw.replace(/^layout[_-]?/i, "").replace(/[_-]+/g, " ").trim();
-  return cleaned.length <= 4 ? cleaned.toUpperCase() : cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-}
+// Acá vivía la sección entera del mapa del circuito: el canvas, la interpolación de los autos, el
+// dibujo del trazado y de la zona de pit, el tooltip al pasar el mouse, la carga del trazado
+// (`/api/track`) y las condiciones de sesión (`renderSession`/`renderSessionChip`) que vivían
+// pegadas al mapa. Esta pantalla fusiona Control de carrera y Sanciones para incrustarla en
+// fslmanager.vercel.app, y el mapa no entra en esa fusión — la rama main lo conserva intacto.
 
 // ===================================================================== sanciones e incidentes
 
@@ -1957,37 +1349,6 @@ const INCIDENT_STATUS = {
   penalized: ["bad", "sancionado"],
 };
 
-/** Firma de lo renderizado, para no reconstruir la lista entera una vez por segundo mientras el
- * admin está leyendo un incidente. */
-let incidentsSignature = "";
-
-/**
- * Qué grupos dejó abiertos el admin, por piloto.
- *
- * La lista se repinta sola cuando llega un incidente nuevo, y sin esto cada repintado cerraría el
- * grupo que estaba leyendo — justo en el momento en que más incidentes están entrando.
- */
-const gruposAbiertos = new Set();
-
-function renderIncidents(incidents) {
-  const signature = incidents.map((i) => i.id + i.status + i.impactCount).join("|");
-  if (signature === incidentsSignature) return;
-  incidentsSignature = signature;
-
-  const list = $("incidents-list");
-  clearChildren(list);
-
-  if (incidents.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "empty";
-    empty.textContent = "Sin incidentes. Los toques, choques y salidas de pista aparecen acá apenas ocurren.";
-    list.appendChild(empty);
-    return;
-  }
-
-  for (const grupo of agruparPorPiloto(incidents)) list.appendChild(grupoCard(grupo));
-}
-
 /**
  * Un grupo por piloto, no una tarjeta por hecho.
  *
@@ -2036,58 +1397,18 @@ function agruparPorPiloto(incidents) {
   return Array.from(porPiloto.values()).sort((a, b) => b.ultimo - a.ultimo);
 }
 
-/** El grupo de un piloto: el resumen siempre a la vista, el detalle a un click. */
-function grupoCard(grupo) {
-  const det = document.createElement("details");
-  det.className = "grupo-incidentes";
-  det.open = gruposAbiertos.has(grupo.clave);
-  det.addEventListener("toggle", () => {
-    if (det.open) gruposAbiertos.add(grupo.clave);
-    else gruposAbiertos.delete(grupo.clave);
-  });
-
-  const sum = document.createElement("summary");
-
-  const nombre = document.createElement("span");
-  nombre.className = "piloto";
-  nombre.textContent = grupo.nombre;
-  sum.appendChild(nombre);
-
-  // Las dos cuentas que importan, cada una con su color. Un cero no se dibuja: en una fila de
-  // chapas, "Choques: 0" ocupa tanto como "Choques: 9" y no dice nada.
-  if (grupo.cuts > 0) sum.appendChild(cuentaChip("Cuts", grupo.cuts, "cuts"));
-  if (grupo.choques > 0) sum.appendChild(cuentaChip("Incidentes", grupo.choques, "choques"));
-  if (grupo.pit > 0) sum.appendChild(cuentaChip("Pit", grupo.pit, "velocidad"));
-  if (grupo.largada > 0) sum.appendChild(cuentaChip("Largada", grupo.largada, "velocidad"));
-  if (grupo.otros > 0) sum.appendChild(cuentaChip("Otros", grupo.otros, "otros"));
-
-  if (grupo.pendientes > 0) {
-    const pend = document.createElement("span");
-    pend.className = "chip-cuenta pendiente";
-    pend.textContent = grupo.pendientes + " sin revisar";
-    sum.appendChild(pend);
-  }
-
-  det.appendChild(sum);
-  for (const fila of grupo.filas) det.appendChild(incidentCard(fila.incident, fila.propio));
-  return det;
-}
-
-function cuentaChip(etiqueta, n, clase) {
-  const span = document.createElement("span");
-  span.className = "chip-cuenta " + clase;
-  span.textContent = etiqueta + ": " + n;
-  return span;
-}
-
 /**
  * Una tarjeta de incidente.
  *
  * `propio` es el piloto desde cuyo grupo se la está mirando, y cambia el título: adentro del grupo
  * de Fulano un toque se lee "Toque con Mengano", que es el dato que el comisario está buscando
  * —contra quién fue—, y no "Fulano vs Mengano", que repite el nombre del encabezado del grupo.
+ *
+ * `carRow` es la fila de la torre a la que pertenece este detalle: lo necesitan sus propios
+ * botones (cancelar el formulario de sanción) para repintar solo ese detalle, sin esperar el
+ * próximo poll ni tocar las filas de los demás pilotos.
  */
-function incidentCard(incident, propio) {
+function incidentCard(incident, propio, carRow) {
   const card = document.createElement("div");
   card.className = "incident" + (incident.status === "pending" ? "" : " resolved");
 
@@ -2125,10 +1446,10 @@ function incidentCard(incident, propio) {
   card.appendChild(ctxLine);
 
   if (incident.status === "pending") {
-    const row = document.createElement("div");
-    row.className = "btn-row";
-    row.appendChild(resolveButton(incident.id, "dismissed", "Descartar", "secondary"));
-    row.appendChild(resolveButton(incident.id, "warned", "Advertir", "secondary"));
+    const btnRow = document.createElement("div");
+    btnRow.className = "btn-row";
+    btnRow.appendChild(resolveButton(incident.id, "dismissed", "Descartar", "secondary"));
+    btnRow.appendChild(resolveButton(incident.id, "warned", "Advertir", "secondary"));
 
     // "Sancionar" no resuelve de una: abre el formulario. Un toque tiene dos pilotos y el
     // servidor no sabe de quién fue la culpa — elegir por él sería inventar un veredicto.
@@ -2136,10 +1457,10 @@ function incidentCard(incident, propio) {
     sanction.className = "btn-mini danger";
     sanction.textContent = "Sancionar";
     sanction.addEventListener("click", () => {
-      row.replaceWith(penaltyForm(incident, card));
+      btnRow.replaceWith(penaltyForm(incident, card, carRow));
     });
-    row.appendChild(sanction);
-    card.appendChild(row);
+    btnRow.appendChild(sanction);
+    card.appendChild(btnRow);
   } else if (incident.status === "penalized") {
     // Qué sanción salió de este incidente. Sin esto, la bandeja decía "sancionado" y había que
     // ir a la otra tabla a adivinar cuál de las sanciones le correspondía.
@@ -2175,7 +1496,7 @@ const MANUAL_PENALTIES = [
 ];
 
 /** Formulario de sanción manual: a quién, qué y —si es de tiempo— cuántos segundos. */
-function penaltyForm(incident, card) {
+function penaltyForm(incident, card, carRow) {
   const form = document.createElement("div");
   form.className = "penalty-form";
 
@@ -2216,8 +1537,9 @@ function penaltyForm(incident, card) {
   cancel.className = "btn-mini secondary";
   cancel.textContent = "Cancelar";
   cancel.addEventListener("click", () => {
-    incidentsSignature = "";
-    renderIncidents(lastState ? lastState.incidents || [] : []);
+    if (!carRow) return;
+    carRow.detailSignature = ""; // forzar el redibujo: volver al botón "Sancionar" de siempre
+    updateCarDetail(carRow, groupForCarId(carRow.carId));
   });
 
   /**
@@ -2259,7 +1581,6 @@ function penaltyForm(incident, card) {
         penaltyType: what.value,
         seconds: Number(seconds.value),
       });
-      incidentsSignature = ""; // forzar el redibujo con el estado nuevo
       toast("Sanción aplicada a " + (res.penalty ? driverLabel(res.penalty.driverGuid, res.penalty.carId) : "el piloto"));
       refresh().catch(() => {});
     } catch (err) {
@@ -2283,7 +1604,6 @@ function resolveButton(id, status, label, cls) {
     btn.disabled = true;
     try {
       await post("/api/incidents/" + id + "/resolve", { status });
-      incidentsSignature = ""; // forzar el redibujo con el estado nuevo
       refresh().catch(() => {});
     } catch (err) {
       btn.disabled = false;
@@ -2411,24 +1731,104 @@ function renderMode(shadowMode) {
     : "El motor aplica sanciones y expulsiones reales.";
 }
 
-// ===================================================================== bandera de carrera
+// ===================================================================== informe de posiciones finales
 
 /**
- * La bandera a cuadros de la barra ondea solo mientras la carrera está en curso.
- *
- * Antes no había forma de saberlo de un vistazo: había que buscar el semáforo de la tarjeta de
- * largada y leerlo. Con el panel abierto en una segunda pantalla durante una carrera, eso es
- * justo lo que no se quiere tener que hacer.
+ * Antes esto vivía junto a la bandera a cuadros de la barra, que se fue con el resto del
+ * encabezado de marca (ver la nota del header en index.html). Lo único que queda de esa función es
+ * lo que de verdad hacía falta: el link de posiciones finales solo aparece con la carrera
+ * terminada. Mientras la carrera corre el link no está: la clasificación se sigue moviendo y un
+ * CSV bajado en la vuelta 20 no es un resultado, es una foto que después nadie sabe de cuándo era.
  */
-function renderRaceFlag(state) {
-  const racing = state.phase === "race" || state.lightState === "green";
-  $("race-flag").classList.toggle("racing", racing);
-  $("nav-live").title = racing ? "Carrera en curso" : "La carrera todavía no arrancó";
-
-  // Las posiciones finales, en la torre, apenas cae la bandera a cuadros. Mientras la carrera
-  // corre el link no está: la clasificación se sigue moviendo y un CSV bajado en la vuelta 20 no
-  // es un resultado, es una foto que después nadie sabe de cuándo era.
+function renderFinishedReport(state) {
   $("btn-report-timing").hidden = state.phase !== "finished";
+}
+
+// ===================================================================== semáforo de 5 luces
+
+/** Cada disco replica el mismo estado —no hay cinco valores independientes del servidor— así que
+ * alcanza con tres clases CSS sobre el contenedor. Constantes calcadas de `RaceControlClient.py`
+ * (`LIGHTS_BLINK_SECONDS`, `LIGHTS_GREEN_HOLD_SECONDS`): lo que ve el admin en el panel tiene que
+ * ser lo mismo que ve el piloto en su propia app, no una aproximación. */
+const LIGHTS_GREEN_HOLD_MS = 3000;
+
+let lightsTrackedState = "idle";
+let lightsGreenUntil = 0;
+let lightsGreenTimer = null;
+
+function renderLights(lightState) {
+  if (lightState === "green" && lightsTrackedState !== "green") {
+    lightsGreenUntil = Date.now() + LIGHTS_GREEN_HOLD_MS;
+    clearTimeout(lightsGreenTimer);
+    lightsGreenTimer = setTimeout(applyLightsClass, LIGHTS_GREEN_HOLD_MS);
+  }
+  lightsTrackedState = lightState;
+  applyLightsClass();
+}
+
+function applyLightsClass() {
+  const box = $("lights");
+  const sosteniendoVerde = lightsTrackedState === "green" && Date.now() < lightsGreenUntil;
+  box.classList.toggle("formation", lightsTrackedState === "formation");
+  box.classList.toggle("green", sosteniendoVerde);
+}
+
+// ===================================================================== indicador de sesión
+
+/** Mismos tipos que `labelForSessionType` en `session/sessionInfo.ts`, resumidos a una letra para
+ * la chapa. El título completo (`session.typeLabel`) es el que de verdad explica qué sesión es. */
+const SESSION_SHORT_LABELS = { 0: "R", 1: "P", 2: "Q", 3: "C", 4: "H", 5: "TA", 6: "D", 7: "REP" };
+
+/** `mm:ss.cc`, igual que un cronómetro de carrera, salvo que `ms` sea tan grande que ya no tenga
+ * sentido mostrarlo así: una práctica que el servidor dejó corriendo horas (bug visto en
+ * producción: "1277:21.41") pasa a mostrarse como lo hace un livetiming, "HH:MM:SS" o, pasado el
+ * día, "N día(s) + HH:MM:SS". Sirve tanto para la cuenta regresiva como para el tiempo
+ * transcurrido: la diferencia la pone `renderSessionIndicator`, no el formato. */
+function formatClock(ms) {
+  const totalCentisimos = Math.max(0, Math.round(ms / 10));
+  const totalSegundos = Math.floor(totalCentisimos / 100);
+  const totalHoras = Math.floor(totalSegundos / 3600);
+
+  if (totalHoras >= 1) {
+    const dias = Math.floor(totalHoras / 24);
+    const horas = String(totalHoras % 24).padStart(2, "0");
+    const minutos = String(Math.floor((totalSegundos % 3600) / 60)).padStart(2, "0");
+    const segundos = String(totalSegundos % 60).padStart(2, "0");
+    const reloj = horas + ":" + minutos + ":" + segundos;
+    return dias >= 1 ? dias + (dias === 1 ? " día + " : " días + ") + reloj : reloj;
+  }
+
+  const centisimos = totalCentisimos % 100;
+  const segundos = totalSegundos % 60;
+  const minutos = Math.floor(totalSegundos / 60);
+  return minutos + ":" + String(segundos).padStart(2, "0") + "." + String(centisimos).padStart(2, "0");
+}
+
+function renderSessionIndicator(session) {
+  const typeEl = $("session-type");
+  const clockEl = $("session-clock");
+
+  if (!session) {
+    typeEl.textContent = "--";
+    typeEl.title = "Esperando el primer aviso de sesión del servidor.";
+    clockEl.textContent = "--:--";
+    clockEl.title = "";
+    return;
+  }
+
+  typeEl.textContent = SESSION_SHORT_LABELS[session.sessionType] || "?";
+  typeEl.title = session.typeLabel;
+
+  if (session.remainingMs !== null) {
+    clockEl.textContent = formatClock(session.remainingMs);
+    clockEl.title = "Tiempo restante de " + session.typeLabel.toLowerCase();
+  } else if (session.laps > 0) {
+    clockEl.textContent = session.laps + " vueltas";
+    clockEl.title = "Sesión a " + session.laps + " vueltas, sin límite de tiempo.";
+  } else {
+    clockEl.textContent = formatClock(session.elapsedMs);
+    clockEl.title = "Tiempo transcurrido de " + session.typeLabel.toLowerCase();
+  }
 }
 
 // ===================================================================== botones de largada
@@ -2476,8 +1876,7 @@ function renderStart(lightState, session) {
   $("race-live").hidden = !racing;
 
   if (!esCarrera) {
-    $("start-hint").textContent =
-      "La largada se habilita sola cuando el servidor pase a la sesión de carrera.";
+    $("start-hint").textContent = "";
     return;
   }
   const hints = {
@@ -2503,6 +1902,16 @@ function renderStart(lightState, session) {
  */
 function renderLinkState() {
   const bar = $("link-down");
+
+  // Con la pestaña en segundo plano el navegador frena los `setInterval`: el poll puede tardar
+  // muchísimo más que `POLL_MS` sin que el servidor haya cortado nada. Sin esta guarda, volver a
+  // esta pestaña después de un rato mostraba "sin contacto" por una desconexión que nunca existió.
+  if (document.hidden) {
+    bar.hidden = true;
+    document.body.classList.remove("link-down");
+    return;
+  }
+
   const stale = Date.now() - lastGoodPollAt;
 
   if (stale < LINK_DOWN_AFTER_MS) {
@@ -2532,8 +1941,9 @@ async function refresh() {
   renderLinkState();
   lastState = state;
 
-  $("version-label").textContent = state.version ? "v" + state.version : "";
-  $("league-label").textContent = state.leagueName || "";
+  // La chapa de marca, el nombre de la liga y la versión se fueron del encabezado con el resto del
+  // header: esta pantalla vive incrustada en fslmanager.vercel.app, que ya tiene los tres. El
+  // asistente de primer arranque sigue necesitando el nombre, así que esa línea queda.
   $("wizard-name").textContent = state.leagueName || "tu liga";
 
   // El asistente lo abre el servidor (no hay liga guardada) y lo cierra el usuario al terminarlo.
@@ -2548,26 +1958,18 @@ async function refresh() {
   }
 
   renderStart(state.lightState, state.session);
-  renderRaceFlag(state);
+  renderLights(state.lightState);
+  renderSessionIndicator(state.session);
+  renderFinishedReport(state);
+  // Los grupos de incidentes van antes de pintar la tabla: cada fila lee de ahí sus columnas de
+  // Cuts/Insi y el contenido de su propio detalle.
+  updateIncidentGroups(state.incidents || []);
   renderTiming(state.cars);
   renderNetwork(state.network);
   renderMode(state.shadowMode);
   renderPenalties(state.formationPenalties, state.pitPenalties, state.stewardPenalties);
-  renderIncidents(state.incidents || []);
 
-  const badge = $("nav-incident-count");
-  badge.textContent = String(state.pendingIncidents || 0);
-  badge.hidden = !state.pendingIncidents;
-
-  // Al mapa van solo los que están en pista. La torre muestra la jornada entera desde la 1.2,
-  // pero un desconectado no está en ningún lado del circuito: su punto quedaría clavado donde se
-  // le cortó, indistinguible de un auto detenido de verdad.
-  updateCarTargets(state.cars.filter((c) => c.connected !== false));
-  pitZone = state.pitZone || null;
   renderPitZoneSuggestion(state.pitZoneSuggestion || null);
-  await refreshTrack(state.track ? state.track.coverage : 0);
-  renderMapStatus(state);
-  renderSession(state.session);
 }
 
 function wireButtons() {
@@ -2579,16 +1981,6 @@ function wireButtons() {
   $("btn-begin").addEventListener("click", action("/api/formation/begin"));
   $("btn-green").addEventListener("click", action("/api/formation/green"));
   $("btn-reset").addEventListener("click", action("/api/formation/reset"));
-
-  // El encabezado de la columna de intervalo es un botón. Repinta la tabla en el acto en vez de
-  // esperar al próximo poll: un click que tarda un segundo en hacer algo se siente roto y se
-  // vuelve a clickear.
-  $("btn-gap-mode").addEventListener("click", () => {
-    gapMode = gapMode === "ahead" ? "leader" : "ahead";
-    renderGapHeader();
-    if (lastState) renderTiming(lastState.cars);
-  });
-  renderGapHeader();
 
   $("btn-test-network").addEventListener("click", async (e) => {
     const button = e.currentTarget;
@@ -2615,11 +2007,9 @@ function wireButtons() {
     }
   });
 
-  wireLogout();
-
   $("btn-copy-support").addEventListener("click", copiarMensajeDeSoporte);
 
-  $("chip-sin-app").addEventListener("click", () => openDrawer("drawer-network"));
+  $("chip-sin-app").addEventListener("click", () => openModal("modal-network"));
 
   wireWizard();
 }
@@ -2688,27 +2078,10 @@ function supportMessage(address) {
   ].join("\n");
 }
 
-/**
- * La sesión no vive en el worker sino en el portal, así que el logout **no** pasa por `api()`:
- * `api()` antepone `BASE` (`/l/<slug>`) y ese prefijo se proxea al worker, que no sabe nada de
- * cookies de sesión. La ruta va absoluta y a mano, con el header que el portal exige para aceptar
- * algo que cambia estado.
- */
-function wireLogout() {
-  const btn = $("btn-logout");
-  if (!BASE) return; // panel abierto directo contra el worker: no hay sesión que cerrar
-  btn.hidden = false;
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    try {
-      await fetch("/api/portal/logout", { method: "POST", headers: { "X-RC-Request": "1" } });
-    } catch (_) {
-      // Si el logout no llegó, igual conviene sacarlo del panel: la pantalla de ingreso le va a
-      // decir qué pasa mejor que un toast acá adentro.
-    }
-    window.location.href = "/login";
-  });
-}
+// Acá vivía `wireLogout`, el ícono de salir que cerraba la sesión del portal. Esta pantalla no
+// tiene sesión que cerrar: vive incrustada en fslmanager.vercel.app sin login propio (ver el
+// middleware `RC_PUBLIC_LEAGUE` en `portal/server.ts`). El panel completo de la rama main, que sí
+// tiene login, conserva el botón intacto.
 
 // ===================================================================== wizard de primer arranque
 
@@ -2789,13 +2162,10 @@ function renderWizardDots() {
   }
 }
 
-wireRouter();
 wireDrawers();
 wireButtons();
-wireMap();
 wireProfiles();
 setupForms();
-renderRoute();
 
 loadConfigForm().catch((err) => toast("No se pudo cargar la configuración: " + err.message, 5000));
 refresh().catch((err) => toast("No se pudo conectar con el backend: " + err.message, 5000));
@@ -2826,4 +2196,15 @@ setInterval(() => {
  * avanzar. No pide nada a la red: solo mira el reloj.
  */
 setInterval(renderLinkState, 1000);
+
+/** Al volver a esta pestaña (o a esta ventana) el dato que había puede tener minutos de atraso por
+ * el freno de `setInterval` en segundo plano: en vez de esperar al próximo poll y mostrar la banda
+ * roja un instante, se pide el estado de una y de inmediato. */
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  refresh().catch((err) => {
+    lastPollError = err.message;
+    renderLinkState();
+  });
+});
 

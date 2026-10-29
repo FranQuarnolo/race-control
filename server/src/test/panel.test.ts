@@ -111,15 +111,17 @@ test("todo id que el panel busca con $() existe en su HTML", () => {
  * no llega. `telemetryStale` estuvo así: el backend marcaba cada auto cuya telemetría se había
  * congelado y el panel lo ignoraba, así que un piloto desconectado se veía igual que uno en pista.
  */
+// En la rama `feature/panel-simplificado-fsl` el panel fusiona Control de carrera y Sanciones en
+// una sola pantalla para incrustarla en fslmanager.vercel.app, y deja de leer `pingMs`,
+// `gapAheadMs` y `gapLeaderMs` (ping, intervalo con el de adelante y con el líder): son datos de
+// la torre completa, que no entra en esa fusión. El panel completo de la rama main sigue
+// leyéndolos; este archivo valida la rama que está activa en `dist/`.
 const CAMPOS_DERIVADOS = [
   "position",
   "brand",
   "brandLogo",
   "telemetryStale",
-  "pingMs",
   "telemetry",
-  "gapAheadMs",
-  "gapLeaderMs",
   "cuts",
   "inPit",
 ];
@@ -148,46 +150,20 @@ test("la lista de campos derivados no quedó vieja contra el backend", () => {
 });
 
 /**
- * Campos de `/api/state` que no son por auto pero existen igual solo para el panel.
- *
- * Mismo riesgo que `CAMPOS_DERIVADOS` y mismo remedio: un campo que el backend arma y nadie lee es
- * trabajo tirado, y lo que debía comunicar no llega. `lapsDown` y `pitZone` nacieron en la 0.6 y
- * los dos se pintan en un solo lugar cada uno, así que son fáciles de perder en una refactorización.
+ * Acá vivían `CAMPOS_DE_ESTADO` y el test "el panel usa los campos de estado que el backend
+ * agrega para él", que exigían `lapsDown`, `pitZone` y `catalogued` en app.js. Los tres eran
+ * exclusivos del mapa (`renderGap`/`updateCarTargets`/`renderMapStatus`), que esta rama
+ * (`feature/panel-simplificado-fsl`) saca entera de la pantalla fusionada para
+ * fslmanager.vercel.app. El panel completo de la rama main los sigue usando los tres.
  */
-const CAMPOS_DE_ESTADO = ["lapsDown", "pitZone", "catalogued"];
-
-test("el panel usa los campos de estado que el backend agrega para él", () => {
-  const js = leer(PANEL, "app.js");
-  const api = leer(DIST, "api", "adminApi.js");
-  for (const campo of CAMPOS_DE_ESTADO) {
-    assert.ok(api.includes(campo), `adminApi ya no manda ${campo}: la lista de este test quedó vieja`);
-    assert.ok(js.includes(campo), `El backend manda ${campo} y el panel no lo menciona nunca`);
-  }
-});
 
 /**
- * El mapa y el motor tienen que estar de acuerdo sobre qué es el pit lane.
- *
- * `isInPitZone` compara `s >= inicio && s <= fin` sin dar la vuelta al cruzar la meta. Si el dibujo
- * fuera más generoso —envolviendo cuando el inicio es mayor que el fin— el mapa pintaría en ámbar
- * un tramo donde el motor no sanciona a nadie, y alguien calibraría la zona mirando un dibujo que
- * miente. Es un acuerdo entre dos archivos que no se importan entre sí, así que no hay tipo ni
- * compilador que lo sostenga.
+ * Acá vivía "el mapa pinta la zona de pit con el mismo criterio que la sanciona el motor", que
+ * exigía `drawPitZone`, `splineStart` y `splineEnd` en app.js. Dependía del mapa, que esta rama
+ * (`feature/panel-simplificado-fsl`) saca entera de la pantalla fusionada para
+ * fslmanager.vercel.app — sin mapa no hay nada que calibrar visualmente. El acuerdo entre
+ * `isInPitZone` y el dibujo sigue vivo y probado en la rama main, donde el mapa no se tocó.
  */
-test("el mapa pinta la zona de pit con el mismo criterio que la sanciona el motor", () => {
-  const js = leer(PANEL, "app.js");
-  const motor = leer(DIST, "instances", "pitSpeeding.js");
-
-  assert.ok(js.includes("drawPitZone"), "nadie dibuja la zona de pit sobre el mapa");
-  // Las dos partes miran los mismos dos extremos. Si alguien renombra uno, este test lo nota antes
-  // de que el dibujo y la sanción dejen de coincidir en silencio.
-  for (const extremo of ["splineStart", "splineEnd"]) {
-    assert.ok(motor.includes(extremo), `pitSpeeding ya no usa ${extremo}`);
-    assert.ok(js.includes(extremo), `el panel no usa ${extremo} para dibujar la zona`);
-  }
-  // Y ninguno de los dos envuelve: un `+ 1` o un `%` acá sería el primer paso hacia que difieran.
-  assert.ok(!/splineEnd\s*[+%]/.test(motor), "el motor empezó a envolver la zona y el mapa no");
-});
 
 test("el panel avisa cuando se queda sin contacto con el motor", () => {
   const js = leer(PANEL, "app.js");
@@ -288,46 +264,20 @@ test("toda clase que el panel arma en JS tiene al menos una regla", () => {
  */
 
 /**
- * Todo elemento de la barra que arranca escondido y se muestra por condición tiene que poder
- * esconderse de verdad.
- *
- * `[hidden]` es `display: none` por hoja del navegador, y cualquier `display` propio en una regla
- * de clase le gana. Este archivo ya pagó ese bug entero: un `display: flex` incondicional dejó el
- * modal de primer arranque visible para siempre. El botón de Salir es el caso vivo —es `flex` y
- * arranca `hidden`—: sin el seguro promete una sesión que en modo local no existe.
+ * Acá vivía "lo que arranca escondido en la barra se puede esconder", que exigía el seguro
+ * `.btn-salir[hidden] { display: none }` contra un `display: flex` incondicional. Esta rama
+ * (`feature/panel-simplificado-fsl`) no tiene sesión que cerrar —la pantalla vive incrustada en
+ * fslmanager.vercel.app, sin login propio— así que el botón de Salir se fue entero junto con el
+ * resto de la barra de marca. La rama main conserva el botón y este test intacto.
  */
-test("lo que arranca escondido en la barra se puede esconder", () => {
-  const css = sinComentarios(leer(PANEL, "styles.css"));
-
-  assert.ok(
-    /\.btn-salir\[hidden\]\s*{[^}]*display:\s*none/.test(css),
-    "falta el seguro `.btn-salir[hidden] { display: none }`: el `display: flex` de la clase le gana al atributo"
-  );
-});
 
 /**
- * Control de carrera y Sanciones son secciones, no acciones.
- *
- * Antes se dibujaban con el mismo `#20242e` que usan los botones de la barra en hover, así que la
- * pestaña activa y un botón cualquiera eran indistinguibles: tres cosas que abren un cajón y dos
- * que cambian la pantalla entera, todas iguales. El grupo tiene que tener forma propia —el marco
- * del control segmentado— y la pestaña activa tiene que distinguirse de la inactiva.
+ * Acá vivía "las pestañas de sección se dibujan distinto de los botones de acción", que exigía
+ * el control segmentado `nav.views` con sus dos pestañas (Control de carrera / Sanciones). Esta
+ * rama (`feature/panel-simplificado-fsl`) fusiona esas dos pestañas en una sola pantalla para
+ * incrustarla en fslmanager.vercel.app, así que no hay más de una vista y `nav.views` se borró
+ * entero junto con el router. La rama main conserva las dos pestañas y este test intacto.
  */
-test("las pestañas de sección se dibujan distinto de los botones de acción", () => {
-  const css = sinComentarios(leer(PANEL, "styles.css"));
-
-  const contenedor = /nav\.views\s*{([^}]*)}/.exec(css);
-  assert.ok(contenedor, "no hay regla para `nav.views`");
-  assert.ok(
-    /background\s*:/.test(contenedor![1]) && /border\s*:/.test(contenedor![1]),
-    "`nav.views` no tiene marco propio: sin fondo y borde el grupo no se lee como un control aparte"
-  );
-
-  assert.ok(
-    /nav\.views\s+a\[aria-current="page"\]\s*{[^}]*background\s*:/.test(css),
-    "la pestaña activa no se distingue de la inactiva"
-  );
-});
 
 /**
  * Cada tipo de incidente del motor tiene que estar clasificado en el panel.

@@ -651,6 +651,40 @@ export function createPortal(config: PortalConfig): Portal {
     });
   });
 
+  /**
+   * Rama `feature/panel-simplificado-fsl`: la pantalla fusionada va a vivir incrustada dentro de
+   * fslmanager.vercel.app, no detrás de un login propio. `RC_PUBLIC_LEAGUE` (el slug de la liga)
+   * hace que la raíz del dominio sirva ese panel directo, sin sesión ni CSRF: no hay cookie que
+   * proteger, así que `checkCsrf` no pinta nada acá. Sin la variable de entorno, el comportamiento
+   * de siempre (login, selección de liga) sigue intacto — esto es estrictamente aditivo y no debería
+   * existir en `main`.
+   */
+  const PUBLIC_LEAGUE_SLUG = process.env.RC_PUBLIC_LEAGUE || "";
+  if (PUBLIC_LEAGUE_SLUG) {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (
+        req.path.startsWith("/l/") ||
+        req.path.startsWith("/api/operador") ||
+        req.path === "/login" ||
+        req.path === "/mis-ligas" ||
+        req.path === "/operador" ||
+        req.path.startsWith("/conectar/")
+      ) {
+        next();
+        return;
+      }
+      const league = store.findLeagueBySlug(PUBLIC_LEAGUE_SLUG);
+      if (!league) {
+        next();
+        return;
+      }
+      if (league.status !== "running") {
+        if (league.status === "stopped") supervisor.start(league.id);
+      }
+      proxyToWorker(req, res, { port: league.adminPort, path: req.url }, { "x-rc-user": `embed:${PUBLIC_LEAGUE_SLUG}` });
+    });
+  }
+
   // --- Pantallas del portal ----------------------------------------------------------------------
 
   app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));

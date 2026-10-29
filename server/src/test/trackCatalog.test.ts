@@ -77,11 +77,10 @@ test("el campo `closed` distingue los circuitos de las pistas punto a punto", ()
   assert.ok(cerrados > abiertos * 5, `${abiertos} pistas abiertas contra ${cerrados} cerradas: el umbral de cierre quedó mal`);
 });
 
-test("el panel no cierra el dibujo de una pista punto a punto", () => {
-  const js = fs.readFileSync(path.join(__dirname, "..", "api", "public", "app.js"), "utf-8");
-  assert.match(
-    js,
-    /closed !== false[\s\S]{0,40}closePath/,
-    "El catálogo marca las pistas abiertas y el panel tiene que honrarlo antes de llamar a closePath()"
-  );
-});
+/**
+ * Acá vivía "el panel no cierra el dibujo de una pista punto a punto", que exigía
+ * `closed !== false` antes de `closePath()` en app.js. Dependía del dibujo del mapa, que la rama
+ * `feature/panel-simplificado-fsl` saca entero de la pantalla fusionada para
+ * fslmanager.vercel.app — sin mapa no hay `closePath()` que cuidar. El panel completo de la rama
+ * main sigue dibujando el mapa y este test sigue vivo ahí.
+ */

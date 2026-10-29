@@ -8,171 +8,111 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <img src="icon.svg" alt="" />
-      <h1>Race Control</h1>
-      <span class="version" id="version-label"></span>
-    </div>
-    <span class="league" id="league-label"></span>
-
-    <span class="spacer"></span>
-
-    <!-- Las dos secciones del panel, no dos botones más.
-         Van en un control segmentado —un solo marco con la pestaña activa rellena— para que se
-         lean como "dónde estoy" y no como "qué hago". Reglas, Conexión y Salir son acciones:
-         abren algo y te devuelven acá. Estas dos cambian la pantalla entera, y antes se veían
-         casi igual que las otras tres. -->
-    <nav class="views">
-      <a href="/" id="nav-live">
-        <!-- La bandera ondea solo con la carrera en curso. Ver `.flag-icon.racing` en styles.css. -->
-        <span class="flag-icon" id="race-flag" aria-hidden="true">
-          <svg viewBox="0 0 16 16">
-            <path class="mast" d="M3 1.5 V14.5" fill="none" />
-            <g class="cloth">
-              <rect class="cloth-bg" x="3.6" y="2" width="7.4" height="6" />
-              <rect x="3.6" y="2" width="3.7" height="3" />
-              <rect x="7.3" y="5" width="3.7" height="3" />
-            </g>
-          </svg>
-        </span>
-        Control de carrera
-      </a>
-      <a href="/sanciones" id="nav-sanciones">
-        <!-- Mazo de juez: es la pestaña del comisario. No otra bandera, que se confundiría con
-             la de al lado a 15 px. -->
-        <span class="nav-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M6.1 2.6 L10.4 6.9" />
-            <path d="M8.3 1.5 L11.5 4.7" />
-            <path d="M4.9 3.8 L8.1 7" />
-            <path d="M7.2 8 L2.6 12.6" />
-            <path d="M8.5 11.5 H14.5" />
-          </svg>
-        </span>
-        Sanciones
-        <span class="count-badge" id="nav-incident-count" hidden>0</span>
-      </a>
-    </nav>
-
-    <button class="status-button" id="btn-rules" aria-haspopup="dialog">Reglas</button>
-
+  <!-- Esta pantalla vive incrustada dentro de fslmanager.vercel.app: no hay marca, nombre de
+       liga, bandera ni sesión que cerrar, porque todo eso ya lo resuelve la página que la
+       contiene. Lo único que queda de la barra de siempre son dos controles flotantes,
+       repartidos a los costados para no taparle nada a la página anfitriona. El panel completo
+       con el encabezado de marca sigue intacto en la rama main. -->
+  <div class="floating floating-left">
     <button class="status-button" id="btn-network" aria-haspopup="dialog">
       <span class="dot" aria-hidden="true"></span>
       <span id="btn-network-label">Conexión</span>
     </button>
+  </div>
 
-    <!-- El modo sombra vive entero adentro del cajón de Conexión: interruptor y aviso.
-         Antes había acá un cartel que aparecía solo en sombra. Se fue por pedido explícito.
-         Queda anotado el motivo por el que existía, porque el riesgo no desapareció con el
-         cartel: se puede correr una carrera entera en sombra sin notar que el motor registra
-         pero no sanciona. Si eso llega a pasar en una fecha real, el lugar para volver a poner
-         el aviso es el encabezado de la torre de tiempos —junto a `chip-sin-app`—, no la barra. -->
+  <div class="floating floating-right">
+    <button class="status-button" id="btn-penalties" aria-haspopup="dialog">Sanciones aplicadas</button>
+    <button class="status-button" id="btn-rules" aria-haspopup="dialog">Reglas</button>
+  </div>
 
-    <!-- Solo aparece cuando el panel se abrió desde el portal: ahí hay una sesión que cerrar.
-         Abierto directo contra el puerto del worker (desarrollo) no hay sesión y el botón
-         mentiría. Lo muestra `app.js` mirando la URL.
-         Es un ícono solo: la puerta con la flecha saliendo, en rojo. El nombre accesible va en
-         `aria-label` porque no hay texto que leer. -->
-    <button class="btn-salir" id="btn-logout" hidden aria-label="Salir"
-            title="Cerrar la sesión y volver a la pantalla de ingreso.">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M9.5 2.5 H3.5 A1 1 0 0 0 2.5 3.5 V12.5 A1 1 0 0 0 3.5 13.5 H9.5" />
-        <path d="M11 5.5 L13.5 8 L11 10.5" />
-        <path d="M13.5 8 H6.5" />
-      </svg>
-    </button>
-  </header>
-
-  <!-- Contacto perdido con el motor. Va acá, debajo de la barra y encima de todo lo demás, porque
-       lo que anuncia es que TODO lo de abajo quedó viejo. `role="alert"` para que un lector de
-       pantalla lo lea apenas aparece: es el único aviso del panel que no puede esperar. -->
+  <!-- Contacto perdido con el motor. Va encima de todo lo demás, porque lo que anuncia es que
+       TODO lo de abajo quedó viejo. `role="alert"` para que un lector de pantalla lo lea apenas
+       aparece: es el único aviso del panel que no puede esperar. -->
   <div id="link-down" role="alert" hidden>
     <span class="dot" aria-hidden="true"></span>
     <span id="link-down-text"></span>
     <span class="detail" id="link-down-detail"></span>
   </div>
 
-  <!-- =============================================================== vista: control de carrera -->
+  <!-- ===================================================================== pantalla fusionada -->
   <main id="view-live">
-    <section class="card" id="card-start">
-      <h2>Largada</h2>
-      <div class="semaforo idle" id="semaforo">--</div>
-      <div class="btn-row">
-        <button id="btn-begin" title="Arma el control de velocidad de la vuelta de formación y avisa por chat a la parrilla.">Iniciar formación</button>
-        <button id="btn-green" class="secondary" title="Apretalo en el instante en que se apaga el semáforo en el juego: avisa por chat y corta el control de velocidad de formación.">Verde</button>
-        <!-- "Reset" no le decía nada a nadie y el título explica lo único que importa: qué NO
-             deshace. Las sanciones ya emitidas siguen en pie. -->
-        <button id="btn-reset" class="secondary" title="Vuelve el semáforo a “Esperando” y apaga el control de velocidad de formación, para rearmar una largada abortada. No borra las sanciones ya emitidas ni toca el servidor de Assetto Corsa.">Reiniciar largada</button>
-      </div>
-      <!-- Con el verde dado, el renglón gris de ayuda deja lugar a este aviso: es el estado que
-           el admin tiene que poder confirmar de un vistazo desde la otra punta del escritorio. -->
-      <span class="race-live" id="race-live" hidden>
-        <span class="dot" aria-hidden="true"></span>
-        Carrera en curso
-      </span>
-      <span class="start-hint" id="start-hint"></span>
-    </section>
+    <section class="card" id="card-race">
+      <div class="race-head">
+        <div class="session-indicator" id="session-indicator" title="Tipo de sesión y tiempo restante.">
+          <span class="session-type" id="session-type">--</span>
+          <span class="session-clock" id="session-clock">--:--</span>
+        </div>
 
-    <section class="card" id="card-timing">
-      <h2>
-        Torre de tiempos
-        <!-- Agrupados: el <h2> reparte con `space-between`, y sueltos la cuenta de autos se iba
-             al medio en cuanto aparecía la chapa. -->
-        <span class="h2-derecha">
-          <span class="hint" id="cars-count"></span>
-          <!-- La tabla de posiciones finales, donde se la busca. Es el mismo informe que ya está
-               en Sanciones, pero ahí nadie lo encuentra al terminar la carrera: lo que uno mira
-               cuando cae la bandera a cuadros es la torre. Aparece solo con la carrera terminada
-               —antes la clasificación todavía se mueve— y por eso arranca `hidden`. -->
-          <a class="hint-action" id="btn-report-timing" href="api/report.csv" download hidden
-             title="Planilla con la clasificación final, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar posiciones finales</a>
-          <!-- Por qué las columnas que dependen de la app están en guiones. Sin esto, "no me
-               aparecen los neumáticos ni los sectores" se lee como un producto roto, cuando lo
-               que pasa es que esos datos solo existen en la Shared Memory del juego y nadie los
-               está mandando. Abre el cajón de conexión, que es donde está el diagnóstico. -->
-          <button type="button" class="chapa-sin-app" id="chip-sin-app" hidden>
-            ningún piloto con la app
-          </button>
-        </span>
-      </h2>
+        <!-- Los 5 discos replican exactamente lo que ve el piloto en su propia app: apagados en
+             espera, parpadeando en rojo durante la formación, y 3 segundos en verde sólido al
+             largar. No es un dato nuevo del servidor — las cinco luces comparten siempre el mismo
+             estado (`state.lightState`), así que se arma del lado del cliente, en `app.js`. -->
+        <div class="lights-wrap">
+          <div class="lights" id="lights" aria-hidden="true">
+            <span class="light" data-i="0"></span>
+            <span class="light" data-i="1"></span>
+            <span class="light" data-i="2"></span>
+            <span class="light" data-i="3"></span>
+            <span class="light" data-i="4"></span>
+          </div>
+          <!-- Las cinco luces son decorativas (`aria-hidden`); este texto es el mismo estado en
+               palabras, para quien use un lector de pantalla o simplemente prefiera leerlo. -->
+          <span class="semaforo idle" id="semaforo">--</span>
+        </div>
+
+        <div class="start-controls" id="card-start">
+          <h2>Largada</h2>
+          <div class="btn-row">
+            <button id="btn-begin" title="Arma el control de velocidad de la vuelta de formación y avisa por chat a la parrilla.">Iniciar formación</button>
+            <button id="btn-green" class="secondary" title="Apretalo en el instante en que se apaga el semáforo en el juego: avisa por chat y corta el control de velocidad de formación.">Verde</button>
+            <!-- "Reset" no le decía nada a nadie y el título explica lo único que importa: qué NO
+                 deshace. Las sanciones ya emitidas siguen en pie. -->
+            <button id="btn-reset" class="secondary" title="Vuelve el semáforo a “Esperando” y apaga el control de velocidad de formación, para rearmar una largada abortada. No borra las sanciones ya emitidas ni toca el servidor de Assetto Corsa.">Reiniciar largada</button>
+          </div>
+          <!-- Con el verde dado, el renglón gris de ayuda deja lugar a este aviso: es el estado
+               que el admin tiene que poder confirmar de un vistazo desde la otra punta del
+               escritorio. -->
+          <span class="race-live" id="race-live" hidden>
+            <span class="dot" aria-hidden="true"></span>
+            Carrera en curso
+          </span>
+          <span class="start-hint" id="start-hint"></span>
+        </div>
+      </div>
+
+      <div class="table-meta">
+        <span class="hint" id="cars-count"></span>
+        <!-- Por qué las columnas que dependen de la app están en guiones. Sin esto, "no me
+             aparecen el combustible ni las paradas" se lee como un producto roto, cuando lo
+             que pasa es que esos datos solo existen en la Shared Memory del juego y nadie los
+             está mandando. Abre el cajón de conexión, que es donde está el diagnóstico. -->
+        <button type="button" class="chapa-sin-app" id="chip-sin-app" hidden>
+          ningún piloto con la app
+        </button>
+        <!-- La tabla de posiciones finales. Aparece solo con la carrera terminada —antes la
+             clasificación todavía se mueve— y por eso arranca `hidden`. -->
+        <a class="hint-action" id="btn-report-timing" href="api/report.csv" download hidden
+           title="Planilla con la clasificación final, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar posiciones finales</a>
+      </div>
+
       <div class="table-wrap">
+        <!-- La fila de cada piloto no tiene detalle fijo en este HTML: "Cuts"/"Insi" solo valen
+             en qualy y carrera (misma lógica de siempre), y el despliegue de "Acciones" arma su
+             contenido — los incidentes de ESE piloto, con su formulario de sanción — recién
+             cuando el admin lo abre. Antes esas tarjetas vivían sueltas en "Incidentes a
+             revisar"; ahora entran una por una dentro de la fila de su propio piloto. -->
         <table id="timing-table">
           <thead>
             <tr>
-              <th class="c-pos" title="Posición en vivo: por progreso en carrera, por mejor vuelta en práctica y clasificación">#</th>
-              <!-- El auto va pegado a la posición y no después del nombre: la columna del piloto
-                   se queda con todo el espacio sobrante, y con el auto detrás el logo terminaba
-                   flotando solo en el medio de la fila, lejos de a quién pertenece. -->
+              <th class="num">#</th>
               <th>Auto</th>
               <th class="c-driver">Piloto</th>
-              <!-- Va pegada al piloto y antes que la velocidad porque es la columna que más se
-                   mira: la pregunta de toda carrera es a cuánto está del de adelante, no a qué
-                   velocidad va. Click en el encabezado alterna entre el intervalo con el de
-                   adelante y el acumulado contra el líder. -->
-              <th class="num c-gap" id="th-gap" title="Intervalo con el auto de adelante. Clickeá para ver la diferencia con el líder.">
-                <button type="button" id="btn-gap-mode">Int.</button>
-              </th>
-              <th class="num">Vel.</th>
-              <th class="num" title="Vueltas completadas">Laps</th>
-              <!-- Acá estaban "Fuera" y "Sectores".
-                   "Sectores" se sacó porque no funcionaba: los tiempos por sector solo existen en
-                   la Shared Memory del juego, los manda la app del piloto, y en pista nunca
-                   llegaron — una columna de veinte guiones que no explica nada.
-                   "Fuera" se sacó porque el número está mejor donde se usa: el resumen por piloto
-                   de la bandeja de incidentes lo muestra como "Cuts: 10", junto a los choques. -->
-              <th class="num">Última</th>
-              <th class="num">Mejor</th>
-              <th class="num" title="Paradas en boxes completadas. Requiere la app del piloto.">Box</th>
-              <th title="Compuesto de neumático. Requiere la app del piloto.">Neum.</th>
-              <th class="num" title="Combustible restante. Requiere la app del piloto.">Comb.</th>
-              <!-- La columna entera desaparece cuando ningún piloto tiene la app reportando (ver
-                   `.sin-ping` en el CSS). Mide el round-trip de la app contra Race Control, no la
-                   latencia del piloto contra el servidor de carrera: el protocolo UDP de Assetto
-                   Corsa no transporta ese dato, así que sin la app no hay nada que mostrar y una
-                   columna de veinte "sin app" en rojo solo ocupa lugar. -->
-              <th class="num c-ping" title="Latencia de la app del piloto contra Race Control (no contra el servidor de AC)">Ping</th>
-              <th></th>
+              <th class="num" title="Velocidad instantánea. No requiere la app del piloto.">Velocidad</th>
+              <th class="num" title="Paradas en boxes completadas. Requiere la app del piloto.">Box Stops</th>
+              <th class="num" title="Combustible restante. Requiere la app del piloto.">Comb</th>
+              <th class="num" title="Cortes de pista sin justificar. Solo cuenta en clasificación y carrera.">Cuts</th>
+              <th class="num" title="Incidentes pendientes de revisar.">Insi</th>
+              <th class="c-actions">Acciones</th>
             </tr>
           </thead>
           <tbody id="cars-body"></tbody>
@@ -189,77 +129,25 @@
         </div>
       </div>
     </section>
-
-    <section class="card" id="card-map">
-      <h2>
-        Mapa en vivo
-        <span class="hint" id="map-hint"></span>
-      </h2>
-      <!-- Condiciones de la sesión. Viento y hora del juego NO están acá porque Assetto Corsa no
-           los expone por ningún canal (son campos de ACC): una columna que dijera siempre "--"
-           sería peor que no tenerla. -->
-      <div id="session-bar">
-        <div class="session-line">
-          <strong id="ses-track">--</strong>
-          <span id="ses-weather" class="muted"></span>
-        </div>
-        <div class="session-line">
-          <span id="ses-type" class="muted"></span>
-          <span id="ses-temps" class="muted"></span>
-        </div>
-        <div class="session-line"><span id="ses-grip" class="muted"></span></div>
-      </div>
-      <div id="map-host">
-        <canvas id="map-canvas"></canvas>
-        <div id="map-tooltip" hidden></div>
-        <div id="map-empty">
-          <span id="map-empty-text">Esperando telemetría del circuito.</span>
-          <div id="map-progress"><div></div></div>
-          <!-- El texto de abajo depende de si el circuito está en el catálogo: con catálogo no hay
-               nada que aprender y prometer un aprendizaje sería mentir; sin catálogo hay que
-               explicar la espera. Lo escribe `renderMapStatus`. -->
-          <span class="muted" id="map-empty-sub"></span>
-        </div>
-      </div>
-      <!-- Lectura del punto de la vuelta, para calibrar la zona de pit. Reglas manda a "mirar el
-           mapa mientras alguien maneja por boxes" y hasta ahora el mapa no mostraba el número que
-           hay que escribir ahí: era mirar un punto moverse y adivinar. Aparece solo con un auto
-           seleccionado, porque sin selección no hay de quién leer el valor. -->
-      <div id="map-readout" hidden>
-        <span class="label">Punto de la vuelta</span>
-        <span class="value" id="map-spline">--</span>
-        <span class="muted" id="map-zone-hint"></span>
-      </div>
-      <!-- La chapa del tipo de sesión va pegada al reloj y no arriba con el nombre, porque la
-           pregunta que contesta es la misma que el reloj: "¿esto que estoy mirando cuenta?". El
-           nombre que el admin le puso en el server_cfg puede decir cualquier cosa ("Tanda 3",
-           "Domingo"); la letra sale del tipo que declara el protocolo y no se puede renombrar. -->
-      <div id="session-clock">
-        <span class="chapa-sesion" id="ses-chip" hidden>--</span>
-        <span class="label" id="ses-clock-label">Restan</span>
-        <span class="value" id="ses-clock-value">--:--</span>
-      </div>
-    </section>
   </main>
 
-  <!-- =============================================================== vista: sanciones -->
-  <main id="view-sanciones" hidden>
-    <section class="card">
-      <h2>
-        Incidentes a revisar
-        <span class="hint">El motor los detecta; la sanción la aplicás vos.</span>
-      </h2>
-      <div class="table-wrap" id="incidents-list"></div>
-    </section>
+  <!-- Acá vivían la tarjeta del mapa en vivo, la torre de tiempos completa (posición, intervalo,
+       vueltas, últimas/mejor vuelta, neumáticos, ping) y las tarjetas sueltas de "Incidentes a
+       revisar" y "Sanciones aplicadas". Esta pantalla fusiona todo eso en la única tabla de
+       arriba y en el modal de abajo, para incrustarla en fslmanager.vercel.app. El panel
+       completo de la rama main conserva las cuatro cosas intactas. -->
 
-    <section class="card">
-      <h2>
-        Sanciones aplicadas
+  <!-- =============================================================== modal: sanciones aplicadas -->
+  <div class="modal-backdrop" id="modal-penalties" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-penalties-title">
+      <header>
+        <h2 id="modal-penalties-title">Sanciones aplicadas</h2>
         <!-- El informe baja del backend, no se arma acá: el panel no tiene por qué saber cómo se
              calcula una clasificación, y así el mismo archivo sale igual desde /api/report.csv. -->
         <a class="hint-action" id="btn-report" href="api/report.csv" download
            title="Planilla con la clasificación, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar informe de carrera</a>
-      </h2>
+        <button class="btn-close" data-close-modal aria-label="Cerrar">&times;</button>
+      </header>
       <div class="table-wrap">
         <table>
           <thead>
@@ -269,15 +157,15 @@
         </table>
         <p class="empty" id="penalties-empty">Sin sanciones todavía.</p>
       </div>
-    </section>
-  </main>
+    </div>
+  </div>
 
-  <!-- =============================================================== cajón: red -->
-  <div class="drawer-backdrop" id="drawer-network" hidden>
-    <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-network-title">
+  <!-- =============================================================== modal: conexión -->
+  <div class="modal-backdrop" id="modal-network" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-network-title">
       <header>
-        <h2 id="drawer-network-title">Conexión con el servidor</h2>
-        <button class="btn-close" data-close-drawer aria-label="Cerrar">&times;</button>
+        <h2 id="modal-network-title">Conexión con el servidor</h2>
+        <button class="btn-close" data-close-modal aria-label="Cerrar">&times;</button>
       </header>
 
       <!-- El manual va primero y el estado abajo. Quien abre este cajón por primera vez necesita
@@ -331,7 +219,7 @@
       </section>
 
       <!-- El modo vive entero acá: el interruptor y el aviso. En la barra de arriba no queda nada,
-           ni el control ni el cartel. Ver el comentario del encabezado en este mismo archivo. -->
+           ni el control ni el cartel. -->
       <section>
         <h3>Modo de funcionamiento</h3>
         <label class="mode-switch" id="mode-switch" title="En modo sombra el motor detecta y registra, pero no sanciona ni kickea de verdad.">
@@ -357,140 +245,158 @@
     </div>
   </div>
 
-  <!-- =============================================================== cajón: reglas -->
-  <div class="drawer-backdrop" id="drawer-rules" hidden>
-    <div class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-rules-title">
+  <!-- =============================================================== modal: reglas (con pestañas) -->
+  <div class="modal-backdrop" id="modal-rules" hidden>
+    <div class="modal modal-tabs" role="dialog" aria-modal="true" aria-labelledby="modal-rules-title">
       <header>
-        <h2 id="drawer-rules-title">Reglas</h2>
-        <button class="btn-close" data-close-drawer aria-label="Cerrar">&times;</button>
+        <h2 id="modal-rules-title">Reglas</h2>
+        <button class="btn-close" data-close-modal aria-label="Cerrar">&times;</button>
       </header>
 
-      <!-- Acá estaban los tres tipos de torneo de fábrica (casual / campeonato / estricto).
-           Se fueron en la 1.2: en cuanto el admin tocaba dos valores, el modo que figuraba
-           elegido ya no describía lo que estaba corriendo. Ahora la liga guarda sus propios
-           reglamentos, con el nombre que use para hablar de ellos. -->
-      <section>
-        <h3>Perfiles de carrera</h3>
-        <p class="muted">
-          Un perfil guarda <strong>todas las reglas de esta pantalla de una vez</strong>, con el
-          nombre que le pongas: "Endurance", "4Fun", lo que uses. Cargarlo las repone todas juntas.
-          No toca nada de la conexión ni del servidor.
-        </p>
-        <div class="row">
-          <label for="profile-select">Cargar un perfil</label>
-          <select id="profile-select"></select>
-        </div>
-        <div class="profile-actions">
-          <button class="secondary" id="btn-apply-profile">Cargar</button>
-          <button class="secondary peligro" id="btn-delete-profile">Borrar</button>
-        </div>
-        <div class="row">
-          <label for="profile-name">Guardar lo que está puesto como</label>
-          <input type="text" id="profile-name" maxlength="60" placeholder="Endurance" />
-        </div>
-        <button id="btn-save-profile">Guardar como perfil</button>
-        <p class="muted" id="profile-empty">Todavía no guardaste ningún perfil.</p>
-      </section>
+      <!-- Mismo contenido que el cajón de siempre, repartido en pestañas en vez de seguir una
+           abajo de la otra: adentro de un modal, seis secciones completas de un tirón se hacían
+           un scroll larguísimo. Los ids de cada campo no cambiaron, así que la lógica de `app.js`
+           que lee y guarda estos formularios sigue siendo la misma. -->
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab" role="tab" aria-selected="true" data-tab="perfiles">Perfiles</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="app">App pilotos</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="largada">Largada</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pista">Pista</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pit">Pit lane</button>
+      </div>
 
-      <section>
-        <h3>Qué se controla en pista</h3>
-        <p class="muted">
-          Para cada cosa decidís qué pasa cuando ocurre. <strong>Solo registrar</strong> la deja
-          anotada para el informe sin molestarte durante la carrera;
-          <strong>mandar a revisar</strong> la manda a la bandeja de sanciones.
-        </p>
-        <div id="infractions-list"></div>
-        <button id="btn-save-infractions" data-form="infractions">Guardar</button>
-      </section>
+      <div class="tab-panel" data-panel="perfiles">
+        <!-- Acá estaban los tres tipos de torneo de fábrica (casual / campeonato / estricto).
+             Se fueron en la 1.2: en cuanto el admin tocaba dos valores, el modo que figuraba
+             elegido ya no describía lo que estaba corriendo. Ahora la liga guarda sus propios
+             reglamentos, con el nombre que use para hablar de ellos. -->
+        <section>
+          <h3>Perfiles de carrera</h3>
+          <p class="muted">
+            Un perfil guarda <strong>todas las reglas de este modal de una vez</strong>, con el
+            nombre que le pongas: "Endurance", "4Fun", lo que uses. Cargarlo las repone todas
+            juntas. No toca nada de la conexión ni del servidor.
+          </p>
+          <div class="row">
+            <label for="profile-select">Cargar un perfil</label>
+            <select id="profile-select"></select>
+          </div>
+          <div class="profile-actions">
+            <button class="secondary" id="btn-apply-profile">Cargar</button>
+            <button class="secondary peligro" id="btn-delete-profile">Borrar</button>
+          </div>
+          <div class="row">
+            <label for="profile-name">Guardar lo que está puesto como</label>
+            <input type="text" id="profile-name" maxlength="60" placeholder="Endurance" />
+          </div>
+          <button id="btn-save-profile">Guardar como perfil</button>
+          <p class="muted" id="profile-empty">Todavía no guardaste ningún perfil.</p>
+        </section>
+      </div>
 
-      <section>
-        <h3>Largada (vuelta de formación)</h3>
-        <div class="row"><label for="f-threshold">Velocidad máxima (km/h)</label><input type="number" id="f-threshold" /></div>
-        <div class="row"><label for="f-tolerance">Tolerancia (s)</label><input type="number" id="f-tolerance" /></div>
-        <div class="row"><label for="f-grace">Vueltas para cumplirla</label><input type="number" id="f-grace" /></div>
-        <div class="row"><label for="f-penalty-type">Sanción</label>
-          <select id="f-penalty-type">
-            <option value="DT">Drive-Through (pasar por pits)</option>
-            <option value="SG">Stop-and-Go (parar en pits)</option>
-            <option value="BALLAST">Lastre (peso extra)</option>
-          </select>
-        </div>
-        <div class="row"><label for="f-escalation">Si no la cumple</label>
-          <select id="f-escalation">
-            <option value="DQ">Expulsar de la carrera</option>
-            <option value="TIME_PENALTY">Penalización de tiempo</option>
-          </select>
-        </div>
-        <button id="btn-save-formation" data-form="formation">Guardar</button>
-      </section>
+      <div class="tab-panel" data-panel="app" hidden>
+        <section>
+          <h3>App de los pilotos</h3>
+          <div class="row">
+            <label for="pr-enforce">Exigir que todos la tengan</label>
+            <input type="checkbox" id="pr-enforce" />
+          </div>
+          <div class="row">
+            <label for="pr-grace">Tiempo de espera antes de expulsar (s)</label>
+            <input type="number" id="pr-grace" min="10" />
+          </div>
+          <p class="muted">
+            Con esto activado, el piloto que entre sin la app instalada es expulsado del servidor
+            pasado ese tiempo. Desactivalo si querés dejar correr a pilotos sin la app: siguen
+            apareciendo en la tabla con posición, velocidad y paradas, y con guiones en
+            combustible, que es un dato que solo existe dentro del juego.
+          </p>
+          <button id="btn-save-presence" data-form="presence">Guardar</button>
+        </section>
+      </div>
 
-      <section>
-        <h3>Pit lane (durante la carrera)</h3>
-        <!-- La zona se calibra sola: cualquier piloto con la app instalada que pase por boxes le
-             enseña al motor dónde empieza y termina el pit lane de este circuito (ver
-             `track/pitZoneLearner.ts`). Los dos campos de abajo quedan como el ajuste manual — el
-             que corrige la calibración automática, o el único camino en un circuito donde todavía
-             nadie con la app pasó por boxes. -->
-        <div id="p-zone-suggestion" class="muted" hidden>
-          Calibración automática para este circuito: <span id="p-zone-suggestion-value"></span>.
-          <button type="button" id="btn-use-zone-suggestion" class="btn-mini">Usar esta calibración</button>
-        </div>
-        <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
-        <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
-        <p class="muted">
-          Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. El tramo
-          configurado se dibuja en ámbar sobre el mapa. Se ajusta solo en cuanto alguien con la app
-          pasa por boxes; estos dos campos son para corregirlo a mano o para un circuito donde
-          todavía no hay ninguna calibración. Para eso, hacé click en un auto en el mapa mientras
-          entra y sale de boxes, y copiá el "punto de la vuelta" que aparece debajo del mapa.
-        </p>
-        <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
-        <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
-        <div class="row"><label for="p-grace">Vueltas para cumplirla</label><input type="number" id="p-grace" /></div>
-        <div class="row"><label for="p-stopgo">Duración del Stop-and-Go (s)</label><input type="number" id="p-stopgo" /></div>
-        <div class="row"><label for="p-penalty-type">Sanción</label>
-          <select id="p-penalty-type">
-            <option value="DT">Drive-Through (pasar por pits)</option>
-            <option value="SG">Stop-and-Go (parar en pits)</option>
-            <option value="BALLAST">Lastre (peso extra)</option>
-          </select>
-        </div>
-        <div class="row"><label for="p-escalation">Si no la cumple</label>
-          <select id="p-escalation">
-            <option value="DQ">Expulsar de la carrera</option>
-            <option value="TIME_PENALTY">Penalización de tiempo</option>
-          </select>
-        </div>
-        <button id="btn-save-pit" data-form="pit">Guardar</button>
-      </section>
+      <div class="tab-panel" data-panel="largada" hidden>
+        <section>
+          <h3>Largada (vuelta de formación)</h3>
+          <div class="row"><label for="f-threshold">Velocidad máxima (km/h)</label><input type="number" id="f-threshold" /></div>
+          <div class="row"><label for="f-tolerance">Tolerancia (s)</label><input type="number" id="f-tolerance" /></div>
+          <div class="row"><label for="f-grace">Vueltas para cumplirla</label><input type="number" id="f-grace" /></div>
+          <div class="row"><label for="f-penalty-type">Sanción</label>
+            <select id="f-penalty-type">
+              <option value="DT">Drive-Through (pasar por pits)</option>
+              <option value="SG">Stop-and-Go (parar en pits)</option>
+              <option value="BALLAST">Lastre (peso extra)</option>
+            </select>
+          </div>
+          <div class="row"><label for="f-escalation">Si no la cumple</label>
+            <select id="f-escalation">
+              <option value="DQ">Expulsar de la carrera</option>
+              <option value="TIME_PENALTY">Penalización de tiempo</option>
+            </select>
+          </div>
+          <button id="btn-save-formation" data-form="formation">Guardar</button>
+        </section>
+      </div>
 
-      <section>
-        <h3>App de los pilotos</h3>
-        <div class="row">
-          <label for="pr-enforce">Exigir que todos la tengan</label>
-          <input type="checkbox" id="pr-enforce" />
-        </div>
-        <div class="row">
-          <label for="pr-grace">Tiempo de espera antes de expulsar (s)</label>
-          <input type="number" id="pr-grace" min="10" />
-        </div>
-        <p class="muted">
-          Con esto activado, el piloto que entre sin la app instalada es expulsado del servidor
-          pasado ese tiempo. Desactivalo si querés dejar correr a pilotos sin la app: siguen
-          apareciendo en la torre con posición, velocidad, vueltas y tiempos, y con guiones en
-          sectores, neumáticos y combustible, que son datos que solo existen dentro del juego.
-        </p>
-        <button id="btn-save-presence" data-form="presence">Guardar</button>
-      </section>
+      <div class="tab-panel" data-panel="pista" hidden>
+        <section>
+          <h3>Qué se controla en pista</h3>
+          <p class="muted">
+            Para cada cosa decidís qué pasa cuando ocurre. <strong>Solo registrar</strong> la deja
+            anotada para el informe sin molestarte durante la carrera;
+            <strong>mandar a revisar</strong> la manda a la bandeja de sanciones.
+          </p>
+          <div id="infractions-list"></div>
+          <button id="btn-save-infractions" data-form="infractions">Guardar</button>
+        </section>
+      </div>
 
-      <section>
-        <h3>Liga</h3>
-        <!-- Solo lectura: el nombre lo pone quien da el acceso, y el motor lo toma de ahí cada vez
-             que arranca. Un campo editable acá volvería solo al nombre viejo en el próximo
-             reinicio, que es la peor forma de no poder cambiar algo. -->
-        <div class="row"><label for="league-input">Nombre</label><input type="text" id="league-input" readonly /></div>
-        <p class="muted">Para cambiarlo, pedíselo a quien te dio el acceso.</p>
-      </section>
+      <div class="tab-panel" data-panel="pit" hidden>
+        <section>
+          <h3>Pit lane (durante la carrera)</h3>
+          <!-- La zona se calibra sola: cualquier piloto con la app instalada que pase por boxes le
+               enseña al motor dónde empieza y termina el pit lane de este circuito (ver
+               `track/pitZoneLearner.ts`). Los dos campos de abajo quedan como el ajuste manual — el
+               que corrige la calibración automática, o el único camino en un circuito donde todavía
+               nadie con la app pasó por boxes. -->
+          <div id="p-zone-suggestion" class="muted" hidden>
+            Calibración automática para este circuito: <span id="p-zone-suggestion-value"></span>.
+            <button type="button" id="btn-use-zone-suggestion" class="btn-mini">Usar esta calibración</button>
+          </div>
+          <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
+          <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
+          <p class="muted">
+            Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. Se ajusta
+            solo en cuanto alguien con la app pasa por boxes; estos dos campos son para corregirlo
+            a mano o para un circuito donde todavía no hay ninguna calibración. El panel completo
+            de Race Control (rama main) muestra ese punto sobre el mapa mientras un auto entra y
+            sale de boxes; desde esta pantalla se carga a mano con lo que haya informado el piloto.
+          </p>
+          <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
+          <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
+          <div class="row"><label for="p-grace">Vueltas para cumplirla</label><input type="number" id="p-grace" /></div>
+          <div class="row"><label for="p-stopgo">Duración del Stop-and-Go (s)</label><input type="number" id="p-stopgo" /></div>
+          <div class="row"><label for="p-penalty-type">Sanción</label>
+            <select id="p-penalty-type">
+              <option value="DT">Drive-Through (pasar por pits)</option>
+              <option value="SG">Stop-and-Go (parar en pits)</option>
+              <option value="BALLAST">Lastre (peso extra)</option>
+            </select>
+          </div>
+          <div class="row"><label for="p-escalation">Si no la cumple</label>
+            <select id="p-escalation">
+              <option value="DQ">Expulsar de la carrera</option>
+              <option value="TIME_PENALTY">Penalización de tiempo</option>
+            </select>
+          </div>
+          <button id="btn-save-pit" data-form="pit">Guardar</button>
+        </section>
+      </div>
+
+      <!-- Acá vivía la pestaña "Liga": un campo de solo lectura con el nombre, que ya administra
+           el portal. Esta pantalla no tiene portal propio —vive incrustada en fslmanager.vercel.app,
+           que ya sabe de qué liga se trata— así que no hay nada que mostrar acá. La rama main
+           conserva la pestaña. -->
     </div>
   </div>
 
