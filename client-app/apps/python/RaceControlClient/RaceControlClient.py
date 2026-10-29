@@ -100,6 +100,31 @@ Primer uso real en modo carrera completo, y dejo cuatro observaciones puntuales:
 
 ---
 
+MENSAJES Y LARGADA NO SE PUEDEN SACAR (desde la 1.7)
+
+Que al piloto sin la app lo expulsen no garantiza nada del piloto que SI la tiene instalada: si
+nunca activo "RC Mensajes" o "RC Largada" en el menu de Apps del juego, o las cerro una vez sin
+querer, corre la carrera sin ver ni los avisos de direccion de carrera ni el semaforo -- exactamente
+lo que la app existe para mostrarle.
+
+La API de Python de AC no tiene forma de impedir que una ventana se cierre (ver el punto anterior,
+el "Pin window" tampoco es de este script), pero si tiene las dos piezas para que cerrarla no sirva
+de nada:
+
+  - `ac.setVisible(window, 1)` apenas se crea la ventana en `acMain`, fuerza que aparezca sin
+    importar si el piloto la habia dejado apagada en una carrera anterior.
+  - `ac.addOnAppDismissedListener(window, callback)` avisa cuando AC la oculta, y el callback
+    (`onMensajesDismissed` / `onLargadaDismissed`) vuelve a llamar `ac.setVisible(window, 1)` en el
+    acto. El piloto la puede mover y redimensionar como siempre -- eso no pasa por este evento --
+    pero intentar sacarla la hace reaparecer de inmediato.
+
+Alcanza con las dos ventanas que informan algo que el piloto necesita saber en el momento. "RC
+Banderas" queda opcional (duplica el indicador de banderas del propio juego) y "RC Alerta" ya se
+dibuja vacia el 99% del tiempo -- forzarla visible solo pondria un marco rojo de la nada cuando no
+hay ningun problema que avisar.
+
+---
+
 Nota: corre dentro del interprete Python embebido de Assetto Corsa, que es Python 3.3 -- NO
 soporta f-strings (son de Python 3.6+). Por eso todo el formateo de texto usa .format()/% .
 Solo se usa stdlib (urllib, winsound, threading, mmap, ctypes), sin dependencias externas.
@@ -245,6 +270,16 @@ def ocultarChrome(window):
     ac.setIconPosition(window, 0, -10000)
 
 
+def onMensajesDismissed():
+    """Ver "MENSAJES Y LARGADA NO SE PUEDEN SACAR" en el encabezado: AC llama esto cuando el
+    piloto oculta "RC Mensajes", y la vuelve a mostrar en el acto."""
+    ac.setVisible(window_messages, 1)
+
+
+def onLargadaDismissed():
+    ac.setVisible(window_lights, 1)
+
+
 def posicionarVentanasDeFabrica(ventanas):
     """Les da a las ventanas una posicion de fabrica bien separada, pero SOLO la primera vez que
     la app corre en esta instalacion.
@@ -292,6 +327,9 @@ def acMain(ac_version):
     window_messages = ac.newApp("RC Mensajes")
     ac.setSize(window_messages, 460, 158)
     ocultarChrome(window_messages)
+    # Ver "MENSAJES Y LARGADA NO SE PUEDEN SACAR" en el encabezado del archivo.
+    ac.setVisible(window_messages, 1)
+    ac.addOnAppDismissedListener(window_messages, onMensajesDismissed)
 
     label_backend_status = ac.addLabel(window_messages, "Buscando servidor de Race Control...")
     ac.setPosition(label_backend_status, 6, 2)
@@ -328,6 +366,8 @@ def acMain(ac_version):
     window_lights = ac.newApp("RC Largada")
     ac.setSize(window_lights, LIGHTS_WINDOW_WIDTH, LIGHTS_WINDOW_HEIGHT)
     ocultarChrome(window_lights)
+    ac.setVisible(window_lights, 1)
+    ac.addOnAppDismissedListener(window_lights, onLargadaDismissed)
     ac.addRenderCallback(window_lights, renderLights)
 
     # Los dos renglones de la vuelta de formacion, debajo de las luces. Arrancan vacios -- ver
