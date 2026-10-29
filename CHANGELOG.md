@@ -3,6 +3,43 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.9] — 2026-10-29
+
+**Race Control deja de ser un portal aparte con login propio.** Esta versión fusiona Control de
+carrera y Sanciones en una sola pantalla pensada para vivir incrustada dentro del admin de la
+liga (fslmanager.vercel.app), no detrás de una dirección y una contraseña propias.
+
+### El panel completo no se podía "meter en un div"
+
+**Causa:** `app.js` asumía ser la página entera —`html,body{height:100%;overflow:hidden}`,
+overlays `position:fixed`, un router que hace `pushState` sobre la URL del host— y traía mapa en
+vivo y torre de tiempos detallada (velocidad, sectores, neumáticos), que no hacen falta para la
+tarea del día de carrera.
+
+**Decisión:** la raíz del dominio sirve, sin sesión ni CSRF, el panel de una liga puntual cuando la
+variable de entorno `RC_PUBLIC_LEAGUE` trae su slug (`server/src/portal/server.ts`). Es aditivo:
+sin la variable, el producto completo de siempre —login, selección de liga, mapa, torre de
+tiempos— sigue intacto. Control de carrera y Sanciones se fusionan en una sola tabla con fila
+expandible, y los cajones laterales (Conexión) pasan a ser modales, igual que Sanciones aplicadas
+y Reglas, para que las tres capas se abran y cierren igual. La paleta se acerca a la de
+fslmanager.vercel.app.
+
+### Cuatro arreglos puntuales de la revisión contra el admin real
+
+- La tabla de autos se rompía con el embed muy ancho: `table-layout: auto` reparte el ancho
+  sobrante mirando el contenido, y con la tabla vacía estiraba las columnas de cualquier manera.
+  Pasa a `fixed`, con un porcentaje de ancho fijo por columna.
+- La banda de "sin contacto con Race Control" se disparaba sola al cambiar de pestaña del
+  navegador o minimizar la ventana: el freno que los navegadores le ponen a los `setInterval` en
+  segundo plano atrasaba el poll más allá del umbral de tres segundos, y eso se leía como una
+  desconexión que nunca existió. Ahora se ignora mientras la pestaña está oculta y se resincroniza
+  apenas vuelve a primer plano.
+- El reloj de sesión mostraba minutos crudos de más de tres dígitos ("1277:21.41") cuando una
+  práctica quedaba corriendo mucho más de lo normal. Pasado el umbral de una hora pasa a mostrarse
+  en `HH:MM:SS`, y pasado el día, en "N día(s) + HH:MM:SS" — como un livetiming.
+- El modal de Reglas cambiaba de tamaño según la pestaña que estuviera activa; ahora tiene un alto
+  fijo, así que cambiar de pestaña no mueve el resto de la pantalla.
+
 ## [1.8] — 2026-10-28
 
 **Tercera tanda de la misma carrera de prueba, ahora del lado de la app del piloto** (`ui.json`
