@@ -124,6 +124,14 @@ POLL_INTERVAL_SECONDS = 1.0
 HEARTBEAT_INTERVAL_SECONDS = 2.0
 SHARED_MEMORY_INTERVAL_SECONDS = 0.25
 SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "green_green_green.wav")
+# Los otros tres avisos de la formacion, locutados por la misma voz que "green_green_green": arrancan
+# apenas el semaforo pasa a "formation" (01), y los otros dos se programan desde ESE instante -- no
+# uno despues del otro -- con `threading.Timer` (ver `startFormationAudioSequence`).
+ROLLING_START_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "rolling_start.wav")
+STAY_BEHIND_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "stay_behind.wav")
+NO_OVERTAKING_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "no_overtaking.wav")
+FORMATION_STAY_BEHIND_DELAY_SECONDS = 10.0
+FORMATION_NO_OVERTAKING_DELAY_SECONDS = 40.0
 # Marca en disco de que ya se pusieron las posiciones de fabrica de las ventanas (ver
 # `posicionarVentanasDeFabrica`). Vive al lado del script y no en una carpeta de AC porque es un
 # dato de la instalacion, no de una partida: tiene que sobrevivir a reinstalar el juego y no tiene
@@ -669,8 +677,15 @@ def pollLoop():
 
             if seq != last_seen_seq:
                 last_seen_seq = seq
-                if state == "green":
-                    playGreenGreenGreen()
+                if state == "formation":
+                    startFormationAudioSequence()
+                else:
+                    # Si el semaforo pasa a verde antes de los 40 s (el admin puede darlo cuando
+                    # quiera) o la largada se reinicia a mitad de formacion, lo que haya quedado
+                    # programado no tiene que sonar fuera de lugar.
+                    cancelFormationAudioSequence()
+                    if state == "green":
+                        playGreenGreenGreen()
         except Exception as e:
             # 401 es el unico error que el piloto puede arreglar solo, y el mensaje tiene que
             # decirle como: la credencial vence a las 24 h y se renueva al volver a entrar al
@@ -743,6 +758,36 @@ def playWav(path):
 
 def playGreenGreenGreen():
     playWav(SOUND_PATH)
+
+
+# Los `threading.Timer` pendientes de la formacion en curso. Python 3.3 no tiene asyncio: un Timer
+# es la unica forma de "sonar esto en N segundos" sin bloquear el hilo del juego. Van en una lista
+# aparte (no una variable sola) porque son dos al mismo tiempo, y los dos tienen que poder
+# cancelarse juntos si la largada se reinicia o el semaforo pasa a verde antes de los 40 s --
+# nada garantiza que la formacion dure eso: el admin puede dar verde cuando quiera.
+formation_audio_timers = []
+
+
+def cancelFormationAudioSequence():
+    global formation_audio_timers
+    for timer in formation_audio_timers:
+        timer.cancel()
+    formation_audio_timers = []
+
+
+def startFormationAudioSequence():
+    """Rolling start apenas arranca la formacion, stay behind a los 10 s y no overtaking a los
+    40 s -- los tres tiempos contados desde este instante, no uno despues del otro."""
+    cancelFormationAudioSequence()
+    playWav(ROLLING_START_SOUND_PATH)
+    stay_behind_timer = threading.Timer(FORMATION_STAY_BEHIND_DELAY_SECONDS, playWav, args=(STAY_BEHIND_SOUND_PATH,))
+    no_overtaking_timer = threading.Timer(FORMATION_NO_OVERTAKING_DELAY_SECONDS, playWav, args=(NO_OVERTAKING_SOUND_PATH,))
+    # Daemon: si el juego cierra con un timer todavia esperando, que no lo retenga.
+    stay_behind_timer.daemon = True
+    no_overtaking_timer.daemon = True
+    stay_behind_timer.start()
+    no_overtaking_timer.start()
+    formation_audio_timers = [stay_behind_timer, no_overtaking_timer]
 
 
 # =============================================================================================

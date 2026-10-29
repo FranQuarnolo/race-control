@@ -14,6 +14,9 @@ const sounds = path.join(root, "apps", "python", "RaceControlClient", "sounds");
 const esperados = [
   ["green_green_green.wav", "el audio de largada"],
   ["cut_warning.wav", "la chicharra del corte"],
+  ["rolling_start.wav", "el aviso de inicio de formación"],
+  ["stay_behind.wav", "el aviso de 'quedate detrás' a los 10 s de formación"],
+  ["no_overtaking.wav", "el aviso de 'prohibido adelantar' a los 40 s de formación"],
 ];
 for (const [archivo, que] of esperados) {
   const ruta = path.join(sounds, archivo);

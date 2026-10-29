@@ -1776,8 +1776,11 @@ function applyLightsClass() {
 // ===================================================================== indicador de sesión
 
 /** Mismos tipos que `labelForSessionType` en `session/sessionInfo.ts`, resumidos a una letra para
- * la chapa. El título completo (`session.typeLabel`) es el que de verdad explica qué sesión es. */
-const SESSION_SHORT_LABELS = { 0: "R", 1: "P", 2: "Q", 3: "C", 4: "H", 5: "TA", 6: "D", 7: "REP" };
+ * la chapa. El título completo (`session.typeLabel`) es el que de verdad explica qué sesión es.
+ * Carrera es "R" (de "race", como en cualquier livetiming) y no "C": "Q" de Clasificación ya
+ * seguía esa misma convención, así que "R" le hacía juego. Reserva pasa a "RES" para no empatarle
+ * la letra a Carrera. */
+const SESSION_SHORT_LABELS = { 0: "RES", 1: "P", 2: "Q", 3: "R", 4: "H", 5: "TA", 6: "D", 7: "REP" };
 
 /** `mm:ss.cc`, igual que un cronómetro de carrera, salvo que `ms` sea tan grande que ya no tenga
  * sentido mostrarlo así: una práctica que el servidor dejó corriendo horas (bug visto en
@@ -1811,12 +1814,14 @@ function renderSessionIndicator(session) {
   if (!session) {
     typeEl.textContent = "--";
     typeEl.title = "Esperando el primer aviso de sesión del servidor.";
+    delete typeEl.dataset.sessionType;
     clockEl.textContent = "--:--";
     clockEl.title = "";
     return;
   }
 
   typeEl.textContent = SESSION_SHORT_LABELS[session.sessionType] || "?";
+  typeEl.dataset.sessionType = session.sessionType;
   typeEl.title = session.typeLabel;
 
   if (session.remainingMs !== null) {
