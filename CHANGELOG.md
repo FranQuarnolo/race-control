@@ -3,6 +3,35 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.12] — 2026-10-29
+
+**La app del piloto obliga a mostrar "RC Mensajes" y "RC Largada", y el README se poda a lo
+esencial** (`ui.json` pasa de 1.6 a 1.7 — hace falta reinstalar el `.zip`).
+
+### Tener la app instalada no garantiza ver los avisos ni el semáforo
+
+**Síntoma:** expulsar a quien no tiene la app (ver versiones anteriores) no alcanza — un piloto que
+sí la tiene instalada puede no haber activado nunca "RC Mensajes" o "RC Largada" en el menú de Apps
+del juego, o haberlas cerrado sin querer, y corre la carrera sin ver ni los avisos de dirección de
+carrera ni el semáforo de largada.
+
+**Decisión:** `ac.setVisible(window, 1)` apenas se crean esas dos ventanas en `acMain`, para que
+aparezcan sin depender de lo que el piloto haya dejado en una carrera anterior, más
+`ac.addOnAppDismissedListener` en cada una para volver a mostrarlas en el acto si el piloto intenta
+cerrarlas — se pueden mover y redimensionar como siempre, pero no sacar de pantalla. Alcanza con
+Mensajes y Largada: "RC Banderas" duplica el indicador del propio juego y queda opcional, y "RC
+Alerta" ya se dibuja vacía el 99% del tiempo, forzarla solo pondría un marco rojo sin motivo. Ver el
+comentario "MENSAJES Y LARGADA NO SE PUEDEN SACAR" en el encabezado de `RaceControlClient.py`.
+
+### El README traía pasos de puesta en marcha que ya no hacen falta
+
+**Decisión del usuario:** se saca la sección "Cómo se usa" (el ticket al hosting, activar el modo
+sombra la primera vez) y "Para el admin: qué hay adentro del panel" — ese recorrido ahora vive en la
+propia página de administración donde el panel está incrustado, no en un README genérico. También
+se saca el aviso puntual de "si la instalaste antes de la 1.6, reinstalá" de la sección del piloto:
+cada versión que necesite reinstalación ya queda registrada acá, en el changelog. De paso, el
+nombre de la página de administración (fslmanager.vercel.app) pasa a ser un link.
+
 ## [1.11] — 2026-10-29
 
 **La tabla seguía rota después de la 1.10, el aviso de "auto en pista" mentía, y un reinicio de
