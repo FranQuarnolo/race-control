@@ -85,11 +85,11 @@ y una credencial por el chat del juego apenas entrás. 🎮
 Son transparentes y sin barra de título: en reposo casi no se ven. Para volver a agarrarlas,
 pasales el mouse por encima.
 
-> ⚠️ **Si la instalaste antes de la 1.5, reinstalala.** No hay actualización automática: sin
-> reinstalar no vas a escuchar los avisos de voz de la formación ("rolling start", "stay behind",
-> "no overtaking" y "green green green"), ni el contador de cortes, ni el aviso de credencial, y
-> vas a seguir viendo el cuadro verde durante la vuelta de formación. Arrastrá el `.zip` nuevo
-> igual que la primera vez: pisa lo anterior sin dejar restos.
+> ⚠️ **Si la instalaste antes de la 1.6, reinstalala.** Sin reinstalar, reiniciar la largada a
+> mitad de formación no te va a cancelar el "stay behind" ni el "no overtaking" que ya estaban
+> programados, y tampoco vas a tener forma de chequear qué versión tenés instalada (el `.zip`
+> nuevo trae un `VERSION.txt` adentro de la carpeta de la app). No hay actualización automática:
+> arrastrá el `.zip` nuevo igual que la primera vez, pisa lo anterior sin dejar restos.
 
 ## 🖥️ Para el admin: qué hay adentro del panel
 

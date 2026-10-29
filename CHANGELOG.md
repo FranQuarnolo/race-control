@@ -3,6 +3,75 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.11] — 2026-10-29
+
+**La tabla seguía rota después de la 1.10, el aviso de "auto en pista" mentía, y un reinicio de
+largada no cancelaba los avisos de voz ya programados** (`ui.json` pasa de 1.5 a 1.6 — hace falta
+reinstalar el `.zip`).
+
+### "Insi" y "Acciones" seguían superpuestos: el diagnóstico de la 1.10 estaba incompleto
+
+**Síntoma:** después de publicar el `overflow: hidden` de la 1.10, el usuario reportó el mismo
+problema con una captura nueva ("tabla.png"): la tabla seguía sin llegar al final del contenedor y
+"Insi"/"Acciones" seguían pisándose.
+
+**Causa real:** `.c-actions` (la clase de la celda con los dos botones de acción) ponía
+`display: flex` tanto en el `<td>` de cada fila como en el `<th>` del encabezado, que comparte la
+clase solo para heredar el ancho de columna. Un `<th>` con `display: flex` deja de participar como
+celda de verdad en `table-layout: fixed`: el navegador le calcula un ancho propio por contenido
+(38px en vez del 15% que le correspondía) e ignora el `width` declarado. El `overflow: hidden` de
+la 1.10 no tenía nada que recortar — el encabezado ya se dibujaba angosto y pegado contra "Insi",
+no desbordado. Se verificó con Playwright contra el sitio en vivo: midiendo el `getBoundingClientRect`
+de cada celda, el `<th>` medía 38px y el `<td>` de la misma columna 253px.
+
+**Decisión:** `display: flex` pasa a `td.c-actions` únicamente. El `<th>` vuelve a ser una celda de
+tabla normal y respeta el ancho de `#timing-table th:nth-child(9)` como el resto de las columnas.
+
+### "Esperando el primer auto en pista." se quedaba a la vista con autos ya en la tabla
+
+**Causa:** mismo bug de fondo que ya atrapó `#wizard-overlay[hidden]` en una rama anterior: `.empty`
+define `display: flex` sin un `.empty[hidden] { display: none; }` que lo pise, así que el
+`cars-empty.hidden = true` que pone `renderTiming` no alcanzaba para ocultar el aviso.
+
+**Decisión:** se agrega el seguro `.empty[hidden] { display: none; }`. De paso se blindó `.row`
+(usado por el campo nuevo de "Segundos de penalización", más abajo) con el mismo seguro antes de
+que hiciera falta.
+
+### Reiniciar la largada a mitad de formación no cancelaba "stay behind" ni "no overtaking"
+
+**Síntoma:** si el admin arrancaba la formación y la reiniciaba antes de los 10 o los 40 segundos,
+los avisos de voz sonaban igual, en el momento que les tocaba originalmente.
+
+**Causa:** a `startFormationAudioSequence()` le faltaba `global formation_audio_timers`. Sin esa
+declaración, la asignación final de la función creaba una variable local que se descartaba al
+volver — la lista global que lee `cancelFormationAudioSequence()` quedaba vacía para siempre
+después de la primera formación, y "cancelar" una lista vacía no cancela nada. Los `Timer` de
+verdad quedaban sueltos, sonando en su horario sin que nada los pudiera parar.
+
+**Decisión:** se agrega el `global` que faltaba.
+
+### El marco ámbar de foco se cortaba en los inputs de los modales
+
+**Causa:** `input:focus-visible, select:focus-visible` dibujaba el contorno hacia AFUERA del borde
+(`outline-offset: 0`). Un campo pegado al borde derecho de `.tab-panel` —que por el `overflow-y:
+auto` de esa clase termina recortando también en X, no solo en Y— se comía la mitad del marco.
+
+**Decisión:** `outline-offset: -2px`, el mismo criterio que ya usaba `.tab:focus-visible`: el
+contorno se dibuja hacia adentro y nunca lo recorta nada, sea cual sea el ancho del modal.
+
+### Otros tres pedidos sueltos
+
+- **La versión del panel** se muestra ahora pegada contra "Sanciones aplicadas", para saber de un
+  vistazo qué build corre sin tener que abrir Reglas.
+- **El `.zip` de la app del piloto** trae un `VERSION.txt` generado a partir de `ui.json` en el
+  momento de empaquetar (y se borra después, no queda como archivo suelto en git): un piloto que
+  pregunta "¿qué versión tengo?" lo puede chequear sin tener que contar reinstalaciones.
+- **"Penalización de tiempo" como escalado automático** (largada y pit lane) tenía el campo
+  `timePenaltySeconds` en el motor desde la 1.9 pero ningún lugar del panel para cargarlo —se
+  aplicaba siempre con el `?? 5` de respaldo del motor, sin que el admin pudiera cambiarlo. Ahora
+  aparece un campo "Segundos de penalización" en cuanto se elige esa opción, en las dos pestañas
+  (Largada y Pit lane).
+
 ## [1.10] — 2026-10-29
 
 **Tercera revisión de la pantalla fusionada contra el admin real, y la app del piloto suma voz a
