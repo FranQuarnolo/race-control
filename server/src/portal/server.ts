@@ -144,8 +144,11 @@ export function createPortal(config: PortalConfig): Portal {
     res.setHeader(
       "Content-Security-Policy",
       // `style-src 'unsafe-inline'` queda porque el panel escribe estilos desde JS; los scripts,
-      // que son los que importan, siguen restringidos a archivos propios.
-      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+      // que son los que importan, siguen restringidos a archivos propios. `fonts.googleapis.com` y
+      // `fonts.gstatic.com` se suman solo para Oswald/Chivo (la tipografía copiada de
+      // fslmanager.vercel.app, ver styles.css): sin esto el CSP corta la hoja de Google Fonts antes
+      // de que llegue el archivo de la tipografía.
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
     );
     if (config.secureCookies) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     next();

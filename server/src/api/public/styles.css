@@ -22,23 +22,31 @@
 
 :root {
   color-scheme: dark;
-  /* Más oscuro que la primera pasada: comparado contra fslmanager.vercel.app en vivo el fondo
-     quedaba más claro que el admin real. Si todavía no coincide pixel a pixel, el valor exacto
-     sale con el selector de color del inspector de esa página, acá fue a ojo sobre una captura. */
-  --bg: #0a0b10;
-  --panel: #12141c;
-  --panel-raised: #161925;
-  --panel-border: #232733;
-  --text: #e6e8ec;
-  --muted: #8b93a3;
-  --accent: #f0b429;
-  --green: #35c76e;
+  /* Valores leídos con el inspector contra una sesión real de fslmanager.vercel.app (ver
+     `CHANGELOG.md`), no a ojo sobre una captura como en la pasada anterior: --bg/--panel/--text
+     son sus tres niveles de fondo (página, tarjeta, campo hundido) y --accent/--muted/--green son
+     sus colores de texto, tal cual los devuelve `getComputedStyle`. */
+  --bg: #0f1116;
+  --panel: #191c22;
+  --panel-raised: #232730;
+  --panel-hover: color-mix(in srgb, var(--panel-raised), white 10%);
+  --panel-sunken: #14161b;
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --text: #e8d5a3;
+  --muted: #8a8d96;
+  --accent: #c9a84c;
+  --green: #4ade80;
   --yellow: #ef8e3c;
   --red: #e05555;
   --purple: #b47ff0;
   --blue: #4a90e2;
   --cyan: #3ecfc0;
-  --radius: 10px;
+  --radius: 12px;
+  /* Oswald para títulos, botones, pestañas y chapas (siempre en mayúscula); Chivo para el resto
+     del texto. El mismo par que usa fslmanager.vercel.app — ver el `<link>` de Google Fonts en
+     `index.html` y el CSP ampliado en `portal/server.ts` para dejarlo pasar. */
+  --font-display: "Oswald", sans-serif;
+  --font-body: "Chivo", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -50,7 +58,7 @@ html, body {
 }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
@@ -154,7 +162,7 @@ body.link-down #card-race {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   cursor: pointer;
-  font-family: inherit;
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 .status-button:hover { border-color: var(--accent); color: var(--accent); }
@@ -167,8 +175,8 @@ body.link-down #card-race {
 }
 /* El botón de conexión se pinta solo: verde si hay servidor confirmado y entra telemetría, rojo
    si falta algo. Es el estado que el admin necesita mirar de reojo. */
-.status-button.ok { border-color: rgba(53, 199, 110, 0.45); color: var(--green); }
-.status-button.ok .dot { background: var(--green); box-shadow: 0 0 7px rgba(53, 199, 110, 0.7); }
+.status-button.ok { border-color: rgba(74, 222, 128, 0.45); color: var(--green); }
+.status-button.ok .dot { background: var(--green); box-shadow: 0 0 7px rgba(74, 222, 128, 0.7); }
 .status-button.bad { border-color: rgba(224, 85, 85, 0.45); color: var(--red); }
 .status-button.bad .dot { background: var(--red); box-shadow: 0 0 7px rgba(224, 85, 85, 0.7); }
 
@@ -189,7 +197,7 @@ body.link-down #card-race {
 .mode-switch .mode-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
 .mode-switch.shadow { border-color: rgba(239, 142, 60, 0.45); }
 .mode-switch.shadow .mode-label { color: var(--yellow); }
-.mode-switch.live { border-color: rgba(53, 199, 110, 0.45); }
+.mode-switch.live { border-color: rgba(74, 222, 128, 0.45); }
 .mode-switch.live .mode-label { color: var(--green); }
 
 .mode-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -197,7 +205,7 @@ body.link-down #card-race {
   width: 36px;
   height: 20px;
   border-radius: 999px;
-  background: #3a3f4c;
+  background: var(--panel-raised);
   position: relative;
   transition: background 0.15s;
   flex: 0 0 auto;
@@ -254,16 +262,19 @@ main[hidden] { display: none; }
   left: 7px;
   width: 9px;
   height: 9px;
-  border-top: 1px solid rgba(240, 180, 41, 0.55);
-  border-left: 1px solid rgba(240, 180, 41, 0.55);
+  border-top: 1px solid rgba(201, 168, 76, 0.55);
+  border-left: 1px solid rgba(201, 168, 76, 0.55);
   pointer-events: none;
 }
 
 .card > h2 {
   font-size: 12px;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--muted);
+  /* El título de tarjeta de fslmanager va en dorado, no en gris apagado (`.tbl-ttl`, inspeccionado
+     en vivo) — acá era el único texto de cabecera que todavía quedaba con el tono de muted viejo. */
+  color: var(--accent);
   margin: 0 0 10px 0;
   display: flex;
   align-items: center;
@@ -326,20 +337,21 @@ main[hidden] { display: none; }
   width: 34px;
   height: 34px;
   border-radius: 7px;
-  background: rgba(240, 180, 41, 0.14);
-  border: 1px solid rgba(240, 180, 41, 0.4);
+  background: rgba(201, 168, 76, 0.14);
+  border: 1px solid rgba(201, 168, 76, 0.4);
   color: var(--accent);
   font-size: 15px;
   font-weight: 800;
+  font-family: var(--font-display);
   letter-spacing: 0.02em;
 }
-.session-type[data-session-type="0"] { background: rgba(139, 147, 163, 0.14); border-color: rgba(139, 147, 163, 0.4); color: var(--muted); } /* Reserva */
+.session-type[data-session-type="0"] { background: rgba(138, 141, 150, 0.14); border-color: rgba(138, 141, 150, 0.4); color: var(--muted); } /* Reserva */
 .session-type[data-session-type="2"] { background: rgba(180, 127, 240, 0.14); border-color: rgba(180, 127, 240, 0.4); color: var(--purple); } /* Clasificación */
 .session-type[data-session-type="3"] { background: rgba(224, 85, 85, 0.14); border-color: rgba(224, 85, 85, 0.4); color: var(--red); } /* Carrera */
 .session-type[data-session-type="4"] { background: rgba(74, 144, 226, 0.14); border-color: rgba(74, 144, 226, 0.4); color: var(--blue); } /* Hotlap */
 .session-type[data-session-type="5"] { background: rgba(239, 142, 60, 0.14); border-color: rgba(239, 142, 60, 0.4); color: var(--yellow); } /* Time attack */
 .session-type[data-session-type="6"] { background: rgba(62, 207, 192, 0.14); border-color: rgba(62, 207, 192, 0.4); color: var(--cyan); } /* Deriva */
-.session-type[data-session-type="7"] { background: rgba(139, 147, 163, 0.14); border-color: rgba(139, 147, 163, 0.4); color: var(--muted); } /* Repetición */
+.session-type[data-session-type="7"] { background: rgba(138, 141, 150, 0.14); border-color: rgba(138, 141, 150, 0.4); color: var(--muted); } /* Repetición */
 .session-clock {
   font-size: 19px;
   font-weight: 700;
@@ -363,7 +375,7 @@ main[hidden] { display: none; }
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #2a2f3a;
+  background: var(--panel-raised);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 .lights.formation .light {
@@ -373,7 +385,7 @@ main[hidden] { display: none; }
 }
 .lights.green .light {
   background: var(--green);
-  box-shadow: 0 0 10px rgba(53, 199, 110, 0.8);
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
 }
 @keyframes light-blink {
   50% { opacity: 0.2; }
@@ -388,15 +400,16 @@ main[hidden] { display: none; }
 .semaforo {
   font-size: 11px;
   font-weight: 700;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 4px 10px;
   border-radius: 999px;
   white-space: nowrap;
 }
-.semaforo.idle { background: #1d2029; color: var(--muted); }
+.semaforo.idle { background: var(--panel-raised); color: var(--muted); }
 .semaforo.formation { background: rgba(239, 142, 60, 0.15); color: var(--yellow); }
-.semaforo.green { background: rgba(53, 199, 110, 0.18); color: var(--green); }
+.semaforo.green { background: rgba(74, 222, 128, 0.18); color: var(--green); }
 
 .start-controls {
   display: flex;
@@ -406,6 +419,7 @@ main[hidden] { display: none; }
 }
 .start-controls h2 {
   font-size: 12px;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
@@ -428,6 +442,7 @@ main[hidden] { display: none; }
   color: var(--green);
   font-size: 13px;
   font-weight: 700;
+  font-family: var(--font-display);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -441,8 +456,8 @@ main[hidden] { display: none; }
   animation: race-pulse 1.5s ease-in-out infinite;
 }
 @keyframes race-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(53, 199, 110, 0.55); }
-  60% { box-shadow: 0 0 0 8px rgba(53, 199, 110, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
+  60% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
   .race-live .dot { animation: none; }
@@ -452,17 +467,19 @@ main[hidden] { display: none; }
 
 button {
   background: var(--accent);
-  color: #1d1400;
+  color: var(--bg);
   border: none;
   border-radius: 7px;
   padding: 8px 14px;
   font-weight: 600;
   cursor: pointer;
   font-size: 13px;
-  font-family: inherit;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
-button.secondary { background: #2a2f3a; color: var(--text); }
-button.danger { background: var(--red); color: #1a0505; }
+button.secondary { background: var(--panel-raised); color: var(--text); }
+button.danger { background: var(--red); color: var(--bg); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -471,7 +488,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
    lo vuelve a dejar como estaba, el botón se apaga solo. */
 button.saved,
 button.saved:disabled {
-  background: rgba(53, 199, 110, 0.18);
+  background: rgba(74, 222, 128, 0.18);
   color: var(--green);
   opacity: 1;
   cursor: default;
@@ -495,8 +512,8 @@ button.saved:disabled {
 .chapa-sin-app {
   text-transform: none;
   letter-spacing: 0;
-  background: rgba(139, 147, 163, 0.14);
-  border: 1px solid rgba(139, 147, 163, 0.4);
+  background: rgba(138, 141, 150, 0.14);
+  border: 1px solid rgba(138, 141, 150, 0.4);
   color: var(--muted);
   border-radius: 7px;
   padding: 3px 9px;
@@ -505,7 +522,7 @@ button.saved:disabled {
   white-space: nowrap;
   cursor: pointer;
 }
-.chapa-sin-app:hover { background: rgba(139, 147, 163, 0.24); color: var(--text); }
+.chapa-sin-app:hover { background: rgba(138, 141, 150, 0.24); color: var(--text); }
 .chapa-sin-app[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- tablas */
@@ -525,6 +542,7 @@ th {
   color: var(--muted);
   font-weight: 500;
   font-size: 11px;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   position: sticky;
@@ -562,26 +580,29 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
   white-space: nowrap;
 }
-.badge.ok { background: rgba(53, 199, 110, 0.15); color: var(--green); }
+.badge.ok { background: rgba(74, 222, 128, 0.15); color: var(--green); }
 .badge.warn { background: rgba(239, 142, 60, 0.15); color: var(--yellow); }
 .badge.bad { background: rgba(224, 85, 85, 0.15); color: var(--red); }
-.badge.neutral { background: rgba(139, 147, 163, 0.15); color: var(--muted); }
+.badge.neutral { background: rgba(138, 141, 150, 0.15); color: var(--muted); }
 
 .btn-mini {
-  background: #2a2f3a;
+  background: var(--panel-raised);
   color: var(--muted);
   border-radius: 6px;
   padding: 3px 9px;
   font-size: 12px;
   font-weight: 600;
 }
-.btn-mini:hover { background: #343a47; color: var(--text); }
+.btn-mini:hover { background: var(--panel-hover); color: var(--text); }
 /* Segundo paso de todo lo que no se deshace: el botón cambia de texto y de color, y se desarma
    solo a los 4 s. Lo usan el kick, aplicar una sanción y anularla — las tres cosas que le llegan
    al piloto en el acto y no pueden salir de un click fallido en una tabla que se mueve sola. */
-.btn-mini.arming { background: var(--red); color: #1a0505; }
+.btn-mini.arming { background: var(--red); color: var(--bg); }
 
 /* ---------------------------------------------------------------- menú de fila (⋮) y detalle (▾) */
 
@@ -605,7 +626,7 @@ td.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: 
   padding: 0;
   position: relative;
 }
-.btn-expand:hover, .btn-expand[aria-expanded="true"] { background: #343a47; color: var(--text); }
+.btn-expand:hover, .btn-expand[aria-expanded="true"] { background: var(--panel-hover); color: var(--text); }
 /* Punto ámbar cuando este piloto tiene incidentes sin revisar: con la fila cerrada es lo único
    que queda a la vista de que hay una decisión pendiente ahí adentro. */
 .btn-expand.has-pending::after {
@@ -633,7 +654,7 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
   padding: 0;
   position: relative;
 }
-.btn-kebab:hover, .btn-kebab[aria-expanded="true"] { background: #343a47; color: var(--text); }
+.btn-kebab:hover, .btn-kebab[aria-expanded="true"] { background: var(--panel-hover); color: var(--text); }
 /* Punto rojo cuando hay un kick a medio confirmar: con el menú cerrado es lo único que queda a
    la vista de que un segundo click expulsa a alguien. */
 .btn-kebab.arming::after {
@@ -671,11 +692,11 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
   font-weight: 500;
   white-space: nowrap;
 }
-.menu-item:hover { background: #343a47; }
+.menu-item:hover { background: var(--panel-hover); }
 .menu-item.peligro { color: var(--red); }
 .menu-item.peligro:hover { background: rgba(224, 85, 85, 0.14); }
 /* Segundo paso, igual que en `.btn-mini.arming`: el ítem cambia de texto y se pinta entero. */
-.menu-item.arming, .menu-item.arming:hover { background: var(--red); color: #1a0505; font-weight: 700; }
+.menu-item.arming, .menu-item.arming:hover { background: var(--red); color: var(--bg); font-weight: 700; }
 
 /* ---------------------------------------------------------------- torre de tiempos */
 
@@ -764,7 +785,7 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
 
 /* Fila de quien está en el pit lane ahora. El tinte vale más que la columna: se ve de un vistazo
    quién está parado sin leer número por número. */
-tbody tr.in-pit { background: rgba(240, 180, 41, 0.07); }
+tbody tr.in-pit { background: rgba(201, 168, 76, 0.07); }
 
 /* Auto cuya telemetría se congeló: el backend lo marca con `telemetryStale` cuando pasaron más de
    dos segundos sin un CAR_UPDATE suyo. Pasa cuando el piloto crashea el juego, pierde la red o se
@@ -805,7 +826,7 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
    sanción (`.penalty-form`) de siempre, ahora anidados adentro de la torre en vez de al costado.
 */
 .car-detail-row td {
-  background: #14161c;
+  background: var(--panel-sunken);
   padding: 0;
 }
 .car-detail { padding: 10px 14px 14px 14px; }
@@ -839,7 +860,7 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
 }
 .penalty-form select,
 .penalty-form input.seconds {
-  background: #0c0e12;
+  background: var(--panel-sunken);
   color: var(--text);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
@@ -921,6 +942,7 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 700;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -1026,7 +1048,7 @@ ol.pasos button { margin-top: 2px; }
   height: 20px;
   margin: 0;
   border-radius: 999px;
-  background: #3a3f4c;
+  background: var(--panel-raised);
   cursor: pointer;
   flex: 0 0 auto;
 }
@@ -1046,7 +1068,7 @@ ol.pasos button { margin-top: 2px; }
 .row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 input[type="number"], input[type="text"], select {
-  background: #0c0e12;
+  background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   color: var(--text);
   border-radius: 6px;
@@ -1068,7 +1090,7 @@ input[type="number"], input[type="text"], select {
 input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 pre.snippet {
-  background: #0c0e12;
+  background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
   padding: 10px;

@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Race Control</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <!-- Oswald + Chivo: el mismo par de fslmanager.vercel.app (ver el comentario de `--font-display`
+       en styles.css). El CSP del portal (`portal/server.ts`) tiene que dejar pasar estos dos
+       dominios o la hoja de estilos de Google Fonts ni siquiera llega a descargarse. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Chivo:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
