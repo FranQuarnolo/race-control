@@ -45,6 +45,15 @@ function limpiarPycache(dir) {
 }
 limpiarPycache(path.join(root, "apps"));
 
+// El pilote no tiene forma de saber qué versión tiene instalada salvo que algo adentro del .zip se
+// lo diga: ni Content Manager ni el juego lo muestran. Se genera a partir de `ui.json` (la fuente
+// de verdad de la versión del cliente) para que nunca queden desincronizados, y se borra apenas
+// termina de comprimir para no dejarlo como un archivo suelto en el árbol de git.
+const appDir = path.join(root, "apps", "python", "RaceControlClient");
+const uiJson = JSON.parse(fs.readFileSync(path.join(appDir, "ui.json"), "utf8"));
+const versionTxtPath = path.join(appDir, "VERSION.txt");
+fs.writeFileSync(versionTxtPath, uiJson.version + "\n", "utf8");
+
 const releaseDir = path.join(root, "release");
 fs.mkdirSync(releaseDir, { recursive: true });
 const zipPath = path.join(releaseDir, "RaceControlClient.zip");
@@ -57,5 +66,7 @@ execFileSync(
   ["-NoProfile", "-Command", `Compress-Archive -Path '${path.join(root, "apps")}' -DestinationPath '${zipPath}'`],
   { stdio: "inherit" }
 );
+
+fs.rmSync(versionTxtPath);
 
 console.log(`Listo: ${zipPath}`);

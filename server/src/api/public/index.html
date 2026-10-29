@@ -11,8 +11,10 @@
   <!-- Esta pantalla vive incrustada dentro de fslmanager.vercel.app: no hay marca, nombre de
        liga, bandera ni sesión que cerrar, porque todo eso ya lo resuelve la página que la
        contiene. Lo único que queda de la barra de siempre son dos controles flotantes,
-       repartidos a los costados para no taparle nada a la página anfitriona. El panel completo
-       con el encabezado de marca sigue intacto en la rama main. -->
+       repartidos a los costados para no taparle nada a la página anfitriona, más la versión del
+       panel pegada contra "Sanciones aplicadas" para saber de un vistazo qué build corre sin
+       tener que abrir Reglas. El panel completo con el encabezado de marca sigue intacto en la
+       rama main. -->
   <div class="floating floating-left">
     <button class="status-button" id="btn-network" aria-haspopup="dialog">
       <span class="dot" aria-hidden="true"></span>
@@ -21,6 +23,7 @@
   </div>
 
   <div class="floating floating-right">
+    <span class="version-tag" id="panel-version"></span>
     <button class="status-button" id="btn-penalties" aria-haspopup="dialog">Sanciones aplicadas</button>
     <button class="status-button" id="btn-rules" aria-haspopup="dialog">Reglas</button>
   </div>
@@ -334,6 +337,10 @@
               <option value="TIME_PENALTY">Penalización de tiempo</option>
             </select>
           </div>
+          <div class="row" id="f-time-penalty-row" hidden>
+            <label for="f-time-penalty">Segundos de penalización</label>
+            <input type="number" min="1" max="600" id="f-time-penalty" />
+          </div>
           <button id="btn-save-formation" data-form="formation">Guardar</button>
         </section>
       </div>
@@ -388,6 +395,10 @@
               <option value="DQ">Expulsar de la carrera</option>
               <option value="TIME_PENALTY">Penalización de tiempo</option>
             </select>
+          </div>
+          <div class="row" id="p-time-penalty-row" hidden>
+            <label for="p-time-penalty">Segundos de penalización</label>
+            <input type="number" min="1" max="600" id="p-time-penalty" />
           </div>
           <button id="btn-save-pit" data-form="pit">Guardar</button>
         </section>

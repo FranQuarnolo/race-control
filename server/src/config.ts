@@ -127,6 +127,7 @@ function defaultPenalty(): PenaltyRules {
     penaltyType: "DT",
     escalation: "DQ",
     ballastKg: 50,
+    timePenaltySeconds: 5,
   };
 }
 
@@ -228,6 +229,11 @@ function validatePenalty(rules: PenaltyRules): void {
   if (rules.escalation !== "DQ" && rules.escalation !== "TIME_PENALTY") {
     rules.escalation = "DQ";
   }
+  // El 5 de respaldo es el mismo que ya usaba `PenaltyEngine.issuePenalty` cuando este campo no
+  // existía: antes de este campo en el panel, cualquier escalado a tiempo quedaba fijo en 5 s sin
+  // que el admin pudiera cambiarlo. Ahora el campo manda, y 5 solo sigue siendo lo que se guarda
+  // si el admin nunca lo tocó o mandó algo inválido.
+  rules.timePenaltySeconds = clampPositive(rules.timePenaltySeconds, 5);
 }
 
 /** Acepta IPv4/IPv6/hostname a ojo. No resuelve DNS: es validación de forma, para que un campo

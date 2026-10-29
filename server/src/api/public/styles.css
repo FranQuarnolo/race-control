@@ -130,6 +130,16 @@ body.link-down #card-race {
 .floating-left { left: 2.5%; }
 .floating-right { right: 2.5%; }
 
+.version-tag {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .status-button {
   display: flex;
   align-items: center;
@@ -536,6 +546,11 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
   font-size: 13px;
   padding: 28px 6px;
 }
+/* Mismo bug que ya documenta `#wizard-overlay` más abajo: sin esto, el `display: flex` de arriba le
+   gana a la regla nativa del navegador para `[hidden]`, y "Esperando el primer auto en pista." se
+   quedaba a la vista con autos ya en la tabla porque `cars-empty.hidden = true` no alcanzaba para
+   ocultarlo. */
+.empty[hidden] { display: none; }
 
 /* El ícono solo lo usa la torre: es el estado que más tiempo pasa vacío, a la espera del primer
    auto, y antes era un renglón de texto solo que se perdía arriba de una tabla sin filas. */
@@ -570,7 +585,14 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- menú de fila (⋮) y detalle (▾) */
 
-.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
+/* Solo la celda del cuerpo necesita ser flex para alinear los dos botones: el `<th>` comparte esta
+   misma clase únicamente para heredar el ancho de columna (ver `#timing-table th:nth-child(9)`), y
+   si también se vuelve `display: flex` deja de participar como celda de tabla en `table-layout:
+   fixed` — el navegador le calcula un ancho propio por contenido (bastante menor al de la columna)
+   en vez de respetar el `width` declarado, y "Acciones" termina angosto y pegado contra "Insi" (el
+   bug de "tabla.png"). El `<td>` de cada fila no tenía este problema porque nunca definía su propio
+   `width`, así que no había nada que perder. */
+td.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
 
 .btn-expand {
   background: transparent;
@@ -982,6 +1004,10 @@ ol.pasos button { margin-top: 2px; }
 .btn-close:hover { color: var(--text); }
 
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+/* Mismo bug que `.empty[hidden]` y `#wizard-overlay[hidden]`: sin esto el `display: flex` de arriba
+   le gana a la regla nativa del navegador para `[hidden]`, y el renglón de segundos de penalización
+   quedaría a la vista aunque la sanción elegida no sea "Penalización de tiempo". */
+.row[hidden] { display: none; }
 .row > label { font-size: 13px; color: var(--muted); }
 .row > span { font-size: 13px; text-align: right; }
 .row span.bad { color: var(--red); font-weight: 600; }
@@ -1035,7 +1061,11 @@ input[type="number"], input[type="text"], select {
 .modal input.wide { width: 230px; }
 .modal .row { align-items: baseline; }
 .modal .row > label { flex: 1 1 auto; }
-input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+/* `outline-offset` negativo, no 0: un input pegado al borde derecho de `.tab-panel` (que por el
+   `overflow-y: auto` de la 925 termina recortando también en X, truco del spec para quien pone solo
+   un eje) se comía la mitad del marco ámbar si el contorno se dibujaba hacia AFUERA del borde. Hacia
+   adentro nunca se recorta, sea cual sea el ancho del modal. Mismo criterio que ya usa `.tab` arriba. */
+input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 pre.snippet {
   background: #0c0e12;

@@ -269,7 +269,7 @@ function setupForms() {
   registerForm(
     "formation",
     "btn-save-formation",
-    ["f-threshold", "f-tolerance", "f-grace", "f-penalty-type", "f-escalation"],
+    ["f-threshold", "f-tolerance", "f-grace", "f-penalty-type", "f-escalation", "f-time-penalty"],
     () => ({
       formation: {
         penalty: {
@@ -278,15 +278,21 @@ function setupForms() {
           graceLaps: num("f-grace"),
           penaltyType: $("f-penalty-type").value,
           escalation: $("f-escalation").value,
+          timePenaltySeconds: num("f-time-penalty"),
         },
       },
     })
   );
+  // El campo de segundos solo tiene sentido con "Penalización de tiempo" elegida: el resto del
+  // tiempo queda oculto, no deshabilitado, para no mandar un número que no se va a usar.
+  $("f-escalation").addEventListener("change", () => {
+    $("f-time-penalty-row").hidden = $("f-escalation").value !== "TIME_PENALTY";
+  });
 
   registerForm(
     "pit",
     "btn-save-pit",
-    ["p-zone-start", "p-zone-end", "p-threshold", "p-tolerance", "p-grace", "p-stopgo", "p-penalty-type", "p-escalation"],
+    ["p-zone-start", "p-zone-end", "p-threshold", "p-tolerance", "p-grace", "p-stopgo", "p-penalty-type", "p-escalation", "p-time-penalty"],
     () => ({
       pit: {
         zone: { splineStart: num("p-zone-start"), splineEnd: num("p-zone-end") },
@@ -297,10 +303,14 @@ function setupForms() {
           graceLaps: num("p-grace"),
           penaltyType: $("p-penalty-type").value,
           escalation: $("p-escalation").value,
+          timePenaltySeconds: num("p-time-penalty"),
         },
       },
     })
   );
+  $("p-escalation").addEventListener("change", () => {
+    $("p-time-penalty-row").hidden = $("p-escalation").value !== "TIME_PENALTY";
+  });
 
   // El botón de la sugerencia no es parte del form "pit": copia los valores aprendidos a los dos
   // campos manuales y dispara el guardado de siempre, para que la calibración automática pase por
@@ -613,6 +623,8 @@ function fillConfigForm(config) {
   $("f-grace").value = config.formation.penalty.graceLaps;
   $("f-penalty-type").value = config.formation.penalty.penaltyType;
   $("f-escalation").value = config.formation.penalty.escalation;
+  $("f-time-penalty").value = config.formation.penalty.timePenaltySeconds ?? 5;
+  $("f-time-penalty-row").hidden = config.formation.penalty.escalation !== "TIME_PENALTY";
 
   $("p-zone-start").value = config.pit.zone.splineStart;
   $("p-zone-end").value = config.pit.zone.splineEnd;
@@ -622,6 +634,8 @@ function fillConfigForm(config) {
   $("p-stopgo").value = config.pit.stopGoSeconds;
   $("p-penalty-type").value = config.pit.penalty.penaltyType;
   $("p-escalation").value = config.pit.penalty.escalation;
+  $("p-time-penalty").value = config.pit.penalty.timePenaltySeconds ?? 5;
+  $("p-time-penalty-row").hidden = config.pit.penalty.escalation !== "TIME_PENALTY";
 
   for (const type of Object.keys(INFRACTION_UI)) {
     const rule = config.infractions[type];
@@ -1946,10 +1960,12 @@ async function refresh() {
   renderLinkState();
   lastState = state;
 
-  // La chapa de marca, el nombre de la liga y la versión se fueron del encabezado con el resto del
-  // header: esta pantalla vive incrustada en fslmanager.vercel.app, que ya tiene los tres. El
-  // asistente de primer arranque sigue necesitando el nombre, así que esa línea queda.
+  // La chapa de marca y el nombre de la liga se fueron del encabezado con el resto del header:
+  // esta pantalla vive incrustada en fslmanager.vercel.app, que ya tiene los dos. El asistente de
+  // primer arranque sigue necesitando el nombre, así que esa línea queda. La versión sí se pidió
+  // de vuelta, pegada contra "Sanciones aplicadas".
   $("wizard-name").textContent = state.leagueName || "tu liga";
+  $("panel-version").textContent = state.version ? "v" + state.version : "";
 
   // El asistente lo abre el servidor (no hay liga guardada) y lo cierra el usuario al terminarlo.
   // Se decide una sola vez y no en cada poll: si no, un cambio de `firstRun` a mitad de camino lo

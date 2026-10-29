@@ -778,6 +778,11 @@ def cancelFormationAudioSequence():
 def startFormationAudioSequence():
     """Rolling start apenas arranca la formacion, stay behind a los 10 s y no overtaking a los
     40 s -- los tres tiempos contados desde este instante, no uno despues del otro."""
+    # Sin este `global` la asignacion de mas abajo crea una variable local: la lista de arriba
+    # (la que lee `cancelFormationAudioSequence`) se queda vacia para siempre despues de la
+    # primera formacion, y reiniciar la largada "cancela" una lista sin nada adentro. Los timers
+    # de verdad quedan sueltos sonando igual.
+    global formation_audio_timers
     cancelFormationAudioSequence()
     playWav(ROLLING_START_SOUND_PATH)
     stay_behind_timer = threading.Timer(FORMATION_STAY_BEHIND_DELAY_SECONDS, playWav, args=(STAY_BEHIND_SOUND_PATH,))
