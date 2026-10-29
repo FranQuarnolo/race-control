@@ -3,6 +3,31 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.13] — 2026-10-29
+
+**El panel copia la paleta y la tipografía de fslmanager.vercel.app tal cual salen del inspector, y
+el README linkea el panel en producción.**
+
+### "Tomada de fslmanager" en el comentario, pero a ojo sobre una captura
+
+**Síntoma:** desde la 1.11 el `:root` de `styles.css` ya decía inspirarse en fslmanager.vercel.app,
+pero el propio comentario admitía que el ajuste había sido a ojo sobre una captura — y se notaba: el
+fondo quedaba más plano y los colores más claros y saturados que el admin real, y la tipografía era
+la del sistema en vez de la condensada en mayúscula que usa esa página.
+
+**Decisión:** con una sesión real en fslmanager.vercel.app se extrajeron los valores con el
+inspector (`getComputedStyle` y las variables `--carbon`/`--gold`/`--gl`/etc. de sus propias hojas de
+estilo) en vez de aproximar por captura: fondo `#0f1116`, tarjeta `#191c22`, campo hundido `#14161b`,
+texto `#e8d5a3`, acento `#c9a84c`, verde `#4ade80`, borde `rgba(255,255,255,.06)` y radio `12px` —
+más Oswald (títulos, botones, chapas y pestañas, siempre en mayúscula) y Chivo (el resto del texto),
+el mismo par que usa esa página. Sumar Google Fonts obligó a ampliar el `Content-Security-Policy` del
+portal (`style-src`/`font-src`) para `fonts.googleapis.com` y `fonts.gstatic.com`, que antes no
+estaban permitidos y hubiesen cortado la tipografía en silencio.
+
+### El README no decía dónde vive el panel en producción
+
+**Decisión del usuario:** se agrega el link a `https://race-control.fly.dev/` debajo del título.
+
 ## [1.12] — 2026-10-29
 
 **La app del piloto obliga a mostrar "RC Mensajes" y "RC Largada", y el README se poda a lo
