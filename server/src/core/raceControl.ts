@@ -835,6 +835,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       const car = carId === undefined ? undefined : stateTracker.get(carId);
       if (car) pitZoneLearner.observe(trackKey, car.normalizedSplinePosition);
     },
+    getFormationSpeedLimitKmh: () => config.formation.penalty.speedThresholdKmh,
     verifyToken: (token) => pilotTokens.verify(token),
     /**
      * El estado permanente del piloto: su cuenta de cortes y lo que debe.

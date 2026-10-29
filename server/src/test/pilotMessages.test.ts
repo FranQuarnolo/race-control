@@ -72,6 +72,7 @@ function deps(board: PilotMessageBoard, guidAcreditado: string | null) {
     onHeartbeat: () => {},
     onSurfaceGrip: () => {},
     onPitLaneSample: () => {},
+    getFormationSpeedLimitKmh: () => 80,
     verifyToken: () => guidAcreditado,
     // El estado permanente del piloto: acá devuelve siempre lo mismo porque lo que se prueba es
     // el reparto de la cola de avisos, no el contador. Su cálculo real se prueba en
@@ -92,6 +93,7 @@ async function pedir(board: PilotMessageBoard, guidAcreditado: string | null, qu
     return (await res.json()) as {
       messages: Array<{ seq: number; text: string }>;
       status: { cuts: number; cutsLimit: number; penalty: string | null };
+      formationSpeedLimitKmh: number;
     };
   } finally {
     server.close();
@@ -147,4 +149,9 @@ test("el estado del piloto viaja en cada poll, aunque no haya ningún aviso nuev
 test("un poll sin `since` igual trae el estado: son dos cosas independientes", async () => {
   const body = await pedir(new PilotMessageBoard(), GUID, "");
   assert.equal(body.status.cuts, 2);
+});
+
+test("el poll trae el límite de velocidad de la vuelta de formación configurado", async () => {
+  const body = await pedir(new PilotMessageBoard(), GUID, "?since=0&guid=" + GUID);
+  assert.equal(body.formationSpeedLimitKmh, 80);
 });

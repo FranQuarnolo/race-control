@@ -76,6 +76,30 @@ meta. Ver el comentario largo arriba de `countCutLocally`.
 
 ---
 
+CUATRO COSAS DE LA PRIMERA CARRERA DE PRUEBA (desde la 1.4 de esta app / 1.7 del servidor)
+
+Primer uso real en modo carrera completo, y dejo cuatro observaciones puntuales:
+
+  - **Las ventanas aparecian apiladas.** Sin una posicion propia, AC crea las apps nuevas una
+    encima de la otra en el mismo origen, y "RC Largada" (chica) quedaba enterrada debajo de "RC
+    Mensajes" (mucho mas grande) -- invisible para quien recien instala, aunque "funcionaba"
+    perfecto. Ver `posicionarVentanasDeFabrica`: les da una posicion de fabrica bien separada,
+    pero SOLO la primera vez, para no deshacerle el acomodo a nadie que ya las movio.
+  - **El semaforo se veia pixelado.** `drawDisc` armaba cada luz con doce franjas; de cerca se
+    notaba el escalonado. Ahora son veintiocho, al mismo costo de nada (ver el comentario de
+    `drawDisc`).
+  - **La vuelta de formacion no decia a que velocidad ir.** Debajo de las luces, mientras el
+    semaforo esta en rojo parpadeando, aparecen dos renglones nuevos: "VUELTA DE FORMACION" y el
+    limite de velocidad configurado en el panel (`formationSpeedLimitKmh` del poll). Mismo
+    criterio que CUTS y la sancion pendiente: es estado, no un aviso que vence.
+  - **El click derecho para fijar una ventana en su lugar** es una funcion de Content Manager /
+    Custom Shaders Patch (click derecho arriba a la izquierda de la ventana, "Pin window"), no
+    algo que esta app controle -- la API de Python de AC no expone eventos de click derecho ni
+    una forma de bloquear una ventana desde el script. Ya funciona igual en las tres, una vez que
+    se las encuentra en pantalla, que era justo el primer problema de esta lista.
+
+---
+
 Nota: corre dentro del interprete Python embebido de Assetto Corsa, que es Python 3.3 -- NO
 soporta f-strings (son de Python 3.6+). Por eso todo el formateo de texto usa .format()/% .
 Solo se usa stdlib (urllib, winsound, threading, mmap, ctypes), sin dependencias externas.
@@ -100,6 +124,11 @@ POLL_INTERVAL_SECONDS = 1.0
 HEARTBEAT_INTERVAL_SECONDS = 2.0
 SHARED_MEMORY_INTERVAL_SECONDS = 0.25
 SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "green_green_green.wav")
+# Marca en disco de que ya se pusieron las posiciones de fabrica de las ventanas (ver
+# `posicionarVentanasDeFabrica`). Vive al lado del script y no en una carpeta de AC porque es un
+# dato de la instalacion, no de una partida: tiene que sobrevivir a reinstalar el juego y no tiene
+# que ver con el circuito ni con el auto.
+FIRST_RUN_MARKER_PATH = os.path.join(os.path.dirname(__file__), "ventanas_posicionadas.flag")
 # La chicharra del corte. Dos bips cortos y ascendentes, de 220 ms en total: suena en el instante
 # del corte, con el auto todavia fuera de pista, y ahi lo ultimo que hace falta es un sonido que
 # tape el del motor medio segundo.
@@ -170,6 +199,8 @@ label_backend_status = None
 label_cuts = None
 label_pending = None
 label_alert = None
+label_formation_lap = None
+label_formation_limit = None
 label_messages = []
 
 backend_url = None  # None hasta que llega el chat de auto-discovery.
@@ -206,9 +237,38 @@ def ocultarChrome(window):
     ac.setIconPosition(window, 0, -10000)
 
 
+def posicionarVentanasDeFabrica(ventanas):
+    """Les da a las ventanas una posicion de fabrica bien separada, pero SOLO la primera vez que
+    la app corre en esta instalacion.
+
+    El bug que esto arregla: Assetto Corsa crea las apps nuevas apiladas en el mismo origen de
+    pantalla, y sin un `setPosition` propio ahi se quedan. "RC Mensajes" (460x158) es mas grande
+    que "RC Largada" (bastante mas chica) y la tapaba por completo -- por eso alguien que recien
+    instala la app encuentra las banderas y los mensajes (se asoman del apilado) pero no el
+    semaforo, que queda enterrado debajo de la ventana de mensajes sin que se note que esta ahi.
+
+    Hacerlo una sola vez y no en cada arranque es la otra mitad del arreglo: el piloto las mueve a
+    gusto despues de la primera vez, y AC ya se encarga de recordar donde las dejo. Si este
+    codigo corriera en cada `acMain` les devolveria la posicion de fabrica en cada sesion,
+    deshaciendole el acomodo a cualquiera.
+    """
+    if os.path.exists(FIRST_RUN_MARKER_PATH):
+        return
+    for window, x, y in ventanas:
+        ac.setPosition(window, x, y)
+    try:
+        with open(FIRST_RUN_MARKER_PATH, "w") as f:
+            f.write("1")
+    except Exception as e:
+        # Si no se pudo escribir la marca, la proxima vez se vuelven a acomodar solas -- es
+        # molesto pero no rompe nada, y preferible a no haber podido separarlas la primera vez.
+        ac.log("[RaceControlClient] no se pudo guardar la marca de posiciones iniciales: {0}".format(e))
+
+
 def acMain(ac_version):
     global window_messages, window_flags, window_lights, window_alert
     global label_backend_status, label_cuts, label_pending, label_alert, label_messages
+    global label_formation_lap, label_formation_limit
     global steam_guid, poll_thread_running
 
     # ---------------------------------------------------------------- RC Mensajes
@@ -262,6 +322,18 @@ def acMain(ac_version):
     ocultarChrome(window_lights)
     ac.addRenderCallback(window_lights, renderLights)
 
+    # Los dos renglones de la vuelta de formacion, debajo de las luces. Arrancan vacios -- ver
+    # `renderFormationLines` -- y solo tienen texto mientras el semaforo esta en rojo parpadeando.
+    label_formation_lap = ac.addLabel(window_lights, "")
+    ac.setPosition(label_formation_lap, 6, LIGHTS_ROW_HEIGHT + 2)
+    ac.setFontSize(label_formation_lap, FORMATION_LAP_FONT_SIZE)
+    ac.setFontColor(label_formation_lap, *FORMATION_LAP_COLOR)
+
+    label_formation_limit = ac.addLabel(window_lights, "")
+    ac.setPosition(label_formation_limit, 6, LIGHTS_ROW_HEIGHT + 24)
+    ac.setFontSize(label_formation_limit, FORMATION_LIMIT_FONT_SIZE)
+    ac.setFontColor(label_formation_limit, *FORMATION_LIMIT_COLOR)
+
     # ---------------------------------------------------------------- RC Alerta
     # Invisible mientras todo este bien, que es el 99% del tiempo. Ver el bloque de comentarios de
     # ALERT_WINDOW_WIDTH para por que es un marco y no un fondo.
@@ -273,6 +345,16 @@ def acMain(ac_version):
     ac.setFontSize(label_alert, ALERT_FONT_SIZE)
     ac.setFontColor(label_alert, *ALERT_TEXT_COLOR)
     ac.addRenderCallback(window_alert, renderAlert)
+
+    # Ver `posicionarVentanasDeFabrica`: separa las cuatro ventanas la primera vez que la app
+    # corre, para que ninguna quede tapada por otra. Despues de esta vez, AC recuerda donde las
+    # dejo el piloto y este llamado no hace nada.
+    posicionarVentanasDeFabrica([
+        (window_messages, 40, 40),
+        (window_flags, 540, 40),
+        (window_lights, 40, 220),
+        (window_alert, 40, 340),
+    ])
 
     # El listener del chat va en una sola ventana: el juego lo entrega una vez por listener
     # registrado, asi que ponerlo en las tres mostraria cada anuncio por triplicado.
@@ -577,6 +659,7 @@ def pollLoop():
             # El estado va siempre, aunque no haya avisos nuevos: es lo que corrige el contador
             # que la app viene adelantando sola. Ver `applyServerStatus`.
             applyServerStatus(data.get("status", {}))
+            applyFormationSpeedLimit(data.get("formationSpeedLimitKmh"))
 
             for message in data.get("messages", []):
                 showMessage(message.get("text", ""))
@@ -681,8 +764,13 @@ def playGreenGreenGreen():
 # =============================================================================================
 
 FLAG_WINDOW_SIZE = 64
-LIGHTS_WINDOW_WIDTH = 170
-LIGHTS_WINDOW_HEIGHT = 46
+LIGHTS_WINDOW_WIDTH = 260
+# La fila de luces ocupa siempre los mismos 46 px de arriba (es el alto que tenia la ventana
+# entera hasta la 1.6). Lo que crecio es el espacio reservado debajo, para "VUELTA DE FORMACION"
+# y el limite de velocidad -- pedido explicito de la prueba en pista, para que durante la
+# formacion se sepa a que velocidad ir sin tener que adivinarla ni buscarla en otro lado.
+LIGHTS_ROW_HEIGHT = 46
+LIGHTS_WINDOW_HEIGHT = LIGHTS_ROW_HEIGHT + 48
 
 # ---------------------------------------------------------------------------------------------
 # La alerta de credencial (1.3)
@@ -733,6 +821,23 @@ LIGHT_GREEN = (0.10, 0.85, 0.25, 1.0)
 # auto adelante o el verde sobre el pasto de la escapatoria se pierden.
 LIGHT_HOUSING = (0.04, 0.04, 0.05, 0.85)
 
+# Los dos renglones debajo de las luces, visibles solo durante la formacion (semaforo en rojo
+# parpadeando). Mismo criterio que CUTS/la sancion pendiente en RC Mensajes: es ESTADO, asi que se
+# prende y se apaga solo, sin pasar por la cola de avisos ni vencer a los 25 segundos.
+#
+# El limite de velocidad sale de `formationSpeedLimitKmh` en cada poll -- es la misma regla que el
+# admin carga en el panel para sancionar el exceso en la vuelta de formacion (ver
+# `config.formation.penalty.speedThresholdKmh` en el servidor), asi que lo que ve el piloto es
+# siempre el numero por el que lo pueden sancionar, no uno fijo en este archivo.
+#
+# Sin tildes, como el resto de los textos de esta app: el renderizado de texto de AC no las trae
+# bien y salen como un caracter roto (ver ALERT_TEXT, LAP_INVALIDATED_TEXT).
+FORMATION_LAP_TEXT = "VUELTA DE FORMACION"
+FORMATION_LAP_COLOR = (1.00, 0.85, 0.05, 1.0)
+FORMATION_LIMIT_COLOR = (0.92, 0.93, 0.96, 1.0)
+FORMATION_LAP_FONT_SIZE = 16
+FORMATION_LIMIT_FONT_SIZE = 14
+
 # El color de cada bandera del juego. Las claves son los valores de `graphics.flag` de la Shared
 # Memory: 0 ninguna, 1 azul, 2 amarilla, 3 negra, 4 blanca, 5 a cuadros, 6 penalidad.
 #
@@ -774,6 +879,7 @@ current_flag = 0  # Lo escribe sharedMemoryLoop. 0 = sin bandera.
 
 light_state = "idle"
 light_green_at = None  # Cuando paso a verde, para apagarlo a los 3 segundos.
+formation_speed_limit_kmh = None  # Lo ultimo que informo el poll. None hasta el primer poll.
 
 
 def setLightState(state):
@@ -783,14 +889,50 @@ def setLightState(state):
         return
     light_state = state
     light_green_at = time.time() if state == "green" else None
+    renderFormationLines()
 
 
-def drawDisc(cx, cy, radius, color, strips=12):
+def applyFormationSpeedLimit(value):
+    """Guarda el limite de velocidad de la formacion que trajo el poll y actualiza el renglon.
+
+    Separado de `setLightState` porque son dos cosas que cambian en momentos distintos: el estado
+    cambia en la transicion a formacion, pero el admin puede cambiar el limite en el panel DURANTE
+    la formacion -- y ahi tiene que actualizarse sin esperar a que el semaforo cambie de estado.
+    """
+    global formation_speed_limit_kmh
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        value = None
+    if value == formation_speed_limit_kmh:
+        return
+    formation_speed_limit_kmh = value
+    renderFormationLines()
+
+
+def renderFormationLines():
+    """Escribe (o borra) los dos renglones debajo de las luces. Estado, no aviso: ver el bloque de
+    comentarios de FORMATION_LAP_TEXT."""
+    if light_state != "formation":
+        ac.setText(label_formation_lap, "")
+        ac.setText(label_formation_limit, "")
+        return
+    ac.setText(label_formation_lap, FORMATION_LAP_TEXT)
+    if formation_speed_limit_kmh and formation_speed_limit_kmh > 0:
+        ac.setText(label_formation_limit, "Limite de velocidad: {0} km/h".format(formation_speed_limit_kmh))
+    else:
+        ac.setText(label_formation_limit, "")
+
+
+def drawDisc(cx, cy, radius, color, strips=28):
     """Dibuja un disco apilando franjas horizontales, porque `glQuad` es lo unico que hay.
 
-    El ancho de cada franja sale del circulo: media cuerda = sqrt(r^2 - dy^2). Con doce franjas y
-    un radio de trece pixeles el escalonado ya no se distingue del antialiasing del juego, y son
-    doce rectangulos por luz -- sesenta por frame con las cinco prendidas, que no es nada.
+    El ancho de cada franja sale del circulo: media cuerda = sqrt(r^2 - dy^2). Antes eran doce
+    franjas, y en la prueba en pista el semaforo se vio pixelado -- doce escalones en un radio de
+    trece pixeles alcanzaban para notarse de cerca, aunque anduvieran bien a distancia. Con
+    veintiocho el escalonado deja de distinguirse de la curva, y el costo sigue siendo nada: dos
+    discos por luz (carcasa + luz) por cinco luces son diez discos, menos de trescientos
+    rectangulos por frame.
     """
     ac.glColor4f(*color)
     height = (2.0 * radius) / strips
@@ -907,7 +1049,7 @@ def renderLights(deltaT):
     else:
         return  # idle: no se dibuja nada, la ventana es un vidrio.
 
-    cy = LIGHTS_WINDOW_HEIGHT / 2.0
+    cy = LIGHTS_ROW_HEIGHT / 2.0
     first = (LIGHTS_WINDOW_WIDTH - (LIGHTS_COUNT - 1) * LIGHT_SPACING) / 2.0
     for i in range(LIGHTS_COUNT):
         cx = first + i * LIGHT_SPACING

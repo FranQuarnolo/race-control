@@ -20,6 +20,11 @@ export interface ClientApiDeps {
   /** El piloto reportó `inPitLane: true` en este poll. Alimenta la calibración automática de la
    * zona de pit lane — ver `track/pitZoneLearner.ts`. */
   onPitLaneSample: (driverGuid: string) => void;
+  /** El límite de velocidad de la vuelta de formación, tal como está configurado AHORA en la
+   * sección Largada del panel. No es por piloto —es una regla del servidor—, por eso va aparte de
+   * `getPilotStatus` y no depende del guid. El cliente lo muestra junto con "Vuelta de formación"
+   * mientras el semáforo esté en rojo parpadeando. */
+  getFormationSpeedLimitKmh: () => number;
   /** Devuelve el `steamGuid` que acredita el token, o `null`. Ver security/pilotToken.ts. */
   verifyToken: (token: string | undefined) => string | null;
   /**
@@ -146,7 +151,12 @@ export function createClientApi(deps: ClientApiDeps): Express {
     // El estado va aunque el `since` sea basura: son dos cosas independientes, y un `since`
     // malformado no es razón para dejar al piloto sin su contador de cortes.
     const status = conocido ? deps.getPilotStatus(guid) : { cuts: 0, cutsLimit: 0, penalty: null };
-    res.json({ lightEvent: deps.lightEventTracker.get(), messages, status });
+    res.json({
+      lightEvent: deps.lightEventTracker.get(),
+      messages,
+      status,
+      formationSpeedLimitKmh: deps.getFormationSpeedLimitKmh(),
+    });
   });
 
   /**

@@ -8,12 +8,16 @@
 3. Activar las ventanas dentro del juego: menú de Apps (AC Apps) → **RC Mensajes**, **RC Banderas**,
    **RC Largada** y **RC Alerta**. Son cuatro entradas separadas y se activan las que uno quiera —
    aunque conviene tener las cuatro: en reposo ninguna ocupa pantalla.
-4. Acomodarlas en pantalla. Una sola vez, y mejor antes de la primera carrera.
+4. Acomodarlas en pantalla. La primera vez ya aparecen separadas, cada una en un lugar distinto de
+   la pantalla (desde la 1.4); después de eso, el juego recuerda dónde las dejaste. Para fijarlas
+   ahí y que no se muevan sin querer, click derecho arriba a la izquierda de la ventana → "Pin
+   window" — es una función de Content Manager / Custom Shaders Patch, igual que en cualquier otra
+   app.
 
 No hay ningún archivo que editar ni ninguna IP que tipear: la app descubre sola a qué backend
 reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 
-> **Si ya la tenías instalada de una versión anterior a la 1.3, hay que reinstalarla.** Arrastrá el
+> **Si ya la tenías instalada de una versión anterior a la 1.4, hay que reinstalarla.** Arrastrá el
 > `.zip` nuevo igual que la primera vez: pisa lo que había sin dejar restos. El `ui.json` dice la
 > versión instalada, así que se puede verificar desde el listado de apps del juego.
 
@@ -23,7 +27,7 @@ reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 |---|---|
 | **RC Mensajes** | De arriba abajo: el estado de la conexión en gris chiquito, el contador de cortes (`CUTS: 3/5`) en amarillo y grande, la sanción que falta cumplir en naranja, y abajo los avisos de dirección de carrera en rojo. |
 | **RC Banderas** | Un cuadro con el color de la bandera vigente, leída de la memoria del propio juego. |
-| **RC Largada** | Cinco luces: rojas parpadeando en la formación, verdes con el audio al verde. |
+| **RC Largada** | Cinco luces: rojas parpadeando en la formación, verdes con el audio al verde. Durante la formación, debajo de las luces aparecen "VUELTA DE FORMACION" y el límite de velocidad configurado en el panel. |
 | **RC Alerta** | Un marco rojo pulsante, solo si falta la credencial. Ver "Si aparece el marco rojo". |
 
 Son apps independientes a propósito: hasta la 0.7 era una sola ventana con todo apilado, así que

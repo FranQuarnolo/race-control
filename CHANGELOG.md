@@ -3,6 +3,52 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.8] — 2026-10-28
+
+**Tercera tanda de la misma carrera de prueba, ahora del lado de la app del piloto** (`ui.json`
+pasa de 1.3 a 1.4 — hace falta reinstalar el `.zip`). Cuatro observaciones puntuales de manejarla
+en pista.
+
+### "RC Largada" no se encontraba en pantalla
+
+**Síntoma:** un piloto que recién instala la app encuentra "RC Banderas" y "RC Mensajes", pero no
+"RC Largada" — el admin, que ya la tenía acomodada de antes, no veía el problema.
+
+**Causa:** ninguna de las cuatro ventanas tenía una posición propia al crearse, así que Assetto
+Corsa las apilaba todas en el mismo origen de pantalla. "RC Mensajes" (460×158) tapaba por completo
+a "RC Largada", mucho más chica — el semáforo estaba ahí, perfectamente funcional, debajo de otra
+ventana.
+
+**Decisión:** `posicionarVentanasDeFabrica()` les da una posición de fábrica bien separada, pero
+solo la primera vez que la app corre en esa instalación (una marca en disco lo recuerda) — después
+de esa vez el juego ya recuerda dónde las dejó el piloto, y este código no vuelve a tocarlas.
+
+### El semáforo se veía pixelado
+
+**Causa:** cada luz se armaba apilando doce franjas horizontales (`drawDisc`, es lo único que
+permite `ac.glQuad`); de cerca el escalonado se notaba.
+
+**Decisión:** pasan a ser veintiocho, al mismo costo de siempre — diez discos por frame entre
+carcasas y luces, menos de trescientos rectángulos.
+
+### El click derecho para fijar una ventana no es algo que la app deba implementar
+
+**Verificado contra la documentación pública de la API de Python de Assetto Corsa:** no existe un
+evento de click derecho ni una función para bloquear la posición de una ventana desde un script. El
+"click derecho para fijarla" que ya funciona en otras apps es una función nativa de Content
+Manager / Custom Shaders Patch (click derecho arriba a la izquierda de la ventana → "Pin window"),
+y aplica igual a las tres ventanas de Race Control sin que haga falta cambiar nada acá — el único
+impedimento real era el bug anterior, que no dejaba encontrar "RC Largada" para poder fijarla.
+
+### La vuelta de formación no decía a qué velocidad ir
+
+**Decisión:** mientras el semáforo está en rojo parpadeando, debajo de las luces aparecen dos
+renglones nuevos: "VUELTA DE FORMACION" y el límite de velocidad configurado en el panel (sección
+Largada). El número sale de `config.formation.penalty.speedThresholdKmh` —la misma regla con la que
+se sanciona el exceso— y viaja en cada respuesta de `/api/client/poll` como `formationSpeedLimitKmh`
+(servidor 1.8). Mismo criterio que el contador de cortes: es estado mientras dure la formación, no
+un aviso que vence a los 25 segundos.
+
 ## [1.7] — 2026-10-28
 
 **Segunda tanda de observaciones de la misma carrera de prueba**, esta vez del lado del servidor:
