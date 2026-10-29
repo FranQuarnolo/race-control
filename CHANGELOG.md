@@ -3,6 +3,44 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.10] — 2026-10-29
+
+**Tercera revisión de la pantalla fusionada contra el admin real, y la app del piloto suma voz a
+la largada** (`ui.json` pasa de 1.4 a 1.5 — hace falta reinstalar el `.zip`).
+
+### "Insi" y "Acciones" se superponían en la cabecera de la tabla
+
+**Síntoma:** con el embed en un ancho real de fslmanager.vercel.app (no el ~1800 px asumido al
+armar el `table-layout: fixed` de la 1.9), el encabezado "ACCIONES" no entraba en su columna y se
+dibujaba montado encima de "Insi" (imagen "bugtabla").
+
+**Causa:** `white-space: nowrap` sin `overflow: hidden` no recorta el texto que no entra en la
+celda — lo sigue dibujando igual, invadiendo la columna vecina. El reparto de porcentajes de la
+1.9 además le daba a "Acciones" (9%) menos aire que a columnas con menos texto.
+
+**Decisión:** `overflow: hidden; text-overflow: ellipsis` en todos los `th`/`td` de la torre, para
+que un desborde futuro termine en "…" y no en texto superpuesto, sea cual sea el ancho real del
+embed. De paso, "Acciones" pasa de 9% a 15% y "Piloto" cede algo de su 28%.
+
+### La chapa de sesión decía "C" de carrera, no "R"
+
+**Decisión:** "R" (de "race", la misma convención que ya usaba "Q" de clasificación) en vez de "C".
+Reserva, que ya usaba "R", pasa a "RES" para no empatarle la letra a Carrera. Las ocho chapas
+(Reserva, Práctica, Clasificación, Carrera, Hotlap, Time attack, Deriva, Repetición) suman además
+un color propio cada una — antes todas compartían el mismo ámbar y solo se distinguían leyendo la
+letra.
+
+### La vuelta de formación ahora se anuncia por voz, no solo con el semáforo
+
+**Decisión:** cuatro locuciones (provistas por el usuario, carpeta `sounds/` de la app del
+piloto): "rolling start" apenas arranca la formación, "stay behind" a los 10 s, "no overtaking" a
+los 40 s —los tres tiempos contados desde el inicio de la formación, no uno después del otro— y
+"green green green" cuando el semáforo pasa a verde de verdad (ese locución ya existía; se
+reemplaza por la nueva, de la misma voz). Los dos avisos intermedios se programan con
+`threading.Timer` —Python 3.3 no tiene `asyncio`— y se cancelan si la largada se reinicia o el
+semáforo pasa a verde antes de los 40 s: el admin puede dar verde cuando quiera, nada garantiza que
+la formación dure eso.
+
 ## [1.9] — 2026-10-29
 
 **Race Control deja de ser un portal aparte con login propio.** Esta versión fusiona Control de
