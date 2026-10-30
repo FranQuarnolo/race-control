@@ -3,6 +3,17 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.23] — 2026-10-30
+
+### Dos ajustes a la tabla del embed, pedidos tras probar la 1.21 en vivo
+
+- **"Box" pasa a "Paradas en box"**: el nombre corto quedaba ambiguo fuera del contexto del panel
+  completo (que además aclara con un `title` que acá el embed no tiene espacio para repetir).
+- **Nueva columna "Incidentes"**, entre Cortes y Acciones: acumulado de todos los incidentes del
+  auto, no solo los pendientes — mismo criterio que ya usa "Insi" en el panel completo
+  (`incidentesCount` en `app.js`) y que la propia columna "Cortes" de al lado, que tampoco baja
+  cuando se resuelve algo. Los incidentes sin resolver se siguen manejando en la celda de Acciones.
+
 ## [1.22] — 2026-10-30
 
 ### El piloto no tenía forma de saber, antes de bajar el .zip, qué versión estaba por instalar

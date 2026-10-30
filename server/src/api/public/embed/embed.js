@@ -130,7 +130,7 @@
   var tabla = document.createElement("table");
   tabla.className = "rc-embed__tabla";
   tabla.innerHTML =
-    "<thead><tr><th>Auto</th><th>Piloto</th><th>Velocidad</th><th>Box</th><th>Combustible</th><th>Cortes</th><th>Acciones</th></tr></thead><tbody></tbody>";
+    "<thead><tr><th>Auto</th><th>Piloto</th><th>Velocidad</th><th>Paradas en box</th><th>Combustible</th><th>Cortes</th><th>Incidentes</th><th>Acciones</th></tr></thead><tbody></tbody>";
   var filas = tabla.querySelector("tbody");
   tablaWrap.appendChild(tabla);
 
@@ -1409,6 +1409,17 @@
       var cortes = document.createElement("td");
       cortes.textContent = String(car.cuts || 0);
       tr.appendChild(cortes);
+
+      // Acumulado de todos los incidentes del auto, no solo los pendientes — mismo criterio que
+      // "Cortes" al lado (un contador que no baja) y que la columna "Insi" del panel completo
+      // (`incidentesCount`, ver app.js). Los que siguen sin resolver se manejan en la celda de
+      // Acciones, de al lado.
+      var deEsteAutoTotal = state.incidents.filter(function (i) {
+        return i.parties.some(function (p) { return p.carId === car.carId; });
+      });
+      var incidentesCelda = document.createElement("td");
+      incidentesCelda.textContent = String(deEsteAutoTotal.length);
+      tr.appendChild(incidentesCelda);
 
       var accionesCelda = document.createElement("td");
       var deEsteAuto = pendientes.filter(function (i) {
