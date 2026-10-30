@@ -3,6 +3,44 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.18] — 2026-10-30
+
+### El embed probado en fslmanager.vercel.app servía para mirar, no para administrar
+
+**Síntoma:** con el embed de la 1.14-1.17 ya funcionando de verdad, el admin que lo probó en su
+página encontró que le faltaba casi todo lo que usa día a día sin tener que saltar al panel
+completo: no veía el auto ni la velocidad de cada piloto, no tenía acciones por fila, no veía el
+semáforo de la largada ni en qué sesión estaba el servidor (P/Q/R) ni cuánto tiempo quedaba, y no
+podía abrir ni Reglas ni Conexión desde ahí.
+
+**Decisión, avisada y aceptada explícitamente:** portar los dos cajones enteros —Conexión reducido
+(Estado, Modo de funcionamiento, ¿Algo anda mal?; sin "Cómo conectar tu servidor" ni "Embed en otra
+página") y Reglas completo (las cinco pestañas: Perfiles, App pilotos, Largada, Pista, Pit lane)— al
+embed, duplicando a propósito la lógica de `app.js` en vez de compartirla (mismo criterio que el
+plan original: autenticación y forma de pegarle a la red ya son distintas entre los dos canales).
+Esto amplía lo que el token del embed puede hacer: de "accionar sobre una carrera en curso" pasa a
+"también leer y cambiar el reglamento de la liga". Ese token no tiene más protección que la de no
+ser un secreto fuerte — queda visible en el código fuente de cualquier página que lo incruste, sea
+pública o no. Se aceptó el trade-off porque en la práctica es la propia liga la que decide dónde
+pegar el snippet, y nadie más tiene motivo para tenerlo.
+
+La tabla suma columnas de Auto (el mismo escudo con monograma que ya usa el panel completo,
+`brandShield`, siempre dibujado en CSS y nunca con `<img>`, para no tener que abrir una ruta de
+imágenes sin sesión solo para esto) y Velocidad, y la columna de incidentes pasa a llamarse
+Acciones sin cambiar su contenido. El semáforo de 5 luces y el indicador de sesión con reloj se
+portaron tal cual los ve el panel completo.
+
+La IP real del servidor sigue sin salir por este canal en ningún lado: "Estado" en el nuevo modal de
+Conexión la muestra como "Configurada"/"Sin configurar" y nunca como el valor, y el primer chequeo
+de "¿Algo anda mal?" (`checkPublicHost`, que hasta ahora mandaba la IP real en `detail` sin
+disimulo) tiene una versión redactada solo para `/api/embed/network/test` con texto genérico.
+
+**De paso, un bug encontrado al escribir el test de regresión:** el campo que reemplazó a `acServer`
+en el DTO del embed se había llamado `acServerKnown` — y el test que confirma que ese dato interno
+no sale busca la subcadena `"acServer"` en el JSON crudo de la respuesta. Un nombre que la
+contuviera hacía fallar la alarma aunque el valor real ya estuviera oculto: el dato no se filtraba,
+pero la prueba que lo garantiza quedaba ciega. Se renombró a `commandTargetKnown`.
+
 ## [1.17] — 2026-10-30
 
 ### Dos reinicios seguidos podían perder sanciones e incidentes que el primero sí había recuperado

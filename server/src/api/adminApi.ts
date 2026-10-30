@@ -68,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.17";
+export const APP_VERSION = "1.18";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -216,16 +216,27 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * La misma foto que `/api/state`, pero para un token que puede terminar visible en el código
    * fuente de la página de un tercero: se le saca el `driverGuid` de todos lados (el SteamID del
    * piloto no tiene por qué salir de esta liga) y los datos de red que son de operación interna, no
-   * de la carrera (`sendAddress`/`acServer` — a dónde le mandamos los comandos nosotros— y el ping
-   * de cada auto, que es diagnóstico del vínculo con nuestro backend, no algo que le importe a
-   * quien mira la carrera desde afuera).
+   * de la carrera (`sendAddress`/`acServer` — a dónde le mandamos los comandos nosotros—, los
+   * puertos de este proceso, la IP pública de la liga, y el ping de cada auto, que es diagnóstico
+   * del vínculo con nuestro backend, no algo que le importe a quien mira la carrera desde afuera).
+   *
+   * `adminPort`/`clientPort`/`publicIp` no se sacaban hasta la fase 2 del embed (ver el plan
+   * "Ampliar el embed de fslmanager.vercel.app"): quien armó la lista original pensó en los datos
+   * de a dónde le hablamos NOSOTROS al servidor de AC y se olvidó de los de a dónde nos habla a
+   * NOSOTROS cualquiera, que es justo el dato más sensible de los dos. "Estado" en el embed no
+   * necesita el valor real de la IP, solo si está configurada — por eso viaja como booleano
+   * (`publicIpConfigured`) y no como el string. Lo mismo para si el servidor de AC ya se identificó
+   * (`commandTargetKnown`): el host y puerto reales (`acServer`) siguen sin viajar. Ese campo no se
+   * llama `acServerKnown` a propósito: el test de regresión busca la subcadena "acServer" en el
+   * JSON crudo para confirmar que el dato interno no salió, y un nombre que la contuviera haría
+   * fallar esa alarma aunque el valor real ya esté oculto.
    */
   function redactForEmbed(full: ReturnType<typeof buildFullStateDto>) {
     const sinGuid = <T extends { driverGuid?: string }>(o: T): Omit<T, "driverGuid"> => {
       const { driverGuid, ...resto } = o;
       return resto;
     };
-    const { sendAddress, acServer, ...networkSinInterno } = full.network;
+    const { sendAddress, acServer, adminPort, clientPort, publicIp, ...networkSinInterno } = full.network;
     return {
       ...full,
       cars: full.cars.map((car) => {
@@ -239,7 +250,15 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       formationPenalties: full.formationPenalties.map(sinGuid),
       pitPenalties: full.pitPenalties.map(sinGuid),
       stewardPenalties: full.stewardPenalties.map(sinGuid),
-      network: networkSinInterno,
+      network: {
+        ...networkSinInterno,
+        publicIpConfigured: Boolean(publicIp),
+        // No "acServerKnown": ese nombre contiene literalmente "acServer", y el test de redacción
+        // (embedApi.test.ts) busca esa subcadena en el JSON crudo para confirmar que el dato
+        // interno no salió — un nombre que la contuviera haría fallar esa alarma aunque el valor
+        // real ya esté oculto.
+        commandTargetKnown: Boolean(acServer.autodetected),
+      },
     };
   }
 
@@ -260,12 +279,16 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    *
    * Todos leen contadores vivos, así que el botón es un refresco y no una reconfiguración. La
    * dirección pública ya no se detecta acá: la fija el portal al arrancar la liga.
+   *
+   * Separado del endpoint para que `/api/embed/network/test` (ver más abajo) corra exactamente el
+   * mismo diagnóstico y solo le aplique su propia redacción después, en vez de repetir el armado
+   * del input de `runDiagnostics`.
    */
-  app.post("/api/network/test", async (_req, res) => {
+  function runDiagnosticsNow() {
     deps.connectivity.refreshTelemetryFlag();
     const ports = deps.getActivePorts();
     const presence = deps.presenceWatchdog.getReportingCount();
-    const checks = runDiagnostics({
+    return runDiagnostics({
       network: deps.connectivity.getStatus(),
       udp: deps.udpClient.getStats(),
       remoteHost: deps.config.acUdp.remoteHost,
@@ -278,8 +301,41 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       driversReporting: presence.reporting,
       contact: deps.contact,
     });
+  }
+
+  app.post("/api/network/test", async (_req, res) => {
+    const checks = runDiagnosticsNow();
     res.json({ checks, summary: summarize(checks) });
   });
+
+  /**
+   * Lo mismo que arriba, pero para `/api/embed/network/test`: dos de los cuatro chequeos de
+   * `runDiagnostics` nombran la dirección real del servidor en su `detail`/`action` cuando salen
+   * bien — `public-host` la IP pública de la liga, `commands` el host de Assetto Corsa al que le
+   * hablamos— y ese texto puede terminar visible en el código fuente de una página ajena. No se
+   * toca `net/diagnostics.ts`: ese sigue sirviendo la versión completa al panel con cookie, y acá
+   * se redactan después, en la frontera de salida, que es donde vive el resto de las redacciones
+   * del embed (ver `redactForEmbed`).
+   */
+  function redactChecksForEmbed(checks: ReturnType<typeof runDiagnostics>): ReturnType<typeof runDiagnostics> {
+    return checks.map((check) => {
+      if (check.id === "public-host") {
+        return {
+          ...check,
+          detail: check.state === "ok" ? "Configurada." : check.detail,
+          action: check.state === "ok" ? "" : "Avisale a quien administra Race Control.",
+        };
+      }
+      if (check.id === "commands" && (check.state === "ok" || check.state === "pending")) {
+        return {
+          ...check,
+          detail: check.state === "ok" ? "Saliendo sin errores." : "Esperando la primera orden para confirmar el destino.",
+          action: "",
+        };
+      }
+      return check;
+    });
+  }
 
   /**
    * Catálogo para armar el panel: qué infracciones hay y qué acciones admite cada una.
@@ -291,12 +347,14 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * Acá también viajaban los tres presets de torneo, que ya no existen: ver el comentario que los
    * reemplazó en `incident/catalog.ts`.
    */
-  app.get("/api/catalog", (_req, res) => {
+  function handleCatalog(_req: express.Request, res: Response): void {
     res.json({
       actions: ACTION_LABELS,
       autoPenaltyAllowed: [...AUTO_PENALTY_ALLOWED],
     });
-  });
+  }
+
+  app.get("/api/catalog", handleCatalog);
 
   /**
    * Perfiles de carrera: el reglamento completo guardado con un nombre.
@@ -380,22 +438,55 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     return copy;
   }
 
-  app.post("/api/config", (req, res) => {
-    if (typeof req.body !== "object" || req.body === null || Array.isArray(req.body)) {
-      res.status(400).json({ ok: false, error: "Body inválido" });
-      return;
+  /**
+   * El guardado de verdad, separado del endpoint para que `/api/embed/config` (ver más abajo) lo
+   * reuse con su propio filtro de campos y su propia forma de responder, en vez de reimplementar el
+   * try/catch de siempre y arriesgarse a que un día se corrija acá y no allá.
+   */
+  function applyConfigPatchCore(
+    body: unknown,
+    strip: (patch: Record<string, unknown>) => Record<string, unknown>
+  ): { ok: true } | { ok: false; status: number; error: string } {
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return { ok: false, status: 400, error: "Body inválido" };
     }
     try {
-      const patch = stripManagedFields(req.body);
-      applyConfigPatch(deps.config, patch);
-      res.json(deps.config);
+      applyConfigPatch(deps.config, strip(body as Record<string, unknown>));
+      return { ok: true };
     } catch (err) {
       // No dejar que un error de escritura (ej. permisos) tumbe el request en silencio — el
       // panel necesita un JSON para poder avisarle al usuario que algo falló.
       console.error("[admin-api] No se pudo guardar la configuración:", err);
-      res.status(500).json({ ok: false, error: "No se pudo guardar la configuración: " + String(err) });
+      return { ok: false, status: 500, error: "No se pudo guardar la configuración: " + String(err) };
     }
+  }
+
+  app.post("/api/config", (req, res) => {
+    const result = applyConfigPatchCore(req.body, stripManagedFields);
+    if (!result.ok) {
+      res.status(result.status).json({ ok: false, error: result.error });
+      return;
+    }
+    res.json(deps.config);
   });
+
+  /**
+   * El subconjunto de `AppConfig` que el modal de Reglas del embed puede leer: el reglamento
+   * completo y nada de lo que describe la instalación (nombre de la liga, puertos, la IP pública)
+   * ni el propio embed (`allowedOrigin`/`tokenVersion` — ver `stripEmbedManagedFields`, el token no
+   * puede ser el que lee o cambia los datos de sí mismo).
+   */
+  function redactConfigForEmbed(config: AppConfig) {
+    return {
+      ruleProfiles: config.ruleProfiles,
+      activeProfileId: config.activeProfileId,
+      presence: config.presence,
+      formation: config.formation,
+      infractions: config.infractions,
+      pit: config.pit,
+      shadowMode: config.shadowMode,
+    };
+  }
 
   /**
    * El tipo de sesión que el protocolo de AC llama "carrera". La largada en movimiento no tiene
@@ -675,6 +766,70 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   embedRouter.post("/formation/begin", handleFormationBegin);
   embedRouter.post("/formation/green", handleFormationGreen);
   embedRouter.post("/formation/reset", handleFormationReset);
+
+  /**
+   * Reglas y diagnóstico de red, portados al embed en la fase 2 (ver el plan "Ampliar el embed de
+   * fslmanager.vercel.app"). Es una ampliación deliberada y avisada del alcance del token: hasta acá
+   * solo podía accionar sobre una carrera en curso, y desde acá también puede leer y cambiar el
+   * reglamento de la liga. El admin que decidió incrustar esto en una página de verdad lo hizo
+   * sabiendo que el token queda visible en el código fuente de esa página.
+   *
+   * `embed.*` nunca viaja por este canal, ni para leerlo ni para cambiarlo: el token no puede ser
+   * quien administra su propio origen autorizado ni su propia versión.
+   */
+  function stripEmbedManagedFields(patch: Record<string, unknown>): Record<string, unknown> {
+    const stripped = stripManagedFields(patch);
+    delete stripped.embed;
+    return stripped;
+  }
+
+  embedRouter.get("/catalog", handleCatalog);
+  embedRouter.get("/config", (_req, res) => res.json(redactConfigForEmbed(deps.config)));
+
+  embedRouter.post("/config", (req, res) => {
+    const result = applyConfigPatchCore(req.body, stripEmbedManagedFields);
+    if (!result.ok) {
+      res.status(result.status).json({ ok: false, error: result.error });
+      return;
+    }
+    res.json(redactConfigForEmbed(deps.config));
+  });
+
+  embedRouter.get("/profiles", (_req, res) => {
+    res.json({ profiles: deps.config.ruleProfiles, activeProfileId: deps.config.activeProfileId });
+  });
+
+  embedRouter.post("/profiles", (req, res) => {
+    const result = saveProfile(deps.config, String((req.body ?? {}).name ?? ""));
+    if ("error" in result) {
+      res.status(409).json({ ok: false, error: result.error });
+      return;
+    }
+    res.json({ ok: true, profile: result, config: redactConfigForEmbed(deps.config) });
+  });
+
+  embedRouter.post("/profiles/:id/apply", (req, res) => {
+    const result = applyProfile(deps.config, req.params.id);
+    if ("error" in result) {
+      res.status(404).json({ ok: false, error: result.error });
+      return;
+    }
+    res.json({ ok: true, profile: result, config: redactConfigForEmbed(deps.config) });
+  });
+
+  embedRouter.delete("/profiles/:id", (req, res) => {
+    const result = deleteProfile(deps.config, req.params.id);
+    if ("error" in result) {
+      res.status(404).json({ ok: false, error: result.error });
+      return;
+    }
+    res.json({ ok: true, config: redactConfigForEmbed(deps.config) });
+  });
+
+  embedRouter.post("/network/test", (_req, res) => {
+    const checks = redactChecksForEmbed(runDiagnosticsNow());
+    res.json({ checks, summary: summarize(checks) });
+  });
 
   app.use("/api/embed", embedRouter);
 

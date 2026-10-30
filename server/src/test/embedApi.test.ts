@@ -193,6 +193,119 @@ test("el estado del embed no trae driverGuid ni los datos de red internos", asyn
     assert.ok(!crudo.includes("76561190000000009"), "el SteamID no debería salir de esta liga");
     assert.ok(!crudo.includes("sendAddress"), "a dónde mandamos los comandos es dato interno");
     assert.ok(!crudo.includes("acServer"), "la identificación del servidor de AC es dato interno");
+    // Regresión: hasta la fase 2 del embed, estos tres campos salían igual en el JSON crudo porque
+    // redactForEmbed solo los sacaba de la lista de "sendAddress"/"acServer" y se olvidaba de ellos.
+    assert.ok(!crudo.includes("adminPort"), "el puerto del panel es dato interno");
+    assert.ok(!crudo.includes("clientPort"), "el puerto de la app del piloto es dato interno");
+    assert.ok(!crudo.includes("203.0.113.5"), "la IP pública real de la liga no debería salir");
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
+test("el catálogo de infracciones viaja igual por el canal de embed", async () => {
+  const { rc, dataDir, server, base } = await levantar("catalogo", 12620, 13620);
+  try {
+    const tok = await token(base);
+    const res = await fetch(`${base}/api/embed/catalog`, {
+      headers: { Origin: ORIGEN, Authorization: `Bearer ${tok}` },
+    });
+    assert.equal(res.status, 200);
+    const catalogo = (await res.json()) as any;
+    assert.ok(catalogo.actions.review, "tiene que traer las etiquetas de acción");
+    assert.deepStrictEqual(catalogo.autoPenaltyAllowed, ["trackLimits"]);
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
+test("la config que lee el embed no trae leagueName, http, acUdp ni embed.*", async () => {
+  const { rc, dataDir, server, base } = await levantar("config-get", 12630, 13630);
+  try {
+    const tok = await token(base);
+    const res = await fetch(`${base}/api/embed/config`, {
+      headers: { Origin: ORIGEN, Authorization: `Bearer ${tok}` },
+    });
+    assert.equal(res.status, 200);
+    const config = (await res.json()) as any;
+    assert.ok(config.formation, "las reglas de largada sí tienen que estar");
+    assert.ok(config.pit, "las reglas de pit lane sí tienen que estar");
+    assert.ok(config.infractions, "el catálogo de infracciones sí tiene que estar");
+    assert.equal(config.leagueName, undefined, "el nombre de la liga no es una regla de carrera");
+    assert.equal(config.http, undefined, "la configuración de red no es una regla de carrera");
+    assert.equal(config.acUdp, undefined, "la configuración de red no es una regla de carrera");
+    assert.equal(config.embed, undefined, "el embed no puede leer ni cambiar su propio origen");
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
+test("Reglas guarda un cambio real por el canal de embed, pero nunca toca embed.allowedOrigin", async () => {
+  const { rc, dataDir, server, base } = await levantar("config-post", 12640, 13640);
+  try {
+    const tok = await token(base);
+    const res = await fetch(`${base}/api/embed/config`, {
+      method: "POST",
+      headers: { Origin: ORIGEN, Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pit: { stopGoSeconds: 45 },
+        embed: { allowedOrigin: "https://atacante.evil" },
+      }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(rc.config.pit.stopGoSeconds, 45, "el cambio real sí se tiene que aplicar");
+    assert.equal(rc.config.embed.allowedOrigin, ORIGEN, "embed.allowedOrigin no se puede tocar por este canal");
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
+test("perfiles de carrera por el canal de embed: guardar, aplicar y borrar", async () => {
+  const { rc, dataDir, server, base } = await levantar("perfiles", 12650, 13650);
+  try {
+    const tok = await token(base);
+    const headers = { Origin: ORIGEN, Authorization: `Bearer ${tok}`, "Content-Type": "application/json" };
+
+    rc.config.pit.stopGoSeconds = 77;
+    const guardado = await fetch(`${base}/api/embed/profiles`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "Endurance" }),
+    });
+    assert.equal(guardado.status, 200);
+    const { profile } = (await guardado.json()) as any;
+    assert.equal(profile.name, "Endurance");
+
+    rc.config.pit.stopGoSeconds = 10;
+    const aplicado = await fetch(`${base}/api/embed/profiles/${profile.id}/apply`, { method: "POST", headers });
+    assert.equal(aplicado.status, 200);
+    assert.equal(rc.config.pit.stopGoSeconds, 77, "aplicar el perfil tiene que restaurar lo guardado");
+
+    const borrado = await fetch(`${base}/api/embed/profiles/${profile.id}`, { method: "DELETE", headers });
+    assert.equal(borrado.status, 200);
+    assert.equal(rc.config.ruleProfiles.find((p) => p.id === profile.id), undefined, "el perfil borrado no puede seguir en la config");
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
+test("el diagnóstico por el canal de embed nunca trae la IP real de la liga", async () => {
+  const { rc, dataDir, server, base } = await levantar("diagnostico", 12660, 13660);
+  try {
+    const tok = await token(base);
+    const res = await fetch(`${base}/api/embed/network/test`, {
+      method: "POST",
+      headers: { Origin: ORIGEN, Authorization: `Bearer ${tok}` },
+    });
+    assert.equal(res.status, 200);
+    const { checks } = (await res.json()) as any;
+    const porHost = checks.find((c: any) => c.id === "public-host");
+    assert.ok(porHost, "tiene que venir el chequeo de la dirección de la liga");
+    assert.equal(porHost.detail, "Configurada.");
+    assert.ok(!JSON.stringify(checks).includes("203.0.113.5"), "la IP real no puede salir en ningún check");
+
+    const porTelemetria = checks.find((c: any) => c.id === "telemetry");
+    assert.ok(porTelemetria.detail.length > 0, "el resto de los chequeos sí trae su detalle real");
   } finally {
     await limpiar(rc, dataDir, server);
   }
