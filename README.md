@@ -3,7 +3,7 @@
 🔗 **[race-control.fly.dev](https://race-control.fly.dev/)**
 
 Control de carrera para ligas de **Assetto Corsa**, pensado para vivir **incrustado dentro del panel
-de administración de tu liga** (en este caso, [fslmanager.vercel.app](https://fslmanager.vercel.app)) en
+de administración de tu liga** en
 vez de ser una página propia con login. Conectás tu servidor dedicado —el que sea: EmperorServers o cualquier otro hosting— y
 dirigís la carrera desde una sola pantalla fusionada, sin salir del admin donde ya hacés todo lo
 demás.
