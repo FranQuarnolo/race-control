@@ -103,8 +103,8 @@
         </button>
         <!-- La tabla de posiciones finales. Aparece solo con la carrera terminada —antes la
              clasificación todavía se mueve— y por eso arranca `hidden`. -->
-        <a class="hint-action" id="btn-report-timing" href="api/report.csv" download hidden
-           title="Planilla con la clasificación final, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar posiciones finales</a>
+        <a class="hint-action" id="btn-report-timing" href="api/report.json" download hidden
+           title="Clasificación final, los segundos de penalización de cada piloto y todos los incidentes revisados, en JSON.">Descargar posiciones finales</a>
       </div>
 
       <div class="table-wrap">
@@ -155,9 +155,9 @@
       <header>
         <h2 id="modal-penalties-title">Sanciones aplicadas</h2>
         <!-- El informe baja del backend, no se arma acá: el panel no tiene por qué saber cómo se
-             calcula una clasificación, y así el mismo archivo sale igual desde /api/report.csv. -->
-        <a class="hint-action" id="btn-report" href="api/report.csv" download
-           title="Planilla con la clasificación, los segundos de penalización de cada piloto y todos los incidentes revisados. Se abre con Excel.">Descargar informe de carrera</a>
+             calcula una clasificación, y así el mismo archivo sale igual desde /api/report.json. -->
+        <a class="hint-action" id="btn-report" href="api/report.json" download
+           title="Clasificación, los segundos de penalización de cada piloto y todos los incidentes revisados, en JSON.">Descargar informe de carrera</a>
         <button class="btn-close" data-close-modal aria-label="Cerrar">&times;</button>
       </header>
       <div class="table-wrap">
@@ -194,7 +194,7 @@
            consulta, no un paso que hay que hacer. Si alguna vez entra una liga con un hosting que
            sí expone el campo, el camino para ella es copiar ese renglón de Estado y pegarlo; no
            hace falta volver a poner el paso. -->
-      <section>
+      <section id="network-howto">
         <h3>Cómo conectar tu servidor</h3>
         <p class="muted">Se hace una sola vez, y lo hace el soporte de tu hosting.</p>
 
@@ -313,8 +313,7 @@
           <h3>Perfiles de carrera</h3>
           <p class="muted">
             Un perfil guarda <strong>todas las reglas de este modal de una vez</strong>, con el
-            nombre que le pongas: "Endurance", "4Fun", lo que uses. Cargarlo las repone todas
-            juntas. No toca nada de la conexión ni del servidor.
+            nombre que le pongas: "Endurance", "4Fun", lo que uses.
           </p>
           <div class="row">
             <label for="profile-select">Cargar un perfil</label>
@@ -408,13 +407,6 @@
           </div>
           <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
           <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
-          <p class="muted">
-            Valores de 0 a 1: en qué punto de la vuelta empieza y termina el pit lane. Se ajusta
-            solo en cuanto alguien con la app pasa por boxes; estos dos campos son para corregirlo
-            a mano o para un circuito donde todavía no hay ninguna calibración. El panel completo
-            de Race Control (rama main) muestra ese punto sobre el mapa mientras un auto entra y
-            sale de boxes; desde esta pantalla se carga a mano con lo que haya informado el piloto.
-          </p>
           <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
           <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
           <div class="row"><label for="p-grace">Vueltas para cumplirla</label><input type="number" id="p-grace" /></div>

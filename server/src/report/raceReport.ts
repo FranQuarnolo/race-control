@@ -331,11 +331,11 @@ function csvCell(value: string): string {
   return '"' + escapado.replace(/"/g, '""') + '"';
 }
 
-/** Nombre de archivo sugerido, sin caracteres que Windows rechace. */
-export function reportFileName(report: RaceReport): string {
+/** Nombre de archivo sugerido, sin caracteres que Windows rechace. `ext` sin el punto. */
+export function reportFileName(report: RaceReport, ext: string = "csv"): string {
   const stamp = report.generatedAt.slice(0, 16).replace(/[:T]/g, "-");
   const track = report.track.split(" · ")[0] || "carrera";
-  return `informe-${slug(track)}-${stamp}.csv`;
+  return `informe-${slug(track)}-${stamp}.${ext}`;
 }
 
 function slug(text: string): string {

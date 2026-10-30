@@ -126,8 +126,8 @@ estaba corriendo.
 ## Ver el historial de una liga
 
 "Ver historial", en el menú ⋮, abre una fila por sesión de esa liga —práctica, clasificación o
-carrera—, con fecha, circuito y estado. El botón **Ver** abre el mismo informe que ya baja
-`/api/report.csv`: clasificación, sanciones e incidentes. El botón **Borrar** borra una sesión, con
+carrera—, con fecha, circuito y estado. El botón **Ver** muestra el mismo informe que el panel baja
+en `/api/report.json`: clasificación, sanciones e incidentes. El botón **Borrar** borra una sesión, con
 doble confirmación —primer click arma, segundo ejecuta—; una sesión en curso no se puede borrar,
 porque el worker la sigue escribiendo.
 

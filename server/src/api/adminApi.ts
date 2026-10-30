@@ -68,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.14";
+export const APP_VERSION = "1.15";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -561,15 +561,24 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   /**
    * Informe de carrera, descargable.
    *
-   * Es un CSV y no un PDF ni una página: lo que el admin hace con esto es pegarlo en la planilla
-   * del campeonato, no leerlo lindo. El mismo contenido está en `/api/report` como JSON, para
-   * quien quiera automatizarlo.
+   * El panel baja `/api/report.json`: mismo contenido que `/api/report`, pero con
+   * `Content-Disposition` para que el link de "Descargar informe de carrera" / "posiciones
+   * finales" (`index.html`) dispare un archivo con nombre propio en vez de abrir el JSON en la
+   * pestaña. `/api/report.csv` queda para quien ya tenía algo integrado contra el CSV (se pegaba
+   * directo en una planilla); no lo usa ninguna pantalla de este repo.
    */
   app.get("/api/report.csv", (_req, res) => {
     const report = currentReport();
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${reportFileName(report)}"`);
     res.send(toCsv(report));
+  });
+
+  app.get("/api/report.json", (_req, res) => {
+    const report = currentReport();
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${reportFileName(report, "json")}"`);
+    res.send(JSON.stringify(report, null, 2));
   });
 
   app.get("/api/report", (_req, res) => res.json(currentReport()));

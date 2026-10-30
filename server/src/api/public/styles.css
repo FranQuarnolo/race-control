@@ -886,12 +886,15 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   background: rgba(5, 6, 9, 0.6);
   z-index: 20;
   display: flex;
-  /* `safe center` centra si entra entero y, si no entra, se comporta como `flex-start` en vez de
-     recortar el borde de arriba contra el techo de la ventana. Lo necesita Conexión: es el único
-     modal sin pestañas y sin scroll interno (ver `#modal-network`), así que si su contenido no
-     entra en la ventana, lo que tiene que ceder es el centrado, no el contenido. */
-  align-items: safe center;
-  justify-content: center;
+  /* Antes esto centraba con `align-items: safe center`, pensado para que Conexión (el único modal
+     sin pestañas ni scroll interno, ver `#modal-network`) cediera el centrado en vez del contenido
+     cuando no entraba en la ventana. En la práctica, apretar "Probar" ahí adentro agranda el modal
+     DESPUÉS de haberlo centrado, y el recorte volvía: el `.modal` queda centrado con `margin: auto`
+     (ver abajo), que no tiene ese problema porque el margen se achica solo a medida que el
+     contenido crece, hasta llegar a 0 y dejar que el `overflow-y: auto` de acá abajo scrollee el
+     resto — sin depender de que el navegador soporte `safe`/`unsafe`. */
+  flex-direction: column;
+  align-items: center;
   padding: 20px;
   overflow-y: auto;
 }
@@ -908,6 +911,9 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   flex-direction: column;
   gap: 14px;
   overflow: hidden;
+  /* Centrado vertical por margen automático, no por `align-items` del backdrop: ver el comentario
+     de `.modal-backdrop`. */
+  margin: auto 0;
 }
 .modal header { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .modal header h2 { flex: 1 1 auto; font-size: 15px; margin: 0; }
@@ -923,8 +929,9 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
 /* El modal de Reglas es más angosto y se achica a un formulario con pestañas, no a una tabla
    ancha: 760 px de "Sanciones aplicadas" se vería como un formulario perdido en el medio.
    El alto es fijo (no `max-height` nada más) para que cambiar de pestaña no cambie el tamaño del
-   modal: antes cada pestaña tenía su propio alto de contenido y la caja saltaba al click. */
-.modal-tabs { width: min(620px, 94vw); height: 600px; max-height: 86vh; }
+   modal: antes cada pestaña tenía su propio alto de contenido y la caja saltaba al click. 720 px
+   (antes 600) porque a 600 la mayoría de las pestañas igual terminaba con scroll interno. */
+.modal-tabs { width: min(620px, 94vw); height: 720px; max-height: 90vh; }
 
 .tabs {
   display: flex;
@@ -1238,4 +1245,42 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
 @media (max-width: 760px) {
   .race-head { justify-content: space-between; }
   .lights-wrap { order: 3; flex-basis: 100%; justify-content: flex-start; }
+}
+
+/* Celular en vertical (~360-400 px). Tres problemas que no se ven en escritorio ni en tablet:
+   1. Los dos grupos de botones flotantes, cada uno pensado para su propio costado, empiezan a
+      pisarse: "Sanciones aplicadas" + "Reglas" + la chapa de versión no entran a la derecha del
+      ancho que le queda a "Conexión" a la izquierda. Achicarles la tipografía no alcanza para
+      liberar el espacio que hace falta.
+   2. Las filas de formulario (`.row`) ponen la etiqueta y el campo lado a lado con
+      `justify-content: space-between`; con un `select` o `input.wide` de 230 px fijos, en ~300 px
+      útiles de modal (94vw menos el padding) no entran los dos y el campo queda recortado contra
+      el borde.
+   3. `#timing-table` reparte 9 columnas por porcentaje del ancho disponible (`table-layout: fixed`):
+      en escritorio es lo que evita que una columna se quede con todo el aire (ver el comentario de
+      la tabla, más arriba), pero en un celular angosto el mismo mecanismo achica cada columna hasta
+      que "Acciones" ya no tiene lugar para los dos botones. Mejor un `.table-wrap` que scrollee de
+      costado —ya tiene `overflow-x: auto`— que nueve columnas ilegibles. */
+@media (max-width: 480px) {
+  .floating { max-width: 47%; flex-wrap: wrap; row-gap: 6px; }
+  .floating-left { left: 3%; }
+  .floating-right { right: 3%; justify-content: flex-end; }
+  main { padding-top: 86px; }
+
+  .modal .row,
+  .wizard .row {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .modal .row > label,
+  .wizard .row > label {
+    flex: 1 1 100%;
+  }
+  .modal select,
+  .modal input.wide,
+  .wizard input[type="text"] {
+    width: 100%;
+  }
+
+  #timing-table { table-layout: auto; min-width: 640px; }
 }

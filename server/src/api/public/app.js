@@ -1726,6 +1726,13 @@ function renderNetwork(network) {
   acEl.textContent = ac.autodetected ? ac.host + ":" + ac.port : "esperando la primera señal...";
   acEl.className = !ac.autodetected && network.receivingTelemetry ? "bad" : "";
 
+  // El manual de "Cómo conectar tu servidor" es para quien todavía no lo hizo. Con la conexión ya
+  // confirmada —mismo criterio que pinta de verde el botón de la barra— seguir mostrándolo es
+  // ruido: ocupa lugar arriba de todo en un cajón que, a partir de acá, se abre sobre todo para
+  // mirar el estado o tocar el modo.
+  const connected = Boolean(ac.autodetected) && network.receivingTelemetry;
+  $("network-howto").hidden = connected;
+
   renderNetworkButton(network, ac);
 }
 
@@ -1796,7 +1803,7 @@ function renderMode(shadowMode) {
  * encabezado de marca (ver la nota del header en index.html). Lo único que queda de esa función es
  * lo que de verdad hacía falta: el link de posiciones finales solo aparece con la carrera
  * terminada. Mientras la carrera corre el link no está: la clasificación se sigue moviendo y un
- * CSV bajado en la vuelta 20 no es un resultado, es una foto que después nadie sabe de cuándo era.
+ * JSON bajado en la vuelta 20 no es un resultado, es una foto que después nadie sabe de cuándo era.
  */
 function renderFinishedReport(state) {
   $("btn-report-timing").hidden = state.phase !== "finished";

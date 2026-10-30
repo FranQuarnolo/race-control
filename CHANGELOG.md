@@ -3,6 +3,67 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.15] — 2026-10-30
+
+**Repaso de la pantalla fusionada tras probarla a fondo: el modal de Conexión se recortaba al
+apretar "Probar", Reglas pedía scroll de más, dos textos largos sobraban, el informe pasa a JSON y
+hay una primera pasada de responsive para celular.**
+
+### El modal de Conexión se recortaba al apretar "Probar", y no había forma de scrollear
+
+**Síntoma:** al abrir Conexión y tocar "Probar", las cuatro tarjetas de diagnóstico que aparecen
+abajo quedaban cortadas contra el borde de la ventana, sin scroll que las alcanzara.
+
+**Causa:** el backdrop centraba el modal con `align-items: safe center` — pensado justo para que
+Conexión (el único modal sin pestañas, con alto libre) cediera el centrado en vez del contenido si
+no entraba en la ventana. El problema es que "Probar" agranda el modal **después** de que el
+navegador ya lo centró: el recorte volvía porque el contenido crecía sin que el layout se
+recalculara con el mismo criterio de "safe".
+
+**Decisión:** cambiar el centrado por el truco de margen automático (`margin: auto 0` en `.modal`,
+dentro de un backdrop en columna) — un mecanismo que no depende de que el contenido ya haya crecido
+ni de que el navegador soporte el valor `safe`: el margen se va a cero solo a medida que hace falta
+y el `overflow-y: auto` del backdrop se encarga del resto. De paso, la sección "Cómo conectar tu
+servidor" se oculta sola en cuanto el servidor queda confirmado como conectado — antes se quedaba a
+la vista para siempre, ocupando el lugar que ahora usa alguien que ya no la necesita.
+
+### Reglas pedía scroll con casi cualquier pestaña abierta
+
+El modal estaba fijado a 600 px de alto; pasa a 720 (con techo de 90vh en pantallas chicas), que es
+lo que de verdad hace falta para que la mayoría de las pestañas entren sin scrollear.
+
+### Dos textos que ya habían dejado de ser necesarios
+
+El párrafo que explicaba la calibración del pit lane (zona de pit, Pista → Pit lane) y la frase
+"Cargarlo las repone todas juntas. No toca nada de la conexión ni del servidor." (Perfiles de
+carrera) repetían lo que ya dicen las etiquetas de los propios campos. Se sacaron enteros.
+
+### El informe baja en JSON, no en CSV
+
+Los dos links de descarga ("Descargar informe de carrera" en Sanciones aplicadas, "Descargar
+posiciones finales" en la torre) apuntaban a `/api/report.csv`; ahora apuntan a un `/api/report.json`
+nuevo, con el mismo `Content-Disposition` que el CSV pero en JSON. `/api/report.csv` se deja andando
+por si algo externo ya lo consume, pero ninguna pantalla de este repo lo usa más.
+
+### Primera pasada de responsive para celular
+
+Tres cosas que solo se notaban en una pantalla angosta de verdad, no en un navegador de escritorio
+achicado:
+
+- Los dos grupos de botones flotantes (Conexión a la izquierda; versión, Sanciones y Reglas a la
+  derecha) se pisaban por debajo de los ~380 px de ancho. Ahora cada grupo queda acotado a su mitad
+  de pantalla y envuelve en dos líneas en vez de superponerse con el otro.
+- Las filas de formulario con un `select` o un `input.wide` de 230 px fijos no entraban en el ancho
+  útil de un modal en celular; pasan a apilarse (etiqueta arriba, campo abajo, ancho completo) por
+  debajo de los 480 px.
+- La torre de tiempos reparte 9 columnas por porcentaje del ancho disponible, que en celular las
+  achicaba hasta volver inusable la columna de Acciones. Por debajo de los 480 px la tabla vuelve a
+  ancho de contenido y scrollea de costado en vez de apretar todo.
+
+**Deuda cerrada de la 1.14:** `RC_PUBLIC_LEAGUE` —el bypass de autenticación sin token que había
+quedado prendido en producción mientras se terminaba el embed— se apagó (`flyctl secrets unset`) una
+vez que el embed con token quedó andando como alternativa real.
+
 ## [1.14] — 2026-10-30
 
 **Race Control se puede incrustar como una sección dentro de otra página (fslmanager.vercel.app),
