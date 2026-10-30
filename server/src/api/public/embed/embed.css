@@ -212,6 +212,46 @@
   font-size: 0.85rem;
 }
 
+/* Igual que #race-live en styles.css: con el verde dado, este aviso reemplaza al renglón de ayuda. */
+.rc-embed__start .rc-embed__race-live {
+  grid-column: 1 / -1;
+}
+.rc-embed__race-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--green);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.rc-embed__race-live[hidden] {
+  display: none;
+}
+.rc-embed__race-live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: rc-embed-race-pulse 1.5s ease-in-out infinite;
+}
+@keyframes rc-embed-race-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green), transparent 45%);
+  }
+  60% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--green), transparent 100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-embed__race-live-dot {
+    animation: none;
+  }
+}
+
 .rc-embed__btn {
   font-family: var(--font-display);
   text-transform: uppercase;
@@ -248,9 +288,67 @@
   color: var(--red);
 }
 
+/* Botones ícono de la columna Acciones: desplegar el detalle y el menú de "Expulsar del
+   servidor". Mismo tratamiento que .btn-expand/.btn-kebab en styles.css. */
+.rc-embed__btn--expandir,
+.rc-embed__btn--kebab {
+  position: relative;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--font-body);
+  padding: 2px 7px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+.rc-embed__btn--expandir:hover,
+.rc-embed__btn--kebab:hover {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+/* Punto ámbar: este piloto tiene incidentes pendientes de revisar. */
+.rc-embed__btn--pendiente::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
+/* Punto rojo: hay un kick a medio confirmar para este piloto. */
+.rc-embed__btn--armando::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
 .rc-embed__celda-auto {
   width: 1%;
   white-space: nowrap;
+}
+
+.rc-embed__celda-acciones {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.rc-embed__brand-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  background: rgba(230, 232, 236, 0.9);
+  border-radius: 4px;
+  padding: 1px;
 }
 
 .rc-embed__brand-shield {
@@ -315,34 +413,99 @@
   font-size: 0.75rem;
 }
 
+/* Atenuada entera y no solo marcada: sin columna de posición visible de lejos, esto es todo el
+   aviso de "ya no está" que le queda a esta tabla chica — mismo criterio que .desconectado en
+   styles.css. El nombre del piloto es la excepción: tiene que seguir legible para saber de quién
+   se está hablando, aunque el resto de la fila se apague. */
 .rc-embed__fila--desconectado {
-  color: var(--muted);
+  opacity: 0.45;
+}
+.rc-embed__fila--desconectado .rc-embed__celda-nombre {
+  opacity: 1;
+  color: var(--text);
+}
+
+.rc-embed__fila-detalle td {
+  background: var(--panel-sunken);
+  padding: 0;
+}
+.rc-embed__detalle {
+  padding: 10px 12px;
 }
 
 .rc-embed__incidente {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
   background: var(--panel-raised);
+  border: 1px solid var(--panel-border);
   border-radius: calc(var(--radius) / 2);
-  padding: 4px 8px;
-  margin-bottom: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.rc-embed__incidente:last-child {
+  margin-bottom: 0;
+}
+.rc-embed__incidente--resuelto {
+  opacity: 0.6;
 }
 
-.rc-embed__incidente-texto {
-  font-size: 0.85rem;
+.rc-embed__incidente-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.rc-embed__incidente-who {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.rc-embed__incidente-ctx {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 8px;
 }
 
 .rc-embed__incidente-botones {
   display: flex;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .rc-embed__incidente-botones .rc-embed__btn {
   padding: 2px 8px;
   font-size: 0.7rem;
+}
+
+/* Menú flotante de "Expulsar del servidor": `position:fixed` y apendeado a document.body, igual
+   que .menu-fila en styles.css y por el mismo motivo — la tabla tiene scroll horizontal y un
+   popup adentro de la fila quedaría recortado. */
+.rc-embed__menu {
+  position: fixed;
+  z-index: 1001;
+  min-width: 190px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: calc(var(--radius) / 2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.rc-embed__menu .rc-embed__btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--font-body);
+  border-radius: calc(var(--radius) / 2 - 2px);
+  padding: 6px 8px;
+}
+.rc-embed__menu .rc-embed__btn:hover {
+  background: var(--panel-raised);
+}
+.rc-embed__menu .rc-embed__btn--arming {
+  background: var(--red);
+  color: var(--text);
 }
 
 .rc-embed__vacio {
@@ -364,6 +527,9 @@
 .rc-embed__badge--served { color: var(--green); }
 .rc-embed__badge--escalated { color: var(--red); }
 .rc-embed__badge--revoked { color: var(--muted); }
+.rc-embed__badge--dismissed { color: var(--muted); }
+.rc-embed__badge--warned { color: var(--yellow); }
+.rc-embed__badge--penalized { color: var(--red); }
 
 /*
   Modales de Conexión y Reglas: se montan DENTRO de `.rc-embed` (no en document.body) para heredar

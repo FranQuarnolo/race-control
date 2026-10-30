@@ -374,6 +374,45 @@ test("anular una sanción por el canal de embed queda igual de anulada que por e
   }
 });
 
+test("expulsar un auto por el canal de embed hace lo mismo que por el panel", async () => {
+  const { rc, dataDir, server, base } = await levantar("kick", 12670, 13670);
+  try {
+    rc.stateTracker.onNewConnection({
+      driverName: "Piloto Kickeado",
+      driverGuid: "guid-kick",
+      carId: 5,
+      carModel: "x",
+      carSkin: "y",
+    } as never);
+
+    const tok = await token(base);
+    const res = await fetch(`${base}/api/embed/cars/5/kick`, {
+      method: "POST",
+      headers: { Origin: ORIGEN, Authorization: `Bearer ${tok}` },
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as any;
+    assert.equal(body.ok, true);
+    assert.equal(body.driverName, "Piloto Kickeado");
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
+test("expulsar un auto que no está conectado por el canal de embed da 404", async () => {
+  const { rc, dataDir, server, base } = await levantar("kick-404", 12680, 13680);
+  try {
+    const tok = await token(base);
+    const res = await fetch(`${base}/api/embed/cars/5/kick`, {
+      method: "POST",
+      headers: { Origin: ORIGEN, Authorization: `Bearer ${tok}` },
+    });
+    assert.equal(res.status, 404);
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
 test("la largada por el canal de embed mueve el mismo semáforo que el panel", async () => {
   const { rc, dataDir, server, base } = await levantar("largada", 12900, 13900);
   try {

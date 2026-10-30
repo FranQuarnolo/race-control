@@ -650,6 +650,17 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
 
+    /**
+     * Los logos de marca (`src/api/public/brands/*.svg`) los pide el mismo navegador sin sesión
+     * que pide `embed.js` — por el mismo motivo de arriba, con el agravante de que acá ni siquiera
+     * hay snippet con token de por medio: son imágenes públicas, sin dato de la liga adentro.
+     */
+    const esAssetDeBrands = resto.startsWith("/brands/");
+    if (esAssetDeBrands) {
+      proxyToWorker(req, res, { port: league.adminPort, path: resto });
+      return;
+    }
+
     if (!req.userId) {
       // Un `fetch` del panel espera JSON; una navegación del navegador, el login.
       if (resto.startsWith("/api/")) res.status(401).json({ ok: false, error: "Sesión vencida." });

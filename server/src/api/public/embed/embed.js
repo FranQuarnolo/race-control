@@ -45,6 +45,10 @@
   // de Race Control. `script.src` es el único dato que tenemos de dónde vive de verdad este archivo.
   var origin = new URL(script.src, document.baseURI).origin;
   var API = origin + "/l/" + encodeURIComponent(slug) + "/api/embed";
+  // Para pedir archivos estáticos que NO viven bajo /api/embed, como los logos de marca —
+  // `/brands/*.svg`, servidos por el propio worker detrás de `/l/<liga>/`. Ver el bypass
+  // `esAssetDeBrands` en portal/server.ts.
+  var ASSET_BASE = origin + "/l/" + encodeURIComponent(slug);
 
   // El snippet que se pega en la página ajena es SOLO el div y este <script> — no le pedimos al
   // admin que agregue también un <link> de la hoja de estilos. Si todavía no está, se suma sola, al
@@ -63,6 +67,14 @@
   var lastState = null;
   var armed = null; // { key, timer } — una sola acción armada a la vez, sea sanción o anulación.
   var pollTimer = null;
+  // Qué autos tienen el detalle de incidentes desplegado. Vive acá afuera, igual que `armed`, para
+  // sobrevivir al redibujado completo de la tabla en cada poll (ver `renderTabla`).
+  var expandedCars = {};
+  // El menú de "Expulsar del servidor" a medio abrir: { carId, el, anchor }. Uno solo a la vez,
+  // apendeado a document.body y no a la fila (ver `toggleKebab`), por el mismo motivo que el menú
+  // equivalente de app.js: la tabla tiene scroll horizontal y un popup adentro de la fila quedaría
+  // recortado.
+  var openKebab = null;
   var catalog = null; // /catalog del canal embed. Null hasta que responde.
   var pitZoneSuggestion = null;
   // Declarado acá arriba y no junto a registrarFormReglas: ese helper ya se llama más abajo,
@@ -121,9 +133,18 @@
   botones.appendChild(btnReset);
   var hint = el("span", "rc-embed__hint");
 
+  // Con el verde dado, el renglón de ayuda se calla y habla este aviso, igual que #race-live en
+  // el panel completo (ver index.html/styles.css): el admin ya no necesita instrucciones, necesita
+  // confirmar de un vistazo que la carrera corre.
+  var raceLive = el("span", "rc-embed__race-live");
+  raceLive.hidden = true;
+  raceLive.appendChild(el("span", "rc-embed__race-live-dot"));
+  raceLive.appendChild(document.createTextNode("Carrera en curso"));
+
   start.appendChild(sessionIndicator);
   start.appendChild(lightsWrap);
   start.appendChild(botones);
+  start.appendChild(raceLive);
   start.appendChild(hint);
 
   var tablaWrap = el("div", "rc-embed__tabla-wrap");
@@ -492,11 +513,61 @@
     if (e.target === modalReglasBackdrop) cerrarModal(modalReglasBackdrop);
   });
 
+  // ------------------------------------------------------------------------- modal: sancionar
+
+  /**
+   * "Sancionar a <piloto>": a diferencia de Descartar/Advertir, que resuelven de un click, esto
+   * necesita elegir tipo y —si es de tiempo— segundos. Va en un modal propio y no como formulario
+   * inline (que es como lo hace `app.js`) porque acá la tabla entera se reconstruye en cada poll de
+   * `POLL_MS`: un formulario inline perdería lo tipeado a mitad de carga. El modal, una vez abierto,
+   * no lo toca ningún render hasta que se cierra.
+   */
+  var modalSancionBackdrop = el("div", "rc-embed__modal-backdrop");
+  modalSancionBackdrop.hidden = true;
+  var modalSancion = el("div", "rc-embed__modal");
+  var headerSancion = el("div", "rc-embed__modal-header");
+  var tituloSancionModal = document.createElement("h2");
+  tituloSancionModal.textContent = "Sancionar";
+  var btnCerrarSancion = boton("×", function () { cerrarModal(modalSancionBackdrop); }, "cerrar");
+  headerSancion.appendChild(tituloSancionModal);
+  headerSancion.appendChild(btnCerrarSancion);
+  modalSancion.appendChild(headerSancion);
+
+  var sancionCuerpo = el("div", "rc-embed__modal-seccion");
+  modalSancion.appendChild(sancionCuerpo);
+  var sancionAviso = el("p", "rc-embed__modal-aviso");
+  sancionAviso.hidden = true;
+  modalSancion.appendChild(sancionAviso);
+  modalSancionBackdrop.appendChild(modalSancion);
+  modalSancionBackdrop.addEventListener("click", function (e) {
+    if (e.target === modalSancionBackdrop) cerrarModal(modalSancionBackdrop);
+  });
+
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
+    if (openKebab) { cerrarKebab(); return; }
     cerrarModal(modalConexionBackdrop);
     cerrarModal(modalReglasBackdrop);
+    cerrarModal(modalSancionBackdrop);
   });
+
+  // El menú de "Expulsar del servidor" vive en document.body, no en la fila (ver `toggleKebab`):
+  // se cierra con un click afuera (captura, para adelantarse al propio click del botón que lo
+  // abrió), con scroll de cualquier ancestro, o si cambia el tamaño de la ventana — mismo criterio
+  // que `toggleRowMenu`/`closeRowMenu` en app.js, y por el mismo motivo: un menú `position:fixed`
+  // no se mueve solo con el contenido.
+  document.addEventListener(
+    "click",
+    function (e) {
+      if (!openKebab) return;
+      if (openKebab.el.contains(e.target)) return;
+      if (openKebab.anchor && openKebab.anchor.contains(e.target)) return;
+      cerrarKebab();
+    },
+    true
+  );
+  document.addEventListener("scroll", function () { cerrarKebab(); }, true);
+  window.addEventListener("resize", function () { cerrarKebab(); });
 
   root.appendChild(banner);
   root.appendChild(topbar);
@@ -507,6 +578,7 @@
   root.appendChild(sancionesVacio);
   root.appendChild(modalConexionBackdrop);
   root.appendChild(modalReglasBackdrop);
+  root.appendChild(modalSancionBackdrop);
 
   // --------------------------------------------------------------------------------------- red
 
@@ -1139,42 +1211,255 @@
     return INCIDENT_KIND_LABELS[incident.kind] || "incidente";
   }
 
-  function renderIncidentesDeAuto(celda, car, incidentesPendientes) {
-    celda.textContent = "";
-    if (incidentesPendientes.length === 0) {
-      celda.appendChild(document.createTextNode("—"));
-      return;
-    }
-    incidentesPendientes.forEach(function (incident) {
-      var card = el("div", "rc-embed__incidente");
-      var texto = el("span", "rc-embed__incidente-texto");
-      texto.textContent = tituloIncidente(incident, car.carId);
-      var acciones = el("div", "rc-embed__incidente-botones");
-      acciones.appendChild(boton("Descartar", function () { resolver(incident.id, "dismissed"); }, "secondary"));
-      acciones.appendChild(boton("Advertir", function () { resolver(incident.id, "warned"); }, "secondary"));
-      acciones.appendChild(
-        botonConfirmacion(
-          "sancionar:" + incident.id,
-          "Sancionar (+5s)",
-          function () { resolver(incident.id, "penalized", { penaltyType: "TIME", seconds: 5, carId: car.carId }); }
-        )
-      );
-      card.appendChild(texto);
-      card.appendChild(acciones);
-      celda.appendChild(card);
-    });
-  }
-
   function resolver(incidentId, status, extra) {
     var body = Object.assign({ status: status }, extra || {});
     ejecutar("/incidents/" + encodeURIComponent(incidentId) + "/resolve", body);
   }
 
+  /** Igual que `GEOMETRY_LABELS` en app.js: cómo se lee la geometría de un toque entre autos. */
+  var GEOMETRY_LABELS = {
+    "rear-end": "Toque trompa contra cola",
+    "side-by-side": "Toque rueda a rueda",
+    "head-on": "Impacto frontal",
+    unknown: "Geometría sin determinar",
+  };
+
+  /** Igual que `INCIDENT_STATUS` en app.js, solo la etiqueta: la clase del badge es el propio
+   * `incident.status` (ver `FAMILIAS_CON_SUFIJO_DINAMICO` en embed.test.ts). */
+  var INCIDENT_STATUS_LABELS = { dismissed: "descartado", warned: "advertido", penalized: "sancionado" };
+
+  /** Detalle de un piloto expandido: todos sus incidentes de la sesión, más nuevo arriba, cada uno
+   * con su propia tarjeta — igual que `updateCarDetail`/`incidentCard` en app.js, pero reconstruido
+   * entero en cada poll en vez de cacheado por firma: acá no hay nada tipeable adentro (Sancionar
+   * abre un modal aparte), así que no hay nada que perder al repintar. */
+  function construirDetalle(car, incidentesDelAuto) {
+    var wrap = el("div", "rc-embed__detalle");
+    if (incidentesDelAuto.length === 0) {
+      var vacio = el("p", "rc-embed__vacio");
+      vacio.textContent = "Sin incidentes para este piloto en esta sesión.";
+      wrap.appendChild(vacio);
+      return wrap;
+    }
+    incidentesDelAuto
+      .slice()
+      .sort(function (a, b) { return b.createdAt - a.createdAt; })
+      .forEach(function (incident) { wrap.appendChild(incidenteCard(incident, car)); });
+    return wrap;
+  }
+
+  function incidenteCard(incident, car) {
+    var resuelto = incident.status !== "pending";
+    var card = document.createElement("div");
+    card.className = "rc-embed__incidente" + (resuelto ? " rc-embed__incidente--resuelto" : "");
+
+    var head = el("div", "rc-embed__incidente-head");
+    var who = el("span", "rc-embed__incidente-who");
+    who.textContent = tituloIncidente(incident, car.carId);
+    head.appendChild(who);
+    if (resuelto) {
+      var badge = el("span", "rc-embed__badge rc-embed__badge--" + incident.status);
+      badge.textContent = INCIDENT_STATUS_LABELS[incident.status] || incident.status;
+      head.appendChild(badge);
+    }
+    card.appendChild(head);
+
+    var ctx = el("div", "rc-embed__incidente-ctx");
+    var bits = [];
+    if (incident.kind === "car-contact") bits.push(GEOMETRY_LABELS[incident.geometry] || GEOMETRY_LABELS.unknown);
+    if (typeof incident.impactSpeedKmh === "number") bits.push("impacto a " + Math.round(incident.impactSpeedKmh) + " km/h");
+    if (incident.detail) bits.push(incident.detail);
+    bits.push("vuelta " + incident.lap);
+    if (incident.impactCount > 1) bits.push(incident.impactCount + " impactos seguidos");
+    bits.push(new Date(incident.createdAt).toLocaleTimeString("es-AR", { hour12: false }));
+    ctx.textContent = bits.join(" · ");
+    card.appendChild(ctx);
+
+    if (incident.status === "pending") {
+      var botones = el("div", "rc-embed__incidente-botones");
+      botones.appendChild(boton("Descartar", function () { resolver(incident.id, "dismissed"); }, "secondary"));
+      botones.appendChild(boton("Advertir", function () { resolver(incident.id, "warned"); }, "secondary"));
+      botones.appendChild(boton("Sancionar", function () { abrirSancion(incident); }, "peligro"));
+      card.appendChild(botones);
+    } else if (incident.status === "penalized") {
+      var issued = ((lastState && lastState.stewardPenalties) || []).filter(function (p) { return p.incidentId === incident.id; })[0];
+      if (issued) {
+        var line = el("div", "rc-embed__incidente-ctx");
+        var que = issued.type === "TIME" ? "+" + issued.timePenaltySeconds + "s" : PENALTY_TYPE_LABELS[issued.type] || issued.type;
+        line.textContent = "Sanción aplicada: " + que + " a " + driverLabelByCarId(issued.carId);
+        card.appendChild(line);
+      }
+    }
+
+    return card;
+  }
+
+  /** Abre o cierra el detalle de un piloto. Se reconstruye entero cada vez que se abre (y en cada
+   * poll mientras sigue abierto): `renderTabla` ya recrea toda la tabla en cada poll, así que
+   * cachear por firma acá —como hace `updateCarDetail` en app.js— no ahorra nada. */
+  function toggleExpand(carId) {
+    expandedCars[carId] = !expandedCars[carId];
+    if (lastState) render(lastState);
+  }
+
+  // --------------------------------------------------------------------------- menú de acciones
+
+  /** Igual que `toggleRowMenu`/`closeRowMenu` en app.js: un solo menú a la vez, `position:fixed`
+   * contra el botón que lo abrió, apendeado a document.body para no quedar recortado por el
+   * scroll horizontal de la tabla. */
+  function toggleKebab(carId, anchor) {
+    var yaEstaba = openKebab !== null && openKebab.carId === carId;
+    cerrarKebab();
+    if (yaEstaba) return;
+    var menu = el("div", "rc-embed__menu");
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+    anchor.setAttribute("aria-expanded", "true");
+    openKebab = { carId: carId, el: menu, anchor: anchor };
+    sincronizarKebab();
+  }
+
+  function cerrarKebab() {
+    if (!openKebab) return;
+    if (openKebab.anchor) openKebab.anchor.setAttribute("aria-expanded", "false");
+    openKebab.el.remove();
+    openKebab = null;
+  }
+
+  /**
+   * Reconstruye el contenido y la posición del menú abierto. Se llama al abrirlo y de nuevo al
+   * final de cada `renderTabla`: la tabla se reconstruye entera en cada poll, así que el botón que
+   * sirve de ancla es un elemento NUEVO cada vez — sin esto, el menú quedaría apuntando a un botón
+   * que ya no existe, y el texto "¿Seguro?" del kick armado no se reflejaría acá.
+   */
+  function sincronizarKebab() {
+    if (!openKebab) return;
+    var anchor = filas.querySelector('[data-kebab-car="' + openKebab.carId + '"]');
+    if (!anchor) { cerrarKebab(); return; }
+    openKebab.anchor = anchor;
+    anchor.setAttribute("aria-expanded", "true");
+
+    openKebab.el.textContent = "";
+    var carId = openKebab.carId;
+    var kick = botonConfirmacion("kick:" + carId, "Expulsar del servidor", function () { ejecutarKick(carId); }, "peligro");
+    openKebab.el.appendChild(kick);
+
+    var r = anchor.getBoundingClientRect();
+    var abajo = r.bottom + 4;
+    var arriba = r.top - openKebab.el.offsetHeight - 4;
+    openKebab.el.style.top = (abajo + openKebab.el.offsetHeight <= window.innerHeight - 8 || arriba < 8 ? abajo : arriba) + "px";
+    openKebab.el.style.left = Math.max(8, r.right - openKebab.el.offsetWidth) + "px";
+  }
+
+  function ejecutarKick(carId) {
+    cerrarKebab();
+    ejecutar("/cars/" + carId + "/kick");
+  }
+
+  // ------------------------------------------------------------------------ sanción manual
+
+  var MANUAL_PENALTIES = [
+    ["TIME", "Penalización de tiempo"],
+    ["DT", "Drive-Through"],
+    ["SG", "Stop & Go"],
+    ["BALLAST", "Lastre"],
+  ];
+
+  /** Arma el modal de Sanción para este incidente y lo abre. Reconstruye `sancionCuerpo` entero
+   * cada vez: es más simple que acordarse de desarmar el formulario anterior, y nunca hay dos
+   * incidentes sancionándose a la vez porque el modal es excluyente. */
+  function abrirSancion(incident) {
+    sancionCuerpo.textContent = "";
+    sancionAviso.hidden = true;
+
+    var who = document.createElement("select");
+    incident.parties.forEach(function (p) {
+      var opt = document.createElement("option");
+      opt.value = String(p.carId);
+      opt.textContent = p.driverName || "Auto " + p.carId;
+      who.appendChild(opt);
+    });
+    // Con un solo piloto involucrado no hay nada que elegir: se muestra igual, deshabilitado, para
+    // que quede claro a quién se está por sancionar — mismo criterio que `penaltyForm` en app.js.
+    who.disabled = incident.parties.length < 2;
+
+    var what = document.createElement("select");
+    MANUAL_PENALTIES.forEach(function (par) {
+      var opt = document.createElement("option");
+      opt.value = par[0];
+      opt.textContent = par[1];
+      what.appendChild(opt);
+    });
+
+    var seconds = document.createElement("input");
+    seconds.type = "number";
+    seconds.min = "1";
+    seconds.max = "600";
+    seconds.value = "5";
+
+    var filaSeconds = filaCampo("Segundos", seconds);
+    filaSeconds.hidden = what.value !== "TIME";
+
+    var armada = null;
+    var btnAplicar = boton("Aplicar", function () {
+      if (!armada) {
+        var etiqueta = MANUAL_PENALTIES.filter(function (par) { return par[0] === what.value; })[0];
+        var queEs = what.value === "TIME" ? "+" + seconds.value + "s" : etiqueta ? etiqueta[1] : what.value;
+        btnAplicar.textContent = "¿" + queEs + " a " + who.options[who.selectedIndex].textContent + "?";
+        btnAplicar.className = "rc-embed__btn rc-embed__btn--arming";
+        armada = setTimeout(desarmarSancion, ARM_MS);
+        return;
+      }
+      clearTimeout(armada);
+      armada = null;
+      btnAplicar.disabled = true;
+      pedido("/incidents/" + encodeURIComponent(incident.id) + "/resolve", {
+        method: "POST",
+        body: { status: "penalized", carId: Number(who.value), penaltyType: what.value, seconds: Number(seconds.value) },
+      }).then(
+        function () {
+          cerrarModal(modalSancionBackdrop);
+          refrescar();
+        },
+        function (err) {
+          btnAplicar.disabled = false;
+          sancionAviso.textContent = "No se pudo sancionar: " + err.message;
+          sancionAviso.hidden = false;
+        }
+      );
+    });
+
+    function desarmarSancion() {
+      if (armada) clearTimeout(armada);
+      armada = null;
+      btnAplicar.textContent = "Aplicar";
+      btnAplicar.className = "rc-embed__btn rc-embed__btn--peligro";
+    }
+    who.addEventListener("change", desarmarSancion);
+    what.addEventListener("change", function () {
+      filaSeconds.hidden = what.value !== "TIME";
+      desarmarSancion();
+    });
+    seconds.addEventListener("input", desarmarSancion);
+
+    var btnCancelar = boton("Cancelar", function () { cerrarModal(modalSancionBackdrop); }, "secondary");
+    var filaBotones = el("div", "rc-embed__row");
+    filaBotones.appendChild(btnAplicar);
+    filaBotones.appendChild(btnCancelar);
+
+    sancionCuerpo.appendChild(filaCampo("Sancionar a", who));
+    sancionCuerpo.appendChild(filaCampo("Tipo de sanción", what));
+    sancionCuerpo.appendChild(filaSeconds);
+    sancionCuerpo.appendChild(filaBotones);
+
+    abrirModal(modalSancionBackdrop);
+  }
+
   // --------------------------------------------------------------------- escudo de marca (CSS)
 
-  /** Escudo con monograma, siempre con CSS y nunca con `<img>`: pedir `/brands/*.svg` sin sesión
-   * abriría una ruta nueva sin bypass en `portal/server.ts` solo para este dibujo. Ver
-   * `brandShield` en `app.js` para el original del que esto es una copia deliberada. */
+  /** Escudo con monograma, dibujado con CSS: el respaldo de `renderCarBadge` para cuando no hay
+   * `brandLogo` o el archivo no carga. Antes era el único dibujo del auto —pedir `/brands/*.svg`
+   * sin sesión no tenía bypass en `portal/server.ts`— pero ya existe `esAssetDeBrands` para eso.
+   * Ver `brandShield` en `app.js` para el original del que esto es una copia deliberada. */
   var BRAND_COLORS = {
     "Ferrari": "#e10600",
     "BMW": "#0d6ec9",
@@ -1253,6 +1538,24 @@
     text.textContent = monogramOf(brand);
     wrap.appendChild(text);
     return wrap;
+  }
+
+  /**
+   * Logo de marca real, con el escudo de monograma como respaldo — igual que `renderCarBadge` en
+   * app.js, pero sin la memoria de `dataset.model`: acá no hace falta, la tabla entera se
+   * reconstruye en cada poll, así que no hay un nodo viejo al que evitarle un repintado.
+   */
+  function renderCarBadge(car) {
+    if (!car.brandLogo) return brandShield(car);
+    var img = document.createElement("img");
+    img.className = "rc-embed__brand-logo";
+    img.alt = car.brand || car.carModel;
+    img.title = car.brand || car.carModel;
+    img.src = ASSET_BASE + "/brands/" + encodeURIComponent(car.brandLogo) + ".svg";
+    img.addEventListener("error", function () {
+      if (img.parentNode) img.parentNode.replaceChild(brandShield(car), img);
+    });
+    return img;
   }
 
   // ===================================================================== semáforo de 5 luces
@@ -1352,6 +1655,11 @@
     btnGreen.disabled = !allowed.green || !esCarrera;
     btnReset.disabled = !allowed.reset;
 
+    // Mismo criterio que renderStart en app.js: el aviso de "Carrera en curso" depende solo del
+    // semáforo, no de la sesión — así un admin que recién abrió el embed en medio de una carrera
+    // lo ve igual, sin esperar el primer SESSION_INFO.
+    raceLive.hidden = lightState !== "green";
+
     // Fuera de carrera no hay parrilla que formar ni nadie a quien sancionar por adelantarse —
     // mismo criterio que app.js: se vacía el renglón en vez de explicarlo, los botones ya quedan
     // deshabilitados arriba.
@@ -1362,14 +1670,19 @@
     var hints = {
       idle: "Arrancá la formación cuando la parrilla esté completa.",
       formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
-      green: "Carrera en marcha.",
     };
     hint.textContent = hints[lightState] || "";
   }
 
   function renderTabla(state) {
     filas.textContent = "";
-    var pendientes = state.incidents.filter(function (i) { return i.status === "pending"; });
+
+    // Un auto que desapareció del estado (se fue y ya prescribió) no puede quedar con el detalle
+    // abierto ni el menú apuntando a una fila que ya no existe.
+    var idsActuales = {};
+    state.cars.forEach(function (c) { idsActuales[c.carId] = true; });
+    Object.keys(expandedCars).forEach(function (id) { if (!idsActuales[id]) delete expandedCars[id]; });
+    if (openKebab && !idsActuales[openKebab.carId]) cerrarKebab();
 
     state.cars.forEach(function (car) {
       var tr = document.createElement("tr");
@@ -1377,10 +1690,11 @@
 
       var autoCelda = document.createElement("td");
       autoCelda.className = "rc-embed__celda-auto";
-      autoCelda.appendChild(brandShield(car));
+      autoCelda.appendChild(renderCarBadge(car));
       tr.appendChild(autoCelda);
 
       var nombre = document.createElement("td");
+      nombre.className = "rc-embed__celda-nombre";
       nombre.textContent = car.driverName || "Auto " + car.carId;
       tr.appendChild(nombre);
 
@@ -1421,15 +1735,53 @@
       incidentesCelda.textContent = String(deEsteAutoTotal.length);
       tr.appendChild(incidentesCelda);
 
-      var accionesCelda = document.createElement("td");
-      var deEsteAuto = pendientes.filter(function (i) {
-        return i.parties.some(function (p) { return p.carId === car.carId; });
-      });
-      renderIncidentesDeAuto(accionesCelda, car, deEsteAuto);
-      tr.appendChild(accionesCelda);
+      var expandido = Boolean(expandedCars[car.carId]);
+      var tienePendientes = deEsteAutoTotal.some(function (i) { return i.status === "pending"; });
 
+      var accionesCelda = document.createElement("td");
+      accionesCelda.className = "rc-embed__celda-acciones";
+
+      var btnExpandir = document.createElement("button");
+      btnExpandir.type = "button";
+      btnExpandir.className = "rc-embed__btn rc-embed__btn--expandir" + (tienePendientes ? " rc-embed__btn--pendiente" : "");
+      btnExpandir.textContent = expandido ? "▴" : "▾";
+      btnExpandir.title = "Ver los incidentes de este piloto";
+      btnExpandir.setAttribute("aria-label", "Ver detalle del piloto");
+      btnExpandir.setAttribute("aria-expanded", String(expandido));
+      btnExpandir.addEventListener("click", function () { toggleExpand(car.carId); });
+      accionesCelda.appendChild(btnExpandir);
+
+      var kebabArmado = armed !== null && armed.key === "kick:" + car.carId;
+      var btnKebab = document.createElement("button");
+      btnKebab.type = "button";
+      btnKebab.className = "rc-embed__btn rc-embed__btn--kebab" + (kebabArmado ? " rc-embed__btn--armando" : "");
+      btnKebab.textContent = "⋮";
+      btnKebab.setAttribute("data-kebab-car", String(car.carId));
+      btnKebab.setAttribute("aria-haspopup", "menu");
+      btnKebab.setAttribute("aria-expanded", openKebab && openKebab.carId === car.carId ? "true" : "false");
+      // Nada que hacerle a alguien que ya no está en el servidor: ni kickearlo ni sancionarlo en
+      // vivo. Mismo criterio que `row.kebab.disabled` en app.js.
+      btnKebab.disabled = car.connected === false;
+      btnKebab.title = car.connected === false ? "El piloto no está conectado" : "Más acciones";
+      btnKebab.addEventListener("click", function () { toggleKebab(car.carId, btnKebab); });
+      accionesCelda.appendChild(btnKebab);
+
+      tr.appendChild(accionesCelda);
       filas.appendChild(tr);
+
+      if (expandido) {
+        var detailTr = el("tr", "rc-embed__fila-detalle");
+        var detailTd = document.createElement("td");
+        detailTd.colSpan = 8;
+        detailTd.appendChild(construirDetalle(car, deEsteAutoTotal));
+        detailTr.appendChild(detailTd);
+        filas.appendChild(detailTr);
+      }
     });
+
+    // El botón que ancla el menú abierto es un elemento nuevo recién creado arriba: sin esto el
+    // menú seguiría apuntando al de la vuelta de poll anterior, ya fuera del documento.
+    sincronizarKebab();
   }
 
   var ENGINE_LABELS = { formation: "Largada", pit: "Pit lane", steward: "Comisario" };

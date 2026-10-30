@@ -3,6 +3,50 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.24] — 2026-10-30
+
+### El embed se probó en vivo pegado en fslmanager y le faltaba casi todo lo que el panel completo da por sentado
+
+El usuario probó la 1.23 con dos ventanas abiertas, el link de siempre y el embed a mano al lado, y
+volvió con una lista de diferencias entre los dos. Todas apuntan a la misma causa: el embed se
+construyó como una tabla chica y fue creciendo pedido a pedido sin nunca ponerse al día del todo
+con el panel.
+
+- **"VERDE" pasaba a texto fijo y no decía "Carrera en curso"**: el semáforo del embed mostraba la
+  etiqueta de la fase (`idle`/`formation`/`green`) tal cual, mientras que el panel completo, pasada
+  la largada, cambia el cartel por "Carrera en curso" con un punto que pulsa. Se portó el mismo
+  indicador (`#race-live` en el panel) a `embed.js`/`embed.css`, visible solo mientras
+  `lightState === "green"`.
+- **No había forma de expulsar un auto desde el embed**: "Acciones" solo tenía la flecha de
+  incidentes. Se agregó el menú de tres puntos (⋮) con "Expulsar del servidor", mismo dos-clicks de
+  confirmación que ya usa el resto del embed para acciones destructivas. El backend reutiliza el
+  mismo handler que ya atendía el kick por cookie (`handleCarKick` en `adminApi.ts`), ahora también
+  colgado de `embedRouter`.
+- **El detalle de incidentes por piloto no existía en el embed**: la flecha de "Acciones" ahora
+  despliega, igual que en el panel, una fila con todos los incidentes de ese auto (no solo los
+  pendientes) — título, contexto (geometría del toque, velocidad de impacto, vuelta, hora) y, si
+  está pendiente, los tres botones de siempre; si ya se sancionó, qué sanción se aplicó.
+- **"Sancionar" no abría nada en el embed**: hacía lo mismo que "Advertir", sin pedir tipo de
+  sanción ni tiempo. Ahora abre un modal propio ("Sancionar a `<piloto>`", tipo de penalización,
+  segundos si corresponde, Aplicar/Cancelar) idéntico en flujo al del panel completo — separado del
+  resto del render del embed para que la tabla, que se redibuja entera cada 1.5 s, no le borre el
+  formulario a mitad de carga.
+- **No se veían los logos de marca, solo el escudo de iniciales**: el embed nunca tuvo forma de
+  pedir `src/api/public/brands/*.svg` sin sesión. Se sumó un bypass en `portal/server.ts` igual al
+  que ya existe para `embed.js`/`embed.css` (son imágenes públicas, sin dato de la liga adentro), y
+  `embed.js` ahora pide el `<img>` real, con el escudo de iniciales como respaldo si la marca no
+  tiene logo o la imagen no carga.
+- **Un piloto desconectado se veía igual que uno en pista**: se bajó la opacidad de la fila entera
+  (iba con `color: var(--muted)`, que en la tabla chica del embed pasaba desapercibido), dejando el
+  nombre sin atenuar para que siga siendo legible a simple vista. Mismo criterio aplicado también
+  en el panel completo, que tenía el mismo problema.
+- **El drive-through y el teletransporte de fin de carrera se contaban como parada en boxes**: la
+  app del piloto (`RaceControlClient.py`) sumaba una parada en cualquier flanco de entrada a
+  `isInPit`, sin distinguir una parada real de un drive-through (pasa por el pit lane sin frenar) o
+  del teletransporte a boxes que Assetto Corsa hace solo al cruzar la bandera a cuadros. Ahora hace
+  falta además haber pasado por el pit lane manejando y estar prácticamente detenido
+  (`PIT_STOP_SPEED_KMH = 5.0`), y se ignora cualquier `isInPit` posterior a la bandera a cuadros.
+
 ## [1.23] — 2026-10-30
 
 ### Dos ajustes a la tabla del embed, pedidos tras probar la 1.21 en vivo

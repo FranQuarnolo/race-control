@@ -71,11 +71,12 @@ test("toda clase que embed.js arma tiene al menos una regla en embed.css", () =>
   }
 
   const FAMILIAS_CON_SUFIJO_DINAMICO: Record<string, string[]> = {
-    "rc-embed__btn": ["secondary", "arming"],
+    "rc-embed__btn": ["secondary", "arming", "peligro", "expandir", "pendiente", "kebab", "armando"],
     "rc-embed__semaforo": ["formation", "green"],
     "rc-embed__fila": ["desconectado"],
-    "rc-embed__badge": ["servingWindow", "served", "escalated", "revoked"],
+    "rc-embed__badge": ["servingWindow", "served", "escalated", "revoked", "dismissed", "warned", "penalized"],
     "rc-embed__dot": ["ok", "bad"],
+    "rc-embed__incidente": ["resuelto"],
   };
   for (const [prefijo, sufijos] of Object.entries(FAMILIAS_CON_SUFIJO_DINAMICO)) {
     assert.ok(

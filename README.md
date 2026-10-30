@@ -25,7 +25,7 @@ demás.
 
 | Para | Qué bajar |
 |---|---|
-| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.7** |
+| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.8** |
 
 ## 🏎️ Para el piloto
 

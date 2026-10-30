@@ -1408,6 +1408,8 @@ def sharedMemoryLoop():
     sectors = SectorTracker()
     pit_stops = 0
     was_in_pit = False
+    was_in_pit_lane = False
+    race_finished = False
 
     while poll_thread_running:
         try:
@@ -1427,12 +1429,34 @@ def sharedMemoryLoop():
             sectors.update(graphics)
             excursions.update(physics, graphics)
 
-            # Una parada se cuenta en el flanco de entrada al box, no mientras se esta adentro:
-            # si no, un auto detenido 20 segundos sumaria una parada por cada lectura.
+            # La bandera a cuadros marca el final: de aca en mas, cualquier "isInPit" que aparezca
+            # es el teletransporte a boxes de fin de carrera, no una parada real.
+            if graphics.flag == 5:
+                race_finished = True
+
+            # Una parada se cuenta en el flanco de entrada al box, no mientras se esta adentro: si
+            # no, un auto detenido 20 segundos sumaria una parada por cada lectura. Ademas hacen
+            # falta dos condiciones que isInPit solo no garantiza: haber pasado por el pit lane
+            # manejando (was_in_pit_lane) y estar practicamente detenido (PIT_STOP_SPEED_KMH). Sin
+            # esto, un drive-through (pasa por el pit lane sin frenar) y el teletransporte de fin
+            # de carrera (aparece ya detenido, sin haber manejado por el pit lane) se contaban como
+            # paradas en boxes.
+            PIT_STOP_SPEED_KMH = 5.0
             in_pit = graphics.isInPit != 0
-            if in_pit and not was_in_pit:
+            in_pit_lane = graphics.isInPitLane != 0
+            if (
+                in_pit
+                and not was_in_pit
+                and was_in_pit_lane
+                and not race_finished
+                and physics.speedKmh < PIT_STOP_SPEED_KMH
+            ):
                 pit_stops += 1
             was_in_pit = in_pit
+            if in_pit_lane:
+                was_in_pit_lane = True
+            elif not in_pit:
+                was_in_pit_lane = False
 
             telemetry_snapshot = {
                 "sectors": sectors.sectors,

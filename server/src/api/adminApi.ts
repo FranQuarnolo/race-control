@@ -68,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.23";
+export const APP_VERSION = "1.24";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -634,7 +634,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * admin, que por definición ya está supervisada. Queda en el journal como `kick.manual`,
    * distinguible del automático.
    */
-  app.post("/api/cars/:carId/kick", (req, res) => {
+  function handleCarKick(req: express.Request, res: Response): void {
     const carId = Number(req.params.carId);
     if (!Number.isInteger(carId) || carId < 0) {
       res.status(400).json({ ok: false, error: "Auto inválido" });
@@ -647,7 +647,8 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     }
     deps.manualKick(carId);
     res.json({ ok: true, carId, driverName: car.driverName });
-  });
+  }
+  app.post("/api/cars/:carId/kick", handleCarKick);
 
   /**
    * Informe de carrera, descargable.
@@ -766,6 +767,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   embedRouter.post("/formation/begin", handleFormationBegin);
   embedRouter.post("/formation/green", handleFormationGreen);
   embedRouter.post("/formation/reset", handleFormationReset);
+  embedRouter.post("/cars/:carId/kick", handleCarKick);
 
   /**
    * Reglas y diagnóstico de red, portados al embed en la fase 2 (ver el plan "Ampliar el embed de
