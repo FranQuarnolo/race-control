@@ -21,20 +21,11 @@ demás.
 - 📋 **Perfiles de carrera**: guardás todo tu reglamento con un nombre —"Endurance", "4Fun"— y lo
   reponés entero de una, sin volver a tocar umbral por umbral.
 
-No trae mapa en vivo ni torre de tiempos con velocidad, sectores o neumáticos: eso sigue existiendo
-en el producto completo de Race Control (ver más abajo), pero esta pantalla fusionada está pensada
-para la tarea del día de carrera —largar, mirar quién corta o para en boxes, resolver incidentes y
-sancionar— no para reemplazar un live timing aparte.
-
 ## 📥 Descargas
 
 | Para | Qué bajar |
 |---|---|
 | 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.7** |
-
-Este link no cambia nunca: siempre baja el último release, sea cual sea su número. Si preferís
-elegir una versión puntual, en la [página de releases](https://github.com/FranQuarnolo/race-control/releases)
-cada una queda publicada también como `RaceControlClient-<versión>.zip`.
 
 ## 🏎️ Para el piloto
 
@@ -46,13 +37,3 @@ cada una queda publicada también como `RaceControlClient-<versión>.zip`.
    color) y **RC Alerta** (el marco rojo que aparece si algo anda mal con tu credencial) quedan a
    tu elección, ahí mismo. ✅
 4. Acomodalas en pantalla. Una sola vez, y mejor antes de largar. 🖱️
-
-Nada más — ni una IP que tipear, ni un archivo que editar. El servidor le manda sola la dirección
-y una credencial por el chat del juego apenas entrás. 🎮
-
-Son transparentes y sin barra de título: en reposo casi no se ven. Para volver a agarrarlas,
-pasales el mouse por encima.
-
-El producto completo de Race Control —con login propio, selección de liga, torre de tiempos
-detallada y mapa en vivo— sigue existiendo en `main`; esta rama es la versión fusionada y sin login
-pensada específicamente para incrustarse en el admin de una liga.
