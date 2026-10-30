@@ -339,6 +339,12 @@
   z-index: 1000;
   padding: 24px 12px;
 }
+/* Sin esto, abrirModal/cerrarModal (que solo tocan .hidden) no hacen nada: el display:flex de
+   arriba es una regla propia y le gana siempre a la regla por defecto del navegador para
+   [hidden], pase lo que pase en la página que incruste el embed. */
+.rc-embed__modal-backdrop[hidden] {
+  display: none;
+}
 
 .rc-embed__modal {
   width: min(560px, 94vw);
@@ -351,7 +357,7 @@
   font-family: var(--font-body);
 }
 .rc-embed__modal--tabs {
-  width: min(620px, 94vw);
+  width: min(760px, 94vw);
 }
 
 .rc-embed__modal-header {
@@ -421,13 +427,18 @@
 .rc-embed__row input[type="number"],
 .rc-embed__row input[type="text"],
 .rc-embed__row select {
-  width: 130px;
+  width: 160px;
   background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   border-radius: calc(var(--radius) / 2);
   color: var(--text);
   padding: 4px 8px;
   font-family: var(--font-body);
+}
+.rc-embed__row select {
+  /* Las opciones de sanción/escalación son texto largo ("Drive-Through (pasar por pits)") y a
+     130px quedaban cortadas. */
+  width: 230px;
 }
 
 .rc-embed__mode-switch {

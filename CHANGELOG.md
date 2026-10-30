@@ -29,6 +29,25 @@ del DOM, antes de que el resto del script corra.
 compilado como texto plano (clases CSS, ids), no lo ejecuta en un DOM. No hay hoy ningún test que
 corra el script y confirme que arranca sin tirar excepciones.
 
+## [1.20] — 2026-10-30
+
+### Los modales de Conexión y Reglas no se podían cerrar (ni abrir normalmente): quedaban siempre visibles
+
+**Síntoma:** apenas se armaba el DOM del embed, los modales de Conexión y Reglas aparecían en
+pantalla sin que nadie tocara los botones, y el botón "×" no los cerraba.
+
+**Causa:** `abrirModal`/`cerrarModal` solo tocan `backdrop.hidden`, confiando en que el navegador
+oculta por defecto cualquier elemento con el atributo `hidden`. Pero `.rc-embed__modal-backdrop`
+tenía `display: flex` fijo en `embed.css` sin la excepción `[hidden] { display: none }` — y una
+regla propia del autor le gana siempre a la regla por defecto del navegador, sin importar nada de
+la página que incruste el embed. El mismo patrón ya existía para las pestañas de Reglas
+(`.rc-embed__tab-panel[hidden]`); al modal-backdrop simplemente se le olvidó.
+
+**De paso:** el modal de Reglas (`min(620px, 94vw)`) y los `<input>`/`<select>` de sus formularios
+(130px fijos) quedaban chicos para texto como "Drive-Through (pasar por pits)". Se amplió el modal
+a `min(760px, 94vw)` y se separó el ancho de los `<select>` (230px) del de los campos numéricos
+(160px).
+
 ## [1.18] — 2026-10-30
 
 ### El embed probado en fslmanager.vercel.app servía para mirar, no para administrar
