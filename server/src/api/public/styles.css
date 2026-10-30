@@ -49,9 +49,12 @@
   --font-body: "Chivo", sans-serif;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   height: 100%;
   margin: 0;
   overflow: hidden; /* la regla de oro, ver arriba */
@@ -91,7 +94,9 @@ body {
   font-weight: 600;
   color: #ffdede;
 }
-#link-down[hidden] { display: none; }
+#link-down[hidden] {
+  display: none;
+}
 #link-down .dot {
   width: 8px;
   height: 8px;
@@ -100,11 +105,19 @@ body {
   flex: 0 0 auto;
   animation: link-pulse 1.4s ease-in-out infinite;
 }
-#link-down .detail { font-weight: 400; color: #ffc9c9; }
+#link-down .detail {
+  font-weight: 400;
+  color: #ffc9c9;
+}
 
 @keyframes link-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 
 /* Sin contacto, toda la tarjeta de carrera es dato viejo. Atenuarla es la mitad del aviso: la
@@ -112,12 +125,18 @@ body {
 body.link-down #card-race {
   opacity: 0.55;
   filter: saturate(0.5);
-  transition: opacity 0.3s, filter 0.3s;
+  transition:
+    opacity 0.3s,
+    filter 0.3s;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #link-down .dot { animation: none; }
-  body.link-down #card-race { transition: none; }
+  #link-down .dot {
+    animation: none;
+  }
+  body.link-down #card-race {
+    transition: none;
+  }
 }
 
 /* ---------------------------------------------------------------- controles flotantes
@@ -135,8 +154,12 @@ body.link-down #card-race {
   display: flex;
   gap: 8px;
 }
-.floating-left { left: 2.5%; }
-.floating-right { right: 2.5%; }
+.floating-left {
+  left: 2.5%;
+}
+.floating-right {
+  right: 2.5%;
+}
 
 .version-tag {
   display: flex;
@@ -165,7 +188,10 @@ body.link-down #card-race {
   font-family: var(--font-display);
   white-space: nowrap;
 }
-.status-button:hover { border-color: var(--accent); color: var(--accent); }
+.status-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .status-button .dot {
   width: 9px;
   height: 9px;
@@ -175,10 +201,22 @@ body.link-down #card-race {
 }
 /* El botón de conexión se pinta solo: verde si hay servidor confirmado y entra telemetría, rojo
    si falta algo. Es el estado que el admin necesita mirar de reojo. */
-.status-button.ok { border-color: rgba(74, 222, 128, 0.45); color: var(--green); }
-.status-button.ok .dot { background: var(--green); box-shadow: 0 0 7px rgba(74, 222, 128, 0.7); }
-.status-button.bad { border-color: rgba(224, 85, 85, 0.45); color: var(--red); }
-.status-button.bad .dot { background: var(--red); box-shadow: 0 0 7px rgba(224, 85, 85, 0.7); }
+.status-button.ok {
+  border-color: rgba(74, 222, 128, 0.45);
+  color: var(--green);
+}
+.status-button.ok .dot {
+  background: var(--green);
+  box-shadow: 0 0 7px rgba(74, 222, 128, 0.7);
+}
+.status-button.bad {
+  border-color: rgba(224, 85, 85, 0.45);
+  color: var(--red);
+}
+.status-button.bad .dot {
+  background: var(--red);
+  box-shadow: 0 0 7px rgba(224, 85, 85, 0.7);
+}
 
 /* Switch de modo. Vive entero adentro del cajón de Conexión: el interruptor y el aviso. En los
    controles flotantes no queda nada, ni el control ni el cartel. */
@@ -194,13 +232,31 @@ body.link-down #card-race {
   user-select: none;
   width: fit-content;
 }
-.mode-switch .mode-label { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
-.mode-switch.shadow { border-color: rgba(239, 142, 60, 0.45); }
-.mode-switch.shadow .mode-label { color: var(--yellow); }
-.mode-switch.live { border-color: rgba(74, 222, 128, 0.45); }
-.mode-switch.live .mode-label { color: var(--green); }
+.mode-switch .mode-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.mode-switch.shadow {
+  border-color: rgba(239, 142, 60, 0.45);
+}
+.mode-switch.shadow .mode-label {
+  color: var(--yellow);
+}
+.mode-switch.live {
+  border-color: rgba(74, 222, 128, 0.45);
+}
+.mode-switch.live .mode-label {
+  color: var(--green);
+}
 
-.mode-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.mode-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
 .mode-switch .track {
   width: 36px;
   height: 20px;
@@ -221,9 +277,16 @@ body.link-down #card-race {
   background: var(--text);
   transition: transform 0.15s;
 }
-.mode-switch.live .track { background: var(--green); }
-.mode-switch.live .track::after { transform: translateX(16px); }
-.mode-switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode-switch.live .track {
+  background: var(--green);
+}
+.mode-switch.live .track::after {
+  transform: translateX(16px);
+}
+.mode-switch input:focus-visible + .track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ---------------------------------------------------------------- vistas */
 
@@ -236,9 +299,14 @@ main {
   display: flex;
 }
 
-main[hidden] { display: none; }
+main[hidden] {
+  display: none;
+}
 
-#card-race { flex: 1 1 auto; min-height: 0; }
+#card-race {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 .card {
   background: var(--panel);
@@ -255,7 +323,8 @@ main[hidden] { display: none; }
 /* La marca de esquina de fslmanager: un ángulo fino en ámbar apagado, decorativo y nada más. Se
    repite en cada tarjeta y en cada modal para que esta pantalla, embebida ahí adentro, no se note
    como un cuerpo extraño. */
-.card::before, .modal::before {
+.card::before,
+.modal::before {
   content: "";
   position: absolute;
   top: 7px;
@@ -282,7 +351,12 @@ main[hidden] { display: none; }
   gap: 10px;
   flex: 0 0 auto;
 }
-.card > h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; }
+.card > h2 .hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 11px;
+}
 
 /* Acción secundaria dentro del encabezado de una tarjeta: se lee como enlace, no compite con los
    botones que deciden una sanción. */
@@ -298,8 +372,13 @@ main[hidden] { display: none; }
   padding: 3px 9px;
   white-space: nowrap;
 }
-.hint-action:hover { border-color: var(--accent); }
-.hint-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint-action:hover {
+  border-color: var(--accent);
+}
+.hint-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ---------------------------------------------------------------- cabecera de carrera
 
@@ -345,13 +424,41 @@ main[hidden] { display: none; }
   font-family: var(--font-display);
   letter-spacing: 0.02em;
 }
-.session-type[data-session-type="0"] { background: rgba(138, 141, 150, 0.14); border-color: rgba(138, 141, 150, 0.4); color: var(--muted); } /* Reserva */
-.session-type[data-session-type="2"] { background: rgba(180, 127, 240, 0.14); border-color: rgba(180, 127, 240, 0.4); color: var(--purple); } /* Clasificación */
-.session-type[data-session-type="3"] { background: rgba(224, 85, 85, 0.14); border-color: rgba(224, 85, 85, 0.4); color: var(--red); } /* Carrera */
-.session-type[data-session-type="4"] { background: rgba(74, 144, 226, 0.14); border-color: rgba(74, 144, 226, 0.4); color: var(--blue); } /* Hotlap */
-.session-type[data-session-type="5"] { background: rgba(239, 142, 60, 0.14); border-color: rgba(239, 142, 60, 0.4); color: var(--yellow); } /* Time attack */
-.session-type[data-session-type="6"] { background: rgba(62, 207, 192, 0.14); border-color: rgba(62, 207, 192, 0.4); color: var(--cyan); } /* Deriva */
-.session-type[data-session-type="7"] { background: rgba(138, 141, 150, 0.14); border-color: rgba(138, 141, 150, 0.4); color: var(--muted); } /* Repetición */
+.session-type[data-session-type="0"] {
+  background: rgba(138, 141, 150, 0.14);
+  border-color: rgba(138, 141, 150, 0.4);
+  color: var(--muted);
+} /* Reserva */
+.session-type[data-session-type="2"] {
+  background: rgba(180, 127, 240, 0.14);
+  border-color: rgba(180, 127, 240, 0.4);
+  color: var(--purple);
+} /* Clasificación */
+.session-type[data-session-type="3"] {
+  background: rgba(224, 85, 85, 0.14);
+  border-color: rgba(224, 85, 85, 0.4);
+  color: var(--red);
+} /* Carrera */
+.session-type[data-session-type="4"] {
+  background: rgba(74, 144, 226, 0.14);
+  border-color: rgba(74, 144, 226, 0.4);
+  color: var(--blue);
+} /* Hotlap */
+.session-type[data-session-type="5"] {
+  background: rgba(239, 142, 60, 0.14);
+  border-color: rgba(239, 142, 60, 0.4);
+  color: var(--yellow);
+} /* Time attack */
+.session-type[data-session-type="6"] {
+  background: rgba(62, 207, 192, 0.14);
+  border-color: rgba(62, 207, 192, 0.4);
+  color: var(--cyan);
+} /* Deriva */
+.session-type[data-session-type="7"] {
+  background: rgba(138, 141, 150, 0.14);
+  border-color: rgba(138, 141, 150, 0.4);
+  color: var(--muted);
+} /* Repetición */
 .session-clock {
   font-size: 19px;
   font-weight: 700;
@@ -370,7 +477,10 @@ main[hidden] { display: none; }
   gap: 12px;
   min-width: 140px;
 }
-.lights { display: flex; gap: 8px; }
+.lights {
+  display: flex;
+  gap: 8px;
+}
 .light {
   width: 16px;
   height: 16px;
@@ -388,10 +498,14 @@ main[hidden] { display: none; }
   box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
 }
 @keyframes light-blink {
-  50% { opacity: 0.2; }
+  50% {
+    opacity: 0.2;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lights.formation .light { animation: none; }
+  .lights.formation .light {
+    animation: none;
+  }
 }
 
 /* Texto equivalente de las cinco luces (que son `aria-hidden`), para lector de pantalla o para
@@ -407,9 +521,18 @@ main[hidden] { display: none; }
   border-radius: 999px;
   white-space: nowrap;
 }
-.semaforo.idle { background: var(--panel-raised); color: var(--muted); }
-.semaforo.formation { background: rgba(239, 142, 60, 0.15); color: var(--yellow); }
-.semaforo.green { background: rgba(74, 222, 128, 0.18); color: var(--green); }
+.semaforo.idle {
+  background: var(--panel-raised);
+  color: var(--muted);
+}
+.semaforo.formation {
+  background: rgba(239, 142, 60, 0.15);
+  color: var(--yellow);
+}
+.semaforo.green {
+  background: rgba(74, 222, 128, 0.18);
+  color: var(--green);
+}
 
 .start-controls {
   display: flex;
@@ -425,15 +548,25 @@ main[hidden] { display: none; }
   color: var(--muted);
   margin: 0;
 }
-.start-controls .btn-row { flex: 0 0 auto; }
-.start-controls .start-hint { color: var(--muted); font-size: 12px; max-width: 22ch; }
+.start-controls .btn-row {
+  flex: 0 0 auto;
+}
+.start-controls .start-hint {
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 22ch;
+}
 
 /* Fuera de la sesión de carrera los botones ya están deshabilitados por `disabled`, pero una
    fila que se ve igual de viva que siempre invita a clickearla y después no explica nada. El
    texto de ayuda queda en pie —es el único que dice por qué— así que no se le baja la opacidad
    junto con el resto. */
-.start-controls.off-session .btn-row { opacity: 0.4; }
-.start-controls.off-session h2 { color: var(--muted); }
+.start-controls.off-session .btn-row {
+  opacity: 0.4;
+}
+.start-controls.off-session h2 {
+  color: var(--muted);
+}
 
 .race-live {
   display: flex;
@@ -447,7 +580,9 @@ main[hidden] { display: none; }
   text-transform: uppercase;
   white-space: nowrap;
 }
-.race-live[hidden] { display: none; }
+.race-live[hidden] {
+  display: none;
+}
 .race-live .dot {
   width: 10px;
   height: 10px;
@@ -456,14 +591,25 @@ main[hidden] { display: none; }
   animation: race-pulse 1.5s ease-in-out infinite;
 }
 @keyframes race-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55); }
-  60% { box-shadow: 0 0 0 8px rgba(74, 222, 128, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 8px rgba(74, 222, 128, 0);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .race-live .dot { animation: none; }
+  .race-live .dot {
+    animation: none;
+  }
 }
 
-.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 button {
   background: var(--accent);
@@ -478,10 +624,22 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-button.secondary { background: var(--panel-raised); color: var(--text); }
-button.danger { background: var(--red); color: var(--bg); }
-button:disabled { opacity: 0.45; cursor: not-allowed; }
-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.secondary {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+button.danger {
+  background: var(--red);
+  color: var(--bg);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* Botón de guardar que ya guardó: verde y deshabilitado hasta que algo cambie. Se compara
    contra los últimos valores guardados, no contra un flag — así, si el admin cambia un valor y
@@ -504,7 +662,10 @@ button.saved:disabled {
   margin-bottom: 8px;
   flex: 0 0 auto;
 }
-.table-meta .hint { color: var(--muted); font-size: 12px; }
+.table-meta .hint {
+  color: var(--muted);
+  font-size: 12px;
+}
 
 /* Aviso de que ningún piloto tiene la app. Gris y no rojo a propósito: no es una falla del
    sistema, es una pieza que todavía no está instalada, y la mitad de las ligas van a correr así.
@@ -522,8 +683,13 @@ button.saved:disabled {
   white-space: nowrap;
   cursor: pointer;
 }
-.chapa-sin-app:hover { background: rgba(138, 141, 150, 0.24); color: var(--text); }
-.chapa-sin-app[hidden] { display: none; }
+.chapa-sin-app:hover {
+  background: rgba(138, 141, 150, 0.24);
+  color: var(--text);
+}
+.chapa-sin-app[hidden] {
+  display: none;
+}
 
 /* ---------------------------------------------------------------- tablas */
 
@@ -536,8 +702,17 @@ button.saved:disabled {
   padding: 0 4px;
 }
 
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--panel-border); }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th,
+td {
+  text-align: left;
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--panel-border);
+}
 th {
   color: var(--muted);
   font-weight: 500;
@@ -550,9 +725,19 @@ th {
   background: var(--panel);
   z-index: 1;
 }
-th.num, td.num { text-align: right; }
-td.num { font-variant-numeric: tabular-nums; }
-th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
+th.num,
+td.num {
+  text-align: right;
+}
+td.num {
+  font-variant-numeric: tabular-nums;
+}
+th:last-child,
+td.actions {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}
 
 .empty {
   display: flex;
@@ -568,11 +753,17 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
    gana a la regla nativa del navegador para `[hidden]`, y "Esperando el primer auto en pista." se
    quedaba a la vista con autos ya en la tabla porque `cars-empty.hidden = true` no alcanzaba para
    ocultarlo. */
-.empty[hidden] { display: none; }
+.empty[hidden] {
+  display: none;
+}
 
 /* El ícono solo lo usa la torre: es el estado que más tiempo pasa vacío, a la espera del primer
    auto, y antes era un renglón de texto solo que se perdía arriba de una tabla sin filas. */
-.empty-icon { width: 26px; height: 26px; opacity: 0.7; }
+.empty-icon {
+  width: 26px;
+  height: 26px;
+  opacity: 0.7;
+}
 
 .badge {
   display: inline-block;
@@ -585,10 +776,22 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
-.badge.ok { background: rgba(74, 222, 128, 0.15); color: var(--green); }
-.badge.warn { background: rgba(239, 142, 60, 0.15); color: var(--yellow); }
-.badge.bad { background: rgba(224, 85, 85, 0.15); color: var(--red); }
-.badge.neutral { background: rgba(138, 141, 150, 0.15); color: var(--muted); }
+.badge.ok {
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--green);
+}
+.badge.warn {
+  background: rgba(239, 142, 60, 0.15);
+  color: var(--yellow);
+}
+.badge.bad {
+  background: rgba(224, 85, 85, 0.15);
+  color: var(--red);
+}
+.badge.neutral {
+  background: rgba(138, 141, 150, 0.15);
+  color: var(--muted);
+}
 
 .btn-mini {
   background: var(--panel-raised);
@@ -598,11 +801,17 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
   font-size: 12px;
   font-weight: 600;
 }
-.btn-mini:hover { background: var(--panel-hover); color: var(--text); }
+.btn-mini:hover {
+  background: var(--panel-hover);
+  color: var(--text);
+}
 /* Segundo paso de todo lo que no se deshace: el botón cambia de texto y de color, y se desarma
    solo a los 4 s. Lo usan el kick, aplicar una sanción y anularla — las tres cosas que le llegan
    al piloto en el acto y no pueden salir de un click fallido en una tabla que se mueve sola. */
-.btn-mini.arming { background: var(--red); color: var(--bg); }
+.btn-mini.arming {
+  background: var(--red);
+  color: var(--bg);
+}
 
 /* ---------------------------------------------------------------- menú de fila (⋮) y detalle (▾) */
 
@@ -613,7 +822,12 @@ th:last-child, td.actions { text-align: right; width: 1%; white-space: nowrap; }
    en vez de respetar el `width` declarado, y "Acciones" termina angosto y pegado contra "Insi" (el
    bug de "tabla.png"). El `<td>` de cada fila no tenía este problema porque nunca definía su propio
    `width`, así que no había nada que perder. */
-td.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: center; }
+td.c-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  align-items: center;
+}
 
 .btn-expand {
   background: transparent;
@@ -626,7 +840,11 @@ td.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: 
   padding: 0;
   position: relative;
 }
-.btn-expand:hover, .btn-expand[aria-expanded="true"] { background: var(--panel-hover); color: var(--text); }
+.btn-expand:hover,
+.btn-expand[aria-expanded="true"] {
+  background: var(--panel-hover);
+  color: var(--text);
+}
 /* Punto ámbar cuando este piloto tiene incidentes sin revisar: con la fila cerrada es lo único
    que queda a la vista de que hay una decisión pendiente ahí adentro. */
 .btn-expand.has-pending::after {
@@ -641,7 +859,10 @@ td.c-actions { display: flex; gap: 4px; justify-content: flex-end; align-items: 
 }
 /* La cuenta de incidentes también se resalta: no hay que abrir la fila para notar que algo
    quedó pendiente de revisión. */
-td.num.has-pending { color: var(--accent); font-weight: 700; }
+td.num.has-pending {
+  color: var(--accent);
+  font-weight: 700;
+}
 
 .btn-kebab {
   background: transparent;
@@ -654,7 +875,11 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
   padding: 0;
   position: relative;
 }
-.btn-kebab:hover, .btn-kebab[aria-expanded="true"] { background: var(--panel-hover); color: var(--text); }
+.btn-kebab:hover,
+.btn-kebab[aria-expanded="true"] {
+  background: var(--panel-hover);
+  color: var(--text);
+}
 /* Punto rojo cuando hay un kick a medio confirmar: con el menú cerrado es lo único que queda a
    la vista de que un segundo click expulsa a alguien. */
 .btn-kebab.arming::after {
@@ -692,11 +917,22 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
   font-weight: 500;
   white-space: nowrap;
 }
-.menu-item:hover { background: var(--panel-hover); }
-.menu-item.peligro { color: var(--red); }
-.menu-item.peligro:hover { background: rgba(224, 85, 85, 0.14); }
+.menu-item:hover {
+  background: var(--panel-hover);
+}
+.menu-item.peligro {
+  color: var(--red);
+}
+.menu-item.peligro:hover {
+  background: rgba(224, 85, 85, 0.14);
+}
 /* Segundo paso, igual que en `.btn-mini.arming`: el ítem cambia de texto y se pinta entero. */
-.menu-item.arming, .menu-item.arming:hover { background: var(--red); color: var(--bg); font-weight: 700; }
+.menu-item.arming,
+.menu-item.arming:hover {
+  background: var(--red);
+  color: var(--bg);
+  font-weight: 700;
+}
 
 /* ---------------------------------------------------------------- torre de tiempos */
 
@@ -719,24 +955,56 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
  * ancho explícito era el de Piloto: con la tabla vacía o con el embed ocupando ~1800px en
  * fslmanager, el navegador estiraba las demás columnas de cualquier manera (imagen "tablarota" en
  * la tarea). Con `fixed` el ancho de cada columna lo deciden estos porcentajes, no el contenido. */
-#timing-table { font-size: 12.5px; table-layout: fixed; width: 100%; }
+#timing-table {
+  font-size: 12.5px;
+  table-layout: fixed;
+  width: 100%;
+}
 /* `overflow: hidden` + ellipsis en el `th` es lo que de verdad evita el bug de "bugtabla": con
    `white-space: nowrap` solo, un encabezado que no entra en su columna (típicamente "ACCIONES",
    la palabra más larga de la fila, contra "Insi", la columna más angosta) no se recorta — se sigue
    dibujando igual, montado encima de la celda de al lado. Esto hace que ese desborde, si pasa,
    termine en "…" y no en texto superpuesto, sea cual sea el ancho real del embed. */
-#timing-table th, #timing-table td { padding: 5px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#timing-table th:nth-child(1) { width: 5%; }
-#timing-table th:nth-child(2) { width: 7%; }
-#timing-table th:nth-child(3) { width: 24%; }
-#timing-table th:nth-child(4) { width: 11%; }
-#timing-table th:nth-child(5) { width: 11%; }
-#timing-table th:nth-child(6) { width: 9%; }
-#timing-table th:nth-child(7) { width: 8%; }
-#timing-table th:nth-child(8) { width: 10%; }
-#timing-table th:nth-child(9) { width: 15%; }
+#timing-table th,
+#timing-table td {
+  padding: 5px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#timing-table th:nth-child(1) {
+  width: 5%;
+}
+#timing-table th:nth-child(2) {
+  width: 7%;
+}
+#timing-table th:nth-child(3) {
+  width: 24%;
+}
+#timing-table th:nth-child(4) {
+  width: 11%;
+}
+#timing-table th:nth-child(5) {
+  width: 11%;
+}
+#timing-table th:nth-child(6) {
+  width: 9%;
+}
+#timing-table th:nth-child(7) {
+  width: 8%;
+}
+#timing-table th:nth-child(8) {
+  width: 10%;
+}
+#timing-table th:nth-child(9) {
+  width: 15%;
+}
 
-#timing-table td.c-driver { max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#timing-table td.c-driver {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Logo de marca de la biblioteca que viene empaquetada con la app (`brands/`, ver `renderCarBadge`
    en app.js). Fondo claro tenue porque son logos a color pensados para imprimirse sobre fondo
@@ -774,8 +1042,15 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
 }
 /* El monograma se sube un pelo: el escudo se angosta hacia abajo y centrado a la caja el texto
    queda ópticamente bajo. */
-.brand-shield > span { transform: translateY(-1px); }
-.brand-shield.empty { clip-path: none; background: none; color: var(--muted); font-size: 11px; }
+.brand-shield > span {
+  transform: translateY(-1px);
+}
+.brand-shield.empty {
+  clip-path: none;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+}
 /* Acá vivía `td.c-car { width: 1% }`: con `table-layout: fixed` el ancho de columna lo define el
  * `th` (ver las reglas `#timing-table th:nth-child`, más arriba), así que esta regla ya no hacía
  * nada. */
@@ -785,7 +1060,9 @@ td.num.has-pending { color: var(--accent); font-weight: 700; }
 
 /* Fila de quien está en el pit lane ahora. El tinte vale más que la columna: se ve de un vistazo
    quién está parado sin leer número por número. */
-tbody tr.in-pit { background: rgba(201, 168, 76, 0.07); }
+tbody tr.in-pit {
+  background: rgba(201, 168, 76, 0.07);
+}
 
 /* Auto cuya telemetría se congeló: el backend lo marca con `telemetryStale` cuando pasaron más de
    dos segundos sin un CAR_UPDATE suyo. Pasa cuando el piloto crashea el juego, pierde la red o se
@@ -795,10 +1072,16 @@ tbody tr.in-pit { background: rgba(201, 168, 76, 0.07); }
    muerto se veía idéntico a uno corriendo: su última velocidad, su última posición, todo quieto
    pero con el mismo aspecto que el resto. La fila entera se apaga —no solo una celda— porque lo
    que quedó viejo no es un dato sino todos. */
-tbody tr.stale td { color: #5a6273; }
-tbody tr.stale .c-driver { color: var(--muted); }
+tbody tr.stale td {
+  color: #5a6273;
+}
+tbody tr.stale .c-driver {
+  color: var(--muted);
+}
 tbody tr.stale .car-badge,
-tbody tr.stale .brand-shield { opacity: 0.4; }
+tbody tr.stale .brand-shield {
+  opacity: 0.4;
+}
 
 /* Piloto que salió del servidor. La fila no se borra: se apaga.
 
@@ -807,12 +1090,19 @@ tbody tr.stale .brand-shield { opacity: 0.4; }
 
    Lo que NO se apaga es el nombre, que queda legible: la fila existe justamente para poder decir
    "a Fulano se le cortó en la vuelta 12". */
-tbody tr.desconectado { opacity: 0.45; }
-tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
+tbody tr.desconectado {
+  opacity: 0.45;
+}
+tbody tr.desconectado .c-driver {
+  opacity: 1;
+  color: var(--text);
+}
 
 /* Columnas que solo existen con la app del piloto instalada. El guion es deliberado: el UDP de
    Assetto Corsa no transporta estos datos, no hay forma de completarlos desde el servidor. */
-.nodata { color: #4d5564; }
+.nodata {
+  color: #4d5564;
+}
 
 /* Acá vivía la sección entera del mapa del circuito: la banda de condiciones de sesión, el canvas
    y su tooltip. Esta pantalla fusiona Control de carrera y Sanciones para incrustarla en
@@ -829,7 +1119,9 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   background: var(--panel-sunken);
   padding: 0;
 }
-.car-detail { padding: 10px 14px 14px 14px; }
+.car-detail {
+  padding: 10px 14px 14px 14px;
+}
 
 /* ---------------------------------------------------------------- incidentes
 
@@ -843,13 +1135,34 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   margin-bottom: 9px;
   background: var(--panel-raised);
 }
-.incident:last-child { margin-bottom: 0; }
-.incident.resolved { opacity: 0.55; }
-.incident .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
-.incident .who { font-weight: 600; }
-.incident .meta { color: var(--muted); font-size: 12px; }
-.incident .ctx { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
-.incident .btn-row { gap: 6px; }
+.incident:last-child {
+  margin-bottom: 0;
+}
+.incident.resolved {
+  opacity: 0.55;
+}
+.incident .head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+.incident .who {
+  font-weight: 600;
+}
+.incident .meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.incident .ctx {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.incident .btn-row {
+  gap: 6px;
+}
 
 /* Formulario de sanción manual. Una sola fila: a quién, qué, cuánto, aplicar. */
 .penalty-form {
@@ -867,9 +1180,15 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   padding: 4px 7px;
   font-size: 12px;
 }
-.penalty-form input.seconds { width: 5.5ch; }
-.penalty-form input.seconds[hidden] { display: none; }
-.penalty-form select:disabled { opacity: 0.7; }
+.penalty-form input.seconds {
+  width: 5.5ch;
+}
+.penalty-form input.seconds[hidden] {
+  display: none;
+}
+.penalty-form select:disabled {
+  opacity: 0.7;
+}
 
 /* ---------------------------------------------------------------- modales
 
@@ -898,10 +1217,12 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   padding: 20px;
   overflow-y: auto;
 }
-.modal-backdrop[hidden] { display: none; }
+.modal-backdrop[hidden] {
+  display: none;
+}
 
 .modal {
-  width: min(760px, 94vw);
+  width: min(900px, 94vw);
   max-height: 88vh;
   background: var(--panel);
   border: 1px solid var(--panel-border);
@@ -911,6 +1232,7 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   flex-direction: column;
   gap: 14px;
   overflow: hidden;
+  overflow-y: scroll;
   /* Centrado vertical por margen automático, no por `align-items` del backdrop: ver el comentario
      de `.modal-backdrop`. */
   margin: auto 0;
@@ -929,8 +1251,17 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   background: var(--panel);
   z-index: 1;
 }
-.modal header h2 { flex: 1 1 auto; font-size: 15px; margin: 0; }
-.modal .table-wrap { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; }
+.modal header h2 {
+  flex: 1 1 auto;
+  font-size: 15px;
+  margin: 0;
+}
+.modal .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
 
 /* Conexión no tiene pestañas que reciban un `.tab-panel` con su propio scroll: es una sucesión de
    secciones una abajo de la otra, y "Revisar ahora" le agrega tarjetas de diagnóstico después de
@@ -942,14 +1273,20 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
    navegadores. Por eso ahora el límite es el mismo `max-height: 88vh` del `.modal` base, y el
    scroll es propio de `#modal-network` — el mismo patrón que ya funciona en `.tab-panel` para
    Reglas, solo que acá no hay pestañas así que scrollea el modal entero (con header incluido). */
-#modal-network { overflow-y: auto; }
+#modal-network {
+  overflow-y: auto;
+}
 
 /* El modal de Reglas es más angosto y se achica a un formulario con pestañas, no a una tabla
    ancha: 760 px de "Sanciones aplicadas" se vería como un formulario perdido en el medio.
    El alto es fijo (no `max-height` nada más) para que cambiar de pestaña no cambie el tamaño del
    modal: antes cada pestaña tenía su propio alto de contenido y la caja saltaba al click. 720 px
    (antes 600) porque a 600 la mayoría de las pestañas igual terminaba con scroll interno. */
-.modal-tabs { width: min(620px, 94vw); height: 720px; max-height: 90vh; }
+.modal-tabs {
+  width: min(620px, 94vw);
+  height: 720px;
+  max-height: 90vh;
+}
 
 .tabs {
   display: flex;
@@ -972,9 +1309,17 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   letter-spacing: 0.04em;
   white-space: nowrap;
 }
-.tab:hover { color: var(--text); }
-.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
-.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab:hover {
+  color: var(--text);
+}
+.tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 .tab-panel {
   flex: 1 1 auto;
@@ -982,7 +1327,9 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.tab-panel[hidden] { display: none; }
+.tab-panel[hidden] {
+  display: none;
+}
 
 .modal h3 {
   font-size: 11px;
@@ -991,8 +1338,14 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
   color: var(--muted);
   margin: 0 0 8px 0;
 }
-.modal section { border-top: 1px solid var(--panel-border); padding-top: 13px; }
-.modal section:first-of-type { border-top: none; padding-top: 0; }
+.modal section {
+  border-top: 1px solid var(--panel-border);
+  padding-top: 13px;
+}
+.modal section:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
 
 /*
   El manual de tres pasos del cajón de Conexión.
@@ -1038,8 +1391,13 @@ ol.pasos > li::before {
 }
 /* El párrafo aclaratorio de adentro de un paso: más chico que el paso y despegado de él, para que
    se lea como la letra chica que es y no compita con la instrucción. */
-ol.pasos .sub { font-size: 12px; margin: 6px 0 8px 0; }
-ol.pasos button { margin-top: 2px; }
+ol.pasos .sub {
+  font-size: 12px;
+  margin: 6px 0 8px 0;
+}
+ol.pasos button {
+  margin-top: 2px;
+}
 
 .btn-close {
   background: none;
@@ -1048,17 +1406,39 @@ ol.pasos button { margin-top: 2px; }
   line-height: 1;
   padding: 2px 8px;
 }
-.btn-close:hover { color: var(--text); }
+.btn-close:hover {
+  color: var(--text);
+}
 
-.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 /* Mismo bug que `.empty[hidden]` y `#wizard-overlay[hidden]`: sin esto el `display: flex` de arriba
    le gana a la regla nativa del navegador para `[hidden]`, y el renglón de segundos de penalización
    quedaría a la vista aunque la sanción elegida no sea "Penalización de tiempo". */
-.row[hidden] { display: none; }
-.row > label { font-size: 13px; color: var(--muted); }
-.row > span { font-size: 13px; text-align: right; }
-.row span.bad { color: var(--red); font-weight: 600; }
-.row span.ok { color: var(--green); font-weight: 600; }
+.row[hidden] {
+  display: none;
+}
+.row > label {
+  font-size: 13px;
+  color: var(--muted);
+}
+.row > span {
+  font-size: 13px;
+  text-align: right;
+}
+.row span.bad {
+  color: var(--red);
+  font-weight: 600;
+}
+.row span.ok {
+  color: var(--green);
+  font-weight: 600;
+}
 
 /* El único checkbox que queda sin disfrazar de interruptor (el de "app pilotos" usa el tildado del
    navegador tal cual, que desentona al lado del toggle de Modo de funcionamiento). Es un checkbox
@@ -1088,11 +1468,20 @@ ol.pasos button { margin-top: 2px; }
   background: var(--text);
   transition: transform 0.15s;
 }
-.row input[type="checkbox"]:checked { background: var(--green); }
-.row input[type="checkbox"]:checked::after { transform: translateX(16px); }
-.row input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row input[type="checkbox"]:checked {
+  background: var(--green);
+}
+.row input[type="checkbox"]:checked::after {
+  transform: translateX(16px);
+}
+.row input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
-input[type="number"], input[type="text"], select {
+input[type="number"],
+input[type="text"],
+select {
   background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   color: var(--text);
@@ -1104,24 +1493,43 @@ input[type="number"], input[type="text"], select {
 }
 /* Los números entran en 130 px; las opciones de sanción ("Drive-Through (pasar por pits sin
    parar)") no, y cortadas a la mitad dejan de explicar lo que la etiqueta larga venía a explicar. */
-.modal select { width: 230px; }
-.modal input.wide { width: 230px; }
-.modal .row { align-items: baseline; }
-.modal .row > label { flex: 1 1 auto; }
+.modal select {
+  width: 230px;
+}
+.modal input.wide {
+  width: 230px;
+}
+.modal .row {
+  align-items: baseline;
+}
+.modal .row > label {
+  flex: 1 1 auto;
+}
 /* `outline-offset` negativo, no 0: un input pegado al borde derecho de `.tab-panel` (que por el
    `overflow-y: auto` de la 925 termina recortando también en X, truco del spec para quien pone solo
    un eje) se comía la mitad del marco ámbar si el contorno se dibujaba hacia AFUERA del borde. Hacia
    adentro nunca se recorta, sea cual sea el ancho del modal. Mismo criterio que ya usa `.tab` arriba. */
-input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 /* `.row` de fábrica pone la etiqueta y el campo lado a lado, pensado para números cortos y
    selects. Para un origen (una URL completa) o el snippet del embed (que tiene un token adentro,
    larguísimo) ese reparto deja el campo apretado contra el borde angosto que sobra. `.row-stack`
    pone la etiqueta arriba y el campo abajo, con todo el ancho del modal para él. */
-.row-stack { display: block; }
-.row-stack > label { display: block; margin-bottom: 6px; }
+.row-stack {
+  display: block;
+}
+.row-stack > label {
+  display: block;
+  margin-bottom: 6px;
+}
 
-#embed-origin { width: 100%; }
+#embed-origin {
+  width: 100%;
+}
 
 /* Sin esta regla el `<textarea>` no tenía ninguna — ni ancho, ni alto, ni el tema oscuro del
    resto de los campos — y quedaba con el tamaño por defecto del navegador (20 columnas), que para
@@ -1140,7 +1548,10 @@ textarea {
   line-height: 1.5;
   resize: vertical;
 }
-textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 
 pre.snippet {
   background: var(--panel-sunken);
@@ -1158,7 +1569,11 @@ pre.snippet {
    "La dirección de tu liga" del Estado y en el `pre.snippet` del asistente—, pero ya no es algo
    que el admin tenga que copiar: eso lo resuelve el mensaje para el soporte del hosting. */
 
-.muted { color: var(--muted); font-size: 12px; margin: 0 0 8px 0; }
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 8px 0;
+}
 
 /* ---------------------------------------------------- diagnóstico de conexión */
 
@@ -1179,19 +1594,53 @@ pre.snippet {
 }
 /* El color del borde izquierdo lleva el estado: a 12 px es lo único que se distingue de un
    vistazo, y el admin solo quiere encontrar rápido cuál de los cuatro está en rojo. */
-.check.ok { border-left-color: var(--green); }
-.check.warn { border-left-color: var(--yellow); }
-.check.fail { border-left-color: var(--red); }
-.check.pending { border-left-color: var(--muted); }
-.check-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.check-head strong { font-size: 13px; }
-.check-head span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-.check.ok .check-head span { color: var(--green); }
-.check.warn .check-head span { color: var(--yellow); }
-.check.fail .check-head span { color: var(--red); }
-.check.pending .check-head span { color: var(--muted); }
-.check p { font-size: 12px; color: var(--muted); margin: 5px 0 0 0; line-height: 1.45; }
-.check-action { color: var(--text) !important; }
+.check.ok {
+  border-left-color: var(--green);
+}
+.check.warn {
+  border-left-color: var(--yellow);
+}
+.check.fail {
+  border-left-color: var(--red);
+}
+.check.pending {
+  border-left-color: var(--muted);
+}
+.check-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.check-head strong {
+  font-size: 13px;
+}
+.check-head span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.check.ok .check-head span {
+  color: var(--green);
+}
+.check.warn .check-head span {
+  color: var(--yellow);
+}
+.check.fail .check-head span {
+  color: var(--red);
+}
+.check.pending .check-head span {
+  color: var(--muted);
+}
+.check p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 5px 0 0 0;
+  line-height: 1.45;
+}
+.check-action {
+  color: var(--text) !important;
+}
 
 /* ------------------------------------------------ perfiles y catálogo de infracciones */
 
@@ -1203,12 +1652,22 @@ pre.snippet {
 
 /* Cargar y Borrar van juntos en un renglón propio, debajo del select: son las dos acciones sobre
    el perfil elegido, y Borrar separado del resto para que no se confunda con Guardar. */
-.profile-actions { display: flex; gap: 8px; margin-bottom: 12px; }
-.profile-actions button { flex: 1 1 0; }
+.profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.profile-actions button {
+  flex: 1 1 0;
+}
 /* Borrar pierde el perfil guardado. Rojo sobre el gris del resto, mismo criterio que el kebab de
    la torre: una acción destructiva no puede verse igual que la de al lado. */
-button.secondary.peligro { color: var(--red); }
-button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.18); }
+button.secondary.peligro {
+  color: var(--red);
+}
+button.secondary.peligro:hover:not(:disabled) {
+  background: rgba(224, 85, 85, 0.18);
+}
 
 .infraction {
   border: 1px solid var(--panel-border);
@@ -1216,11 +1675,22 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
   padding: 10px 12px;
   margin-bottom: 8px;
 }
-.infraction > h4 { font-size: 13px; margin: 0 0 4px 0; font-weight: 600; }
-.infraction > p { font-size: 12px; color: var(--muted); margin: 0 0 8px 0; line-height: 1.4; }
+.infraction > h4 {
+  font-size: 13px;
+  margin: 0 0 4px 0;
+  font-weight: 600;
+}
+.infraction > p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
 /* Los umbrales se apagan cuando el tipo está en "no controlar": siguen visibles —así se ve qué
    se estaría controlando— pero dejan de pedir una decisión que no se va a usar. */
-.infraction.off .row:not(:first-child) { opacity: 0.4; }
+.infraction.off .row:not(:first-child) {
+  opacity: 0.4;
+}
 
 /* ---------------------------------------------------------------- wizard y toast */
 
@@ -1236,30 +1706,61 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
 /* Sin esto, el `display: flex` de arriba le gana a la regla nativa del navegador para [hidden]
    (display: none): el atributo se setea bien desde JS pero el modal nunca se oculta. Este fue el
    bug real detrás de "el modal nunca cierra". */
-#wizard-overlay[hidden] { display: none; }
-#wizard-overlay .card { max-width: 480px; width: 92vw; }
-#wizard-overlay .card h2 { margin-bottom: 8px; }
+#wizard-overlay[hidden] {
+  display: none;
+}
+#wizard-overlay .card {
+  max-width: 480px;
+  width: 92vw;
+}
+#wizard-overlay .card h2 {
+  margin-bottom: 8px;
+}
 /* Excepción a "sin scroll": el paso de los cuatro chequeos no entra en 768 px de alto. Scrollea
    la tarjeta, no la página. */
-.wizard { max-height: 88vh; overflow-y: auto; }
-.wizard .row { align-items: baseline; }
-.wizard .row > label { flex: 1 1 auto; }
-.wizard input[type="text"] { width: 230px; }
+.wizard {
+  max-height: 88vh;
+  overflow-y: auto;
+}
+.wizard .row {
+  align-items: baseline;
+}
+.wizard .row > label {
+  flex: 1 1 auto;
+}
+.wizard input[type="text"] {
+  width: 230px;
+}
 
-.wizard-steps { display: flex; gap: 6px; margin-bottom: 14px; }
+.wizard-steps {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
 .wizard-dot {
   flex: 1 1 0;
   height: 3px;
   border-radius: 2px;
   background: var(--panel-border);
 }
-.wizard-dot.done { background: var(--green); }
-.wizard-dot.current { background: var(--accent); }
+.wizard-dot.done {
+  background: var(--green);
+}
+.wizard-dot.current {
+  background: var(--accent);
+}
 
 /* Atrás a la izquierda, Siguiente a la derecha: el orden en que se leen, y deja el botón que
    avanza siempre en el mismo lugar entre pasos. */
-.wizard-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
-.wizard-nav button:only-child { margin-left: auto; }
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+.wizard-nav button:only-child {
+  margin-left: auto;
+}
 
 #toast {
   position: fixed;
@@ -1276,21 +1777,37 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
   z-index: 40;
   max-width: 50vw;
 }
-#toast.show { opacity: 1; }
+#toast.show {
+  opacity: 1;
+}
 
 /* Pantallas bajas (portátiles de 768 px de alto): la cabecera de carrera se compacta para
    cederle alto a la tabla, que es donde el alto sí hace falta. */
 @media (max-height: 820px) {
-  .card { padding: 10px 12px; }
-  .race-head { padding-bottom: 8px; margin-bottom: 8px; gap: 14px; }
-  .session-clock { font-size: 16px; }
+  .card {
+    padding: 10px 12px;
+  }
+  .race-head {
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    gap: 14px;
+  }
+  .session-clock {
+    font-size: 16px;
+  }
 }
 
 /* Pantallas angostas: la cabecera de carrera pasa a dos filas en vez de achicar todo hasta lo
    ilegible — sesión y largada arriba, el semáforo centrado abajo. */
 @media (max-width: 760px) {
-  .race-head { justify-content: space-between; }
-  .lights-wrap { order: 3; flex-basis: 100%; justify-content: flex-start; }
+  .race-head {
+    justify-content: space-between;
+  }
+  .lights-wrap {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
 }
 
 /* Celular en vertical (~360-400 px). Tres problemas que no se ven en escritorio ni en tablet:
@@ -1308,10 +1825,21 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
       que "Acciones" ya no tiene lugar para los dos botones. Mejor un `.table-wrap` que scrollee de
       costado —ya tiene `overflow-x: auto`— que nueve columnas ilegibles. */
 @media (max-width: 480px) {
-  .floating { max-width: 47%; flex-wrap: wrap; row-gap: 6px; }
-  .floating-left { left: 3%; }
-  .floating-right { right: 3%; justify-content: flex-end; }
-  main { padding-top: 86px; }
+  .floating {
+    max-width: 47%;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .floating-left {
+    left: 3%;
+  }
+  .floating-right {
+    right: 3%;
+    justify-content: flex-end;
+  }
+  main {
+    padding-top: 86px;
+  }
 
   .modal .row,
   .wizard .row {
@@ -1328,5 +1856,8 @@ button.secondary.peligro:hover:not(:disabled) { background: rgba(224, 85, 85, 0.
     width: 100%;
   }
 
-  #timing-table { table-layout: auto; min-width: 640px; }
+  #timing-table {
+    table-layout: auto;
+    min-width: 640px;
+  }
 }
