@@ -46,7 +46,7 @@
   if (!document.querySelector('link[data-rc-embed-css="' + slug + '"]')) {
     var link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = origin + "/embed/embed.css";
+    link.href = origin + "/l/" + encodeURIComponent(slug) + "/embed/embed.css";
     link.setAttribute("data-rc-embed-css", slug);
     document.head.appendChild(link);
   }

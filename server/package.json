@@ -1,6 +1,6 @@
 {
   "name": "race-control-server",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Portal web de dirección de carrera para ligas de Assetto Corsa: largada en movimiento, incidentes y sanciones en tiempo real.",
   "private": true,
   "main": "dist/portal/index.js",

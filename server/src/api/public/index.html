@@ -266,7 +266,7 @@
           generes queda visible en el código fuente de esa página — por eso solo da acceso a
           <b>esta</b> liga, y lo podés regenerar en un click si hace falta.
         </p>
-        <div class="row">
+        <div class="row row-stack">
           <label for="embed-origin">Sitio autorizado (origen exacto, con https://)</label>
           <input type="text" id="embed-origin" placeholder="https://fslmanager.vercel.app" />
         </div>
@@ -275,9 +275,9 @@
           Sin un origen guardado acá, el embed no le contesta a nadie aunque use el token correcto.
         </p>
         <button type="button" class="secondary" id="btn-embed-regenerate">Generar/Regenerar token</button>
-        <div class="row">
+        <div class="row row-stack">
           <label for="embed-snippet">Código para pegar en esa página</label>
-          <textarea id="embed-snippet" rows="4" readonly></textarea>
+          <textarea id="embed-snippet" rows="7" readonly></textarea>
         </div>
         <button type="button" class="secondary" id="btn-copy-embed-snippet">Copiar código</button>
       </section>

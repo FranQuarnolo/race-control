@@ -258,6 +258,16 @@ test("el canal de pilotos no sirve para colarse al panel", async () => {
   assert.equal(res.status, 401);
 });
 
+// --- Bundle del embed (embed.js / embed.css) -------------------------------------------------------
+
+test("sin sesión, embed.js se sirve igual: lo pide el navegador de quien mira la página ajena", async () => {
+  // Si esto exigiera sesión como el resto del panel, el <script> del snippet recibiría la
+  // redirección al login en vez del archivo — el bug real que motivó este bypass.
+  const res = await pedir("GET", "/l/liga-a/embed/embed.js");
+  assert.equal(res.status, 200);
+  assert.equal(espejoAdmin.ultimo()!.url, "/embed/embed.js");
+});
+
 // --- Portal ---------------------------------------------------------------------------------------
 
 test("sin sesión el portal no cuenta nada de nadie", async () => {

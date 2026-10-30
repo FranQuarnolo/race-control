@@ -684,7 +684,11 @@ async function loadEmbedToken() {
 
 /** El snippet trae la dirección de ESTE servidor (`location.origin`) y el slug de ESTA liga
  * (deducido de `BASE`, igual que el resto del panel): el admin lo pega tal cual, sin completar
- * nada a mano. */
+ * nada a mano.
+ *
+ * El `src` del script lleva `BASE` (`/l/<slug>`) adelante de `/embed/embed.js`: sin eso apuntaba a
+ * la raíz del dominio, que el portal no sabe a qué liga mandar (y que, de paso, nunca llegó a
+ * servir nada ahí — ver el bypass de sesión nuevo en `portal/server.ts`). */
 function renderEmbedSnippet() {
   if (!embedToken) return;
   const slug = BASE.slice(3);
@@ -692,6 +696,7 @@ function renderEmbedSnippet() {
     '<div id="rc-embed"></div>\n' +
     '<script src="' +
     window.location.origin +
+    BASE +
     '/embed/embed.js" data-slug="' +
     slug +
     '" data-token="' +

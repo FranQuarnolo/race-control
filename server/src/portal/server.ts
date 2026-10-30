@@ -635,6 +635,21 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
 
+    /**
+     * `embed.js`/`embed.css` (`src/api/public/embed/`) los pide el navegador de quien mira
+     * fslmanager.vercel.app, que no tiene sesión con Race Control — si esto le exigiera
+     * `req.userId` como el resto de acá abajo, el `<script src="…/embed/embed.js">` recibiría la
+     * redirección al login en vez del archivo, y fallaría en silencio (un script que "ejecuta" un
+     * 302 a una página HTML no hace nada). No hay nada secreto en estos dos archivos — el token
+     * vive en el propio `<script>` del snippet, no acá — así que alcanza con dejarlos pasar igual
+     * que el canal de pilotos y el de datos del embed.
+     */
+    const esAssetDeEmbed = resto.startsWith("/embed/");
+    if (esAssetDeEmbed) {
+      proxyToWorker(req, res, { port: league.adminPort, path: resto });
+      return;
+    }
+
     if (!req.userId) {
       // Un `fetch` del panel espera JSON; una navegación del navegador, el login.
       if (resto.startsWith("/api/")) res.status(401).json({ ok: false, error: "Sesión vencida." });

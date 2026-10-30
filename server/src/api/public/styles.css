@@ -915,16 +915,34 @@ tbody tr.desconectado .c-driver { opacity: 1; color: var(--text); }
      de `.modal-backdrop`. */
   margin: auto 0;
 }
-.modal header { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+/* `position: sticky` para que, en Conexión (el único modal sin `.tab-panel` propio, que ahora
+   scrollea con `overflow-y: auto` en `#modal-network`), cerrar no obligue a volver a scrollear
+   hasta arriba. En los modales que no scrollean a este nivel no hace nada, así que es seguro
+   dejarlo para todos. */
+.modal header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 1;
+}
 .modal header h2 { flex: 1 1 auto; font-size: 15px; margin: 0; }
 .modal .table-wrap { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; }
 
-/* Conexión no tiene pestañas ni una tabla que reparta el alto sobrante: es una sucesión de
-   secciones de alto fijo, así que pedirle "sin scroll" es pedirle que no se recorte, no que quepa
-   en 88vh como sea. Por eso se le saca el techo de alto y el `overflow: hidden` del `.modal` base:
-   si no entra en la ventana, la crece el `overflow-y: auto` del `.modal-backdrop`, no un scroll
-   propio adentro de la caja. */
-#modal-network { max-height: none; overflow: visible; }
+/* Conexión no tiene pestañas que reciban un `.tab-panel` con su propio scroll: es una sucesión de
+   secciones una abajo de la otra, y "Revisar ahora" le agrega tarjetas de diagnóstico después de
+   armado el layout. Se probó dejarlo crecer sin techo y que el `overflow-y: auto` del
+   `.modal-backdrop` scrollee la caja entera (con centrado por `margin: auto` en vez de
+   `align-items: center`, para esquivar el bug clásico de Chrome/Firefox que recorta el contenido
+   de un flex item centrado que no entra). En la práctica seguía cortando "Embed en otra página":
+   scroll adentro de un modal que además se mueve dentro del backdrop no es confiable en todos los
+   navegadores. Por eso ahora el límite es el mismo `max-height: 88vh` del `.modal` base, y el
+   scroll es propio de `#modal-network` — el mismo patrón que ya funciona en `.tab-panel` para
+   Reglas, solo que acá no hay pestañas así que scrollea el modal entero (con header incluido). */
+#modal-network { overflow-y: auto; }
 
 /* El modal de Reglas es más angosto y se achica a un formulario con pestañas, no a una tabla
    ancha: 760 px de "Sanciones aplicadas" se vería como un formulario perdido en el medio.
@@ -1095,6 +1113,34 @@ input[type="number"], input[type="text"], select {
    un eje) se comía la mitad del marco ámbar si el contorno se dibujaba hacia AFUERA del borde. Hacia
    adentro nunca se recorta, sea cual sea el ancho del modal. Mismo criterio que ya usa `.tab` arriba. */
 input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* `.row` de fábrica pone la etiqueta y el campo lado a lado, pensado para números cortos y
+   selects. Para un origen (una URL completa) o el snippet del embed (que tiene un token adentro,
+   larguísimo) ese reparto deja el campo apretado contra el borde angosto que sobra. `.row-stack`
+   pone la etiqueta arriba y el campo abajo, con todo el ancho del modal para él. */
+.row-stack { display: block; }
+.row-stack > label { display: block; margin-bottom: 6px; }
+
+#embed-origin { width: 100%; }
+
+/* Sin esta regla el `<textarea>` no tenía ninguna — ni ancho, ni alto, ni el tema oscuro del
+   resto de los campos — y quedaba con el tamaño por defecto del navegador (20 columnas), que para
+   un snippet de tres líneas con una URL y un token adentro apenas alcanza para ver un pedazo. */
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  background: var(--panel-sunken);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  line-height: 1.5;
+  resize: vertical;
+}
+textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 pre.snippet {
   background: var(--panel-sunken);

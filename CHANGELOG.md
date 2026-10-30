@@ -3,6 +3,49 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.16] — 2026-10-30
+
+**El embed de la 1.14 no funcionaba de verdad para quien lo pegaba en su página, y el arreglo del
+modal de Conexión de la 1.15 tampoco: esta entrada cierra las dos.**
+
+### El embed no se podía usar fuera de este dominio: ni el archivo cargaba, ni el snippet apuntaba bien
+
+**Síntoma:** siguiendo el flujo pensado para fslmanager.vercel.app —pegar el origen, generar el
+token, copiar el snippet— el `<script src="...">` que arma el panel nunca iba a funcionar en una
+página ajena.
+
+**Causa:** tres problemas, los tres en el mismo camino. Primero, `portal/server.ts` no dejaba pasar
+`/embed/embed.js` ni `/embed/embed.css` sin sesión: el único visitante de esas rutas es el navegador
+de quien mira fslmanager.vercel.app, que no tiene cookie de Race Control, así que recibía la
+redirección al login en vez del archivo — un `<script>` que "ejecuta" un 302 a una página HTML no
+hace nada, y falla en silencio. Segundo, el snippet que arma el panel (`app.js`) armaba el `src` sin
+el prefijo `/l/<slug>` que todas las demás rutas de la liga necesitan. Tercero, `embed.js` tenía el
+mismo olvido al pedir su propio `embed.css`. Los tres bugs estaban ahí desde la 1.14 y ninguno daba
+error visible: el embed simplemente no aparecía.
+
+**Decisión:** sumar `/embed/*` a la lista de rutas que el portal deja pasar sin sesión (mismo
+criterio que ya usan `/api/client/*` y `/api/embed/*`: no hay nada secreto en esos dos archivos, el
+token vive en el propio `<script>` del snippet) y corregir las URLs del snippet y de `embed.js` para
+que lleven el `/l/<slug>` que les falta.
+
+### El modal de Conexión seguía recortando "Embed en otra página" después de "Probar"
+
+La 1.15 había cambiado el centrado del modal (`margin: auto` en vez de `align-items: safe center`)
+apostando a que el `overflow-y: auto` del fondo scrolleara la caja entera si crecía de más. En la
+práctica seguía sin alcanzar: un modal que además se mueve dentro de su contenedor no scrollea
+confiable en todos los navegadores. Ahora `#modal-network` tiene su propio `overflow-y: auto` con el
+mismo techo de `88vh` que ya usa el resto de los modales — el mismo patrón que ya le funciona a las
+pestañas de Reglas — y el encabezado queda fijo arriba (`position: sticky`) para no perder la cruz de
+cerrar al scrollear hasta el final.
+
+### "Sitio autorizado" y el código para embeber eran casi ilegibles
+
+Ninguno de los dos tenía una regla de ancho o alto propia: el input de origen heredaba los 130 px
+genéricos pensados para números, y el `<textarea>` del snippet ni siquiera tenía una regla de CSS —
+quedaba con el tamaño por defecto del navegador, que para una URL y un token adentro apenas mostraba
+un pedazo. Los dos pasan a ocupar el ancho completo del modal, y el snippet suma más alto y
+tipografía monoespaciada para leerse entero.
+
 ## [1.15] — 2026-10-30
 
 **Repaso de la pantalla fusionada tras probarla a fondo: el modal de Conexión se recortaba al
