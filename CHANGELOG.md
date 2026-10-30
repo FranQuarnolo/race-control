@@ -3,6 +3,24 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.21] — 2026-10-30
+
+### Ajustes de layout en la barra de largada y el botón de Conexión, pedidos tras probar la 1.20 en vivo
+
+**Cambios, todos visuales, sin tocar lógica de negocio:**
+
+- La fila de largada (`.rc-embed__start`) pasa de un `flex` que apilaba todo a la izquierda a tres
+  columnas: el indicador de sesión (P/Q/R + reloj) a la izquierda, el semáforo centrado entre ese
+  reloj y los botones, y Formación/Verde/Reiniciar pegados a la derecha. El renglón de ayuda sigue
+  abajo, ocupando el ancho entero.
+- El botón de Conexión suma un punto de estado (`rc-embed__dot`) que parpadea siempre, en verde o
+  rojo según `commandTargetKnown && receivingTelemetry` — mismo criterio que ya usa
+  `renderNetworkButton` en el panel completo para decidir "Conectado" vs "Sin servidor"/"Sin señal".
+  Se corrió a la derecha del botón de Reglas (antes iba primero).
+- Se saca el cartel "El servidor no está en una sesión de carrera.": en práctica/clasificación los
+  tres botones de largada ya quedan deshabilitados, y `app.js` tampoco escribe nada ahí — el embed
+  quedó inconsistente con el panel completo al escribir esta frase, se empareja vaciando el renglón.
+
 ## [1.19] — 2026-10-30
 
 ### El embed de la 1.18 no cargaba: tiraba "Cannot set properties of undefined (setting 'formation')"

@@ -84,10 +84,14 @@
   // cajones que antes solo existían en el panel completo, y el pedido explícito fue poder abrirlos
   // sin salir de la página donde está incrustado el embed.
   var topbar = el("div", "rc-embed__topbar");
-  var btnConexion = boton("Conexión", function () { abrirModal(modalConexionBackdrop); }, "secondary");
   var btnReglas = boton("Reglas", function () { abrirModal(modalReglasBackdrop); }, "secondary");
-  topbar.appendChild(btnConexion);
+  var btnConexion = boton("Conexión", function () { abrirModal(modalConexionBackdrop); }, "secondary");
+  // El puntito va antes del texto (mismo orden que ya usa el botón de Conexión del panel completo),
+  // insertado a mano porque boton() ya puso el texto como único hijo.
+  var conexionDot = el("span", "rc-embed__dot");
+  btnConexion.insertBefore(conexionDot, btnConexion.firstChild);
   topbar.appendChild(btnReglas);
+  topbar.appendChild(btnConexion);
 
   var start = el("div", "rc-embed__start");
 
@@ -723,6 +727,12 @@
   function renderConexionEstado(state) {
     var network = state.network || {};
 
+    // Mismo criterio que renderNetworkButton en app.js: verde solo si las dos mitades están bien
+    // (auto identificado y entra telemetría). Parpadea siempre, en verde o en rojo según corresponda
+    // — es el resumen de todo el cajón de Conexión en un vistazo, sin tener que abrirlo.
+    var conexionOk = Boolean(network.commandTargetKnown) && Boolean(network.receivingTelemetry);
+    conexionDot.className = "rc-embed__dot rc-embed__dot--" + (conexionOk ? "ok" : "bad");
+
     valorIp.textContent = network.publicIpConfigured ? "Configurada" : "Sin configurar";
     valorIp.className = network.publicIpConfigured ? "rc-embed__valor--ok" : "rc-embed__valor--bad";
 
@@ -1342,8 +1352,11 @@
     btnGreen.disabled = !allowed.green || !esCarrera;
     btnReset.disabled = !allowed.reset;
 
+    // Fuera de carrera no hay parrilla que formar ni nadie a quien sancionar por adelantarse —
+    // mismo criterio que app.js: se vacía el renglón en vez de explicarlo, los botones ya quedan
+    // deshabilitados arriba.
     if (!esCarrera) {
-      hint.textContent = "El servidor no está en una sesión de carrera.";
+      hint.textContent = "";
       return;
     }
     var hints = {

@@ -75,6 +75,7 @@ test("toda clase que embed.js arma tiene al menos una regla en embed.css", () =>
     "rc-embed__semaforo": ["formation", "green"],
     "rc-embed__fila": ["desconectado"],
     "rc-embed__badge": ["servingWindow", "served", "escalated", "revoked"],
+    "rc-embed__dot": ["ok", "bad"],
   };
   for (const [prefijo, sufijos] of Object.entries(FAMILIAS_CON_SUFIJO_DINAMICO)) {
     assert.ok(

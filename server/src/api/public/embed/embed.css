@@ -64,16 +64,59 @@
   margin-bottom: 12px;
 }
 
+.rc-embed__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: rc-embed-dot-blink 1.6s ease-in-out infinite;
+}
+.rc-embed__dot--ok {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+.rc-embed__dot--bad {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+@keyframes rc-embed-dot-blink {
+  50% { opacity: 0.25; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-embed__dot { animation: none; }
+}
+
+/* Tres columnas: sesión a la izquierda, semáforo centrado entre el reloj y los botones de largada,
+   botones pegados a la derecha. El hint ocupa el ancho entero en el renglón de abajo. */
 .rc-embed__start {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
   background: var(--panel);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   padding: 12px;
   margin-bottom: 16px;
+}
+.rc-embed__start .rc-embed__lights-wrap {
+  justify-self: center;
+}
+.rc-embed__start .rc-embed__botones {
+  justify-self: end;
+}
+.rc-embed__start .rc-embed__hint {
+  grid-column: 1 / -1;
+}
+@media (max-width: 480px) {
+  .rc-embed__start {
+    grid-template-columns: 1fr;
+  }
+  .rc-embed__start .rc-embed__lights-wrap,
+  .rc-embed__start .rc-embed__botones {
+    justify-self: stretch;
+  }
 }
 
 .rc-embed__session {
