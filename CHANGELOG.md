@@ -3,6 +3,16 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.22] — 2026-10-30
+
+### El piloto no tenía forma de saber, antes de bajar el .zip, qué versión estaba por instalar
+
+**Decisión:** `node client-app/scripts/package-client.js` ahora arma dos copias idénticas del
+mismo `.zip`: `RaceControlClient.zip` (el nombre fijo que linkea el README — no se toca en cada
+release, justamente para no tener que acordarse) y `RaceControlClient-<versión de ui.json>.zip`,
+para quien entra a la página de releases de GitHub a elegir a mano. El README suma la versión
+actual al lado del link de descarga.
+
 ## [1.21] — 2026-10-30
 
 ### Ajustes de layout en la barra de largada y el botón de Conexión, pedidos tras probar la 1.20 en vivo

@@ -59,6 +59,11 @@ fs.mkdirSync(releaseDir, { recursive: true });
 const zipPath = path.join(releaseDir, "RaceControlClient.zip");
 if (fs.existsSync(zipPath)) fs.rmSync(zipPath);
 
+// Zips versionados de builds anteriores (release/ es local, no se borra solo entre corridas).
+for (const entry of fs.readdirSync(releaseDir)) {
+  if (/^RaceControlClient-.*\.zip$/.test(entry)) fs.rmSync(path.join(releaseDir, entry));
+}
+
 // Se comprime la carpeta "apps" completa (no su contenido suelto) para que el .zip reproduzca
 // la misma estructura "apps/python/RaceControlClient/..." que usa Content Manager.
 execFileSync(
@@ -69,4 +74,11 @@ execFileSync(
 
 fs.rmSync(versionTxtPath);
 
+// Mismo contenido, un segundo nombre con la versión adentro: el README linkea siempre al genérico
+// de arriba (no se toca en cada release), pero quien entra a la página del release a mano hoy no
+// tenía forma de saber, sin bajarlo, qué versión de ui.json trae.
+const versionedZipPath = path.join(releaseDir, `RaceControlClient-${uiJson.version}.zip`);
+fs.copyFileSync(zipPath, versionedZipPath);
+
 console.log(`Listo: ${zipPath}`);
+console.log(`Listo: ${versionedZipPath}`);

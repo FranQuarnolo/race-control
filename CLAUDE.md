@@ -65,11 +65,14 @@ que tocarlas en cuatro lugares: `server/package.json`, dos líneas de `server/pa
 
 El `ui.json` de la app del piloto lleva **su propia** numeración y se sube solo cuando el `.py`
 cambia. Cuando cambia, los pilotos tienen que reinstalar el `.zip`: no hay actualización
-automática.
+automática. Si cambia, hay que tocar también el número que aparece en el README, en la fila de
+descargas ("versión actual: X.Y").
 
 El `.zip` se arma con `node client-app/scripts/package-client.js` y no se commitea
-(`client-app/release/` está en `.gitignore`): se adjunta al release de GitHub, de donde lo baja el
-link del README.
+(`client-app/release/` está en `.gitignore`): produce dos archivos idénticos,
+`RaceControlClient.zip` (el que linkea el README, con nombre fijo para no tener que tocar ese link
+en cada release) y `RaceControlClient-<versión>.zip` (mismo contenido, para quien entra a la
+página de releases de GitHub a elegir una versión puntual). Los dos se adjuntan al release.
 
 ## Idioma
 

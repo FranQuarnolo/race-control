@@ -30,7 +30,11 @@ sancionar— no para reemplazar un live timing aparte.
 
 | Para | Qué bajar |
 |---|---|
-| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) |
+| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.7** |
+
+Este link no cambia nunca: siempre baja el último release, sea cual sea su número. Si preferís
+elegir una versión puntual, en la [página de releases](https://github.com/FranQuarnolo/race-control/releases)
+cada una queda publicada también como `RaceControlClient-<versión>.zip`.
 
 ## 🏎️ Para el piloto
 
