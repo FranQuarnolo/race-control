@@ -3,6 +3,28 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.17] — 2026-10-30
+
+### Dos reinicios seguidos podían perder sanciones e incidentes que el primero sí había recuperado
+
+**Síntoma:** después de un reinicio del backend (por ejemplo, dos deploys seguidos en poco tiempo),
+sanciones e incidentes pendientes que seguían vigentes de verdad desaparecían de la bandeja.
+
+**Causa:** la restauración de un reinicio (`restoreState`, ver `src/log/restore.ts`) reconstruye el
+estado leyendo las líneas `penalty.state`/`incident.state` del journal anterior. A propósito,
+`restore()` en los motores no emite eventos al cargar ese estado —si los emitiera, cada sanción
+restaurada le reenviaría el mensaje de chat al piloto, avisándole de algo que ya sabía—, pero esos
+mismos eventos son los que escriben las líneas de estado en el journal. Resultado: el primer
+reinicio restauraba bien, pero su propio journal quedaba sin ninguna línea de estado para lo que
+acababa de recuperar. Un segundo reinicio, leyendo ESE journal, no encontraba nada que restaurar y
+lo perdía — aunque nada hubiera cambiado en el medio.
+
+**Decisión:** después de restaurar, reescribir lo recuperado directo en el journal nuevo (no a
+través de los eventos del motor, para no reenviar el aviso al piloto). Así el journal de cada
+arranque siempre lleva su propio estado completo, aguante uno o diez reinicios encadenados. Sumado
+un test de punta a punta (`core.test.ts`) que levanta el núcleo tres veces seguidas sobre la misma
+carpeta de datos y confirma que la sanción sigue ahí en la tercera.
+
 ## [1.16] — 2026-10-30
 
 **El embed de la 1.14 no funcionaba de verdad para quien lo pegaba en su página, y el arreglo del

@@ -98,6 +98,46 @@ test("stop() libera el puerto UDP, así que la misma liga puede reiniciarse en c
  * panel ve: que la ruta encuentre la sanción sin que le digan de qué motor salió, y que
  * `/api/state` la devuelva anulada en el poll siguiente.
  */
+/**
+ * Dos reinicios seguidos, sin que cambie nada en el medio, no tienen que perder lo recuperado.
+ *
+ * `restore()` no emite eventos (así no se le reenvía el mensaje de chat al piloto por una sanción
+ * ya avisada), y por eso lo restaurado no pasaba por los listeners que escriben `penalty.state` en
+ * el journal. El primer reinicio recuperaba bien, pero su propio journal quedaba sin ninguna línea
+ * de estado — así que un SEGUNDO reinicio, leyendo ESE journal, no encontraba nada para restaurar
+ * y la sanción (que seguía vigente de verdad) desaparecía. Ver el comentario en `raceControl.ts`
+ * junto a `restoreState`.
+ */
+test("una sanción sobrevive a dos reinicios seguidos, no solo al primero", async () => {
+  const primera = await levantar("doble-reinicio", 12640, 13640);
+  const p = primera.rc.stewardPenaltyEngine.issuePenalty(7, "guid-7", "Comisario: corte de pista", "TIME", {
+    timePenaltySeconds: 10,
+  });
+  primera.rc.stop();
+
+  const segunda = await createRaceControl({
+    config: configDePrueba(12640, 13640),
+    dataDir: primera.dataDir,
+    ports: { adminPort: 13640, clientPort: 13641 },
+  });
+  assert.equal(segunda.stewardPenaltyEngine.getAll().find((x) => x.id === p.id)?.status, p.status);
+  segunda.stop();
+
+  const tercera = await createRaceControl({
+    config: configDePrueba(12640, 13640),
+    dataDir: primera.dataDir,
+    ports: { adminPort: 13640, clientPort: 13641 },
+  });
+  try {
+    // Esta es la comprobación que fallaba antes del fix: sin la reescritura en el journal de
+    // `segunda`, acá no había nada que restaurar.
+    assert.equal(tercera.stewardPenaltyEngine.getAll().find((x) => x.id === p.id)?.status, p.status);
+  } finally {
+    tercera.stop();
+    fs.rmSync(primera.dataDir, { recursive: true, force: true });
+  }
+});
+
 test("se puede anular una sanción desde la API y el estado lo refleja", async () => {
   const { rc, dataDir } = await levantar("anular", 12650, 13650);
   // `createRaceControl` arma la app pero no escucha: quien abre el puerto es el entry. Acá se abre

@@ -737,6 +737,17 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     console.log(
       `[race-control] Carrera interrumpida: recuperadas ${count} sanción(es) y ${restored.incidents.length} incidente(s).`
     );
+    // Reescribe lo recuperado en ESTE journal (el nuevo, no el que se acaba de leer). Si no se
+    // hace, dos reinicios seguidos sin que cambie nada en el medio pierden el estado: el primero
+    // restaura bien, pero como `restore()` no emite eventos (ver el comentario de arriba), este
+    // journal queda sin ninguna línea `penalty.state`/`incident.state`, y el SEGUNDO reinicio no
+    // encuentra nada que restaurar en él. Se escribe directo al journal y no con `persist`/
+    // `persistIncident` (que están enganchados a los eventos del motor) a propósito: pasar por ahí
+    // dispararía de nuevo el mensaje de chat al piloto por una sanción que ya le habían avisado.
+    for (const [engineLabel, list] of restored.penalties) {
+      for (const penalty of list) journal.log("penalty.state", { engine: engineLabel, penalty });
+    }
+    for (const incident of restored.incidents) journal.log("incident.state", { incident });
     journal.log("session.restored", {
       from: restored.sourceFile,
       interruptedAt: new Date(restored.interruptedAt).toISOString(),
