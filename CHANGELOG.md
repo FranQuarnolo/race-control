@@ -3,6 +3,32 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.19] — 2026-10-30
+
+### El embed de la 1.18 no cargaba: tiraba "Cannot set properties of undefined (setting 'formation')"
+
+**Síntoma:** apenas publicada la 1.18, el embed real en fslmanager.vercel.app dejó de iniciar. La
+consola tiraba `Uncaught TypeError: Cannot set properties of undefined (setting 'formation')`.
+
+**Causa:** `reglasForms` —el registro de los formularios con dirty-tracking de las pestañas de
+Reglas (Largada, Pit lane, App pilotos)— se declaraba con `var reglasForms = {}` recién en la
+sección de "formularios de Reglas", bastante más abajo en el archivo que el armado del DOM del
+modal de Reglas, que ya llama a `registrarFormReglas("formation", ...)` durante la construcción
+inicial. `var` adelanta el nombre de la variable al tope de la función, pero no su asignación: en
+el momento de ese primer llamado, `reglasForms` todavía era `undefined`. Nunca se vio en desarrollo
+porque la ejecución ahí no lanza excepción hasta que algo intenta escribir en la variable — y eso
+pasa en la primera línea de `registrarFormReglas`.
+
+**Decisión:** mover `var reglasForms = {}` al bloque de estado de arriba de todo, junto al resto de
+las variables de módulo (`lastState`, `armed`, `catalog`, etc.), y borrar la declaración duplicada
+de más abajo. Dejarla ahí explica, con un comentario, por qué importa el orden en este archivo
+puntual: es la única variable de todo `embed.js` cuyo primer uso ocurre durante el armado síncrono
+del DOM, antes de que el resto del script corra.
+
+**Nota para el futuro:** `embed.test.ts` no agarra esta clase de bug — lee el `dist/embed.js`
+compilado como texto plano (clases CSS, ids), no lo ejecuta en un DOM. No hay hoy ningún test que
+corra el script y confirme que arranca sin tirar excepciones.
+
 ## [1.18] — 2026-10-30
 
 ### El embed probado en fslmanager.vercel.app servía para mirar, no para administrar

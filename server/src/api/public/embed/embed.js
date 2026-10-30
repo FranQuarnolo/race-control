@@ -65,6 +65,12 @@
   var pollTimer = null;
   var catalog = null; // /catalog del canal embed. Null hasta que responde.
   var pitZoneSuggestion = null;
+  // Declarado acá arriba y no junto a registrarFormReglas: ese helper ya se llama más abajo,
+  // durante el armado del DOM de Reglas (formation/pit/presence), bastante antes de llegar a la
+  // sección de "formularios de Reglas" del archivo. `var` no sube la asignación, solo el nombre —
+  // declararlo ahí abajo dejaba `reglasForms` en `undefined` en ese primer llamado y tiraba
+  // "Cannot set properties of undefined (setting 'formation')" apenas cargaba la página.
+  var reglasForms = {};
 
   // ------------------------------------------------------------------------------ armado del DOM
 
@@ -737,8 +743,6 @@
   }
 
   // -------------------------------------------------------------------- formularios de Reglas
-
-  var reglasForms = {};
 
   function registrarFormReglas(nombre, botonGuardar, elementos, buildPayload) {
     var form = { boton: botonGuardar, elementos: elementos, buildPayload: buildPayload, guardado: null };
