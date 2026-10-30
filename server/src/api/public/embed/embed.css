@@ -1,0 +1,201 @@
+/*
+  Embed de Race Control para una página ajena (ej. fslmanager.vercel.app).
+
+  Hoja nueva y chica a propósito, no una porción de ../styles.css: esa hoja asume ser la página
+  entera (`html,body{height:100%;overflow:hidden}`, overlays `position:fixed` contra el viewport) y
+  nada de eso vale adentro de un <div> de otra página. Las variables se definen DENTRO de
+  `.rc-embed` y no en `:root`, para no pisar ni heredar nada de la hoja del sitio que la incruste.
+
+  Paleta: los mismos valores que ../styles.css (ver ese archivo para de dónde salieron — leídos
+  contra una sesión real de fslmanager.vercel.app), para que el widget no se note como un cuerpo
+  extraño en esa página. El admin puede editar este archivo en su propio despliegue si su paleta
+  cambia; lo único que tiene que seguir siendo cierto es que el resto de las reglas de acá abajo
+  usan las variables y no colores sueltos.
+*/
+
+.rc-embed {
+  --bg: #0f1116;
+  --panel: #191c22;
+  --panel-raised: #232730;
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --text: #e8d5a3;
+  --muted: #8a8d96;
+  --accent: #c9a84c;
+  --green: #4ade80;
+  --yellow: #ef8e3c;
+  --red: #e05555;
+  --radius: 12px;
+  --font-display: "Oswald", sans-serif;
+  --font-body: "Chivo", sans-serif;
+
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 16px;
+  max-width: 100%;
+}
+
+.rc-embed *,
+.rc-embed *::before,
+.rc-embed *::after {
+  box-sizing: border-box;
+}
+
+.rc-embed__banner {
+  background: color-mix(in srgb, var(--red), transparent 75%);
+  border: 1px solid var(--red);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.rc-embed__start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.rc-embed__semaforo {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: calc(var(--radius) / 2);
+  background: var(--panel-raised);
+  color: var(--muted);
+}
+.rc-embed__semaforo--formation { color: var(--yellow); }
+.rc-embed__semaforo--green { color: var(--green); }
+
+.rc-embed__botones {
+  display: flex;
+  gap: 8px;
+}
+
+.rc-embed__hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.rc-embed__btn {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.85rem;
+  border: 1px solid var(--panel-border);
+  background: var(--accent);
+  color: var(--bg);
+  border-radius: calc(var(--radius) / 2);
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.rc-embed__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.rc-embed__btn--secondary {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+.rc-embed__btn--arming {
+  background: var(--red);
+  color: var(--text);
+}
+
+.rc-embed__titulo {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  font-size: 1rem;
+  margin: 0 0 8px;
+}
+
+.rc-embed__tabla-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.rc-embed__tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.rc-embed__tabla th,
+.rc-embed__tabla td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  vertical-align: top;
+}
+
+.rc-embed__tabla th {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+}
+
+.rc-embed__fila--desconectado {
+  color: var(--muted);
+}
+
+.rc-embed__incidente {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--panel-raised);
+  border-radius: calc(var(--radius) / 2);
+  padding: 4px 8px;
+  margin-bottom: 4px;
+}
+
+.rc-embed__incidente-texto {
+  font-size: 0.85rem;
+}
+
+.rc-embed__incidente-botones {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rc-embed__incidente-botones .rc-embed__btn {
+  padding: 2px 8px;
+  font-size: 0.7rem;
+}
+
+.rc-embed__vacio {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.rc-embed__badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: var(--panel-raised);
+  color: var(--muted);
+}
+.rc-embed__badge--servingWindow { color: var(--yellow); }
+.rc-embed__badge--served { color: var(--green); }
+.rc-embed__badge--escalated { color: var(--red); }
+.rc-embed__badge--revoked { color: var(--muted); }

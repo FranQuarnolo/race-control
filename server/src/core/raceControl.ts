@@ -27,6 +27,7 @@ import { PitZoneLearner } from "../track/pitZoneLearner";
 import { TrackLimitsIncident, TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { PilotTokenIssuer } from "../security/pilotToken";
+import { EmbedTokenIssuer } from "../security/embedToken";
 import { LeagueEventsStore } from "../history/leagueEvents";
 import { buildReport } from "../report/raceReport";
 
@@ -176,6 +177,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // La clave de esta liga. Se crea sola en el primer arranque y no sale nunca del servidor: lo
   // que viaja es un token firmado con ella, por piloto y con vencimiento.
   const pilotTokens = new PilotTokenIssuer(dataDir);
+  const embedTokens = new EmbedTokenIssuer(dataDir);
 
   const announcer = new BackendAnnouncer(
     udpClient,
@@ -786,6 +788,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
 
   const adminApp = createAdminApi({
     config,
+    embedTokens,
     stateTracker,
     formationStart,
     formationPenaltyEngine,

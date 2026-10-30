@@ -237,6 +237,27 @@ el reinicio siguiente — que es el paso justo después. Por eso varios paneles 
 lectura, y por eso Race Control dejó de ofrecer las dos líneas para pegar ahí: era un consejo que
 fallaba en silencio.
 
+### Incrustarlo en su propia página (desde la 1.14)
+
+Si el admin ya tiene una página de administración propia (el caso real: `fslmanager.vercel.app`),
+no hace falta que use Race Control como producto aparte. En **Conexión**, debajo del manual de
+conexión, hay una sección **"Embed externo"** con tres pasos:
+
+1. **Pega la dirección de su página** (ej. `https://fslmanager.vercel.app`) en "Guardar origen".
+   Sin esto, el embed no le contesta a nadie — es a propósito.
+2. **"Generar/Regenerar token"** arma un token propio de su liga. Regenerar invalida el anterior al
+   instante: si alguna vez lo filtra sin querer, no hace falta avisar a nadie, alcanza con tocar ese
+   botón de nuevo.
+3. **"Copiar código"** le da el `<div>` + `<script>` listo para pegar en su página. Eso es todo lo
+   que tiene que tocar del lado de él; no requiere su propio despliegue de nada.
+
+Explicale que ese token **no es una contraseña de las que repartís vos**: vive en el código fuente
+de su página, visible para cualquiera que la abra, y por eso el embed solo deja leer el estado de
+SU liga, resolver incidentes, aplicar/anular sanciones y controlar la largada — nunca reconfigurar
+reglas, ver el SteamID de un piloto ni nada del resto del panel. El mapa, los tiempos y los
+neumáticos tampoco están ahí: siguen en el producto completo, al que sigue entrando con su usuario
+y contraseña de siempre.
+
 ---
 
 ## 6. La app de los pilotos

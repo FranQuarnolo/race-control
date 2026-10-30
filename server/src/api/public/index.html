@@ -254,6 +254,33 @@
         <button class="secondary" id="btn-test-network">Revisar ahora</button>
         <div id="net-checks"></div>
       </section>
+
+      <!-- Token stateless (versión + firma, ver security/embedToken.ts): no hay "se muestra una
+           sola vez" como con usuario y contraseña, así que el campo siempre puede traer el vigente
+           de vuelta y no hace falta ninguna ceremonia de guardado especial. -->
+      <section>
+        <h3>Embed en otra página</h3>
+        <p class="muted">
+          Para incrustar esta pantalla en el panel de tu liga (por ejemplo fslmanager.vercel.app),
+          en vez de que tus pilotos y comisarios entren acá con usuario y contraseña. El token que
+          generes queda visible en el código fuente de esa página — por eso solo da acceso a
+          <b>esta</b> liga, y lo podés regenerar en un click si hace falta.
+        </p>
+        <div class="row">
+          <label for="embed-origin">Sitio autorizado (origen exacto, con https://)</label>
+          <input type="text" id="embed-origin" placeholder="https://fslmanager.vercel.app" />
+        </div>
+        <button id="btn-save-embed" data-form="embed">Guardar origen</button>
+        <p class="muted">
+          Sin un origen guardado acá, el embed no le contesta a nadie aunque use el token correcto.
+        </p>
+        <button type="button" class="secondary" id="btn-embed-regenerate">Generar/Regenerar token</button>
+        <div class="row">
+          <label for="embed-snippet">Código para pegar en esa página</label>
+          <textarea id="embed-snippet" rows="4" readonly></textarea>
+        </div>
+        <button type="button" class="secondary" id="btn-copy-embed-snippet">Copiar código</button>
+      </section>
     </div>
   </div>
 

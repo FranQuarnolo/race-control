@@ -330,6 +330,13 @@ function setupForms() {
     () => ({ presence: { enforce: $("pr-enforce").checked, graceSeconds: num("pr-grace") } })
   );
 
+  // `tokenVersion` no se toca desde este formulario: `stripManagedFields` en adminApi.ts lo saca
+  // de cualquier patch de `/api/config` justamente para que guardar el origen no revoque el token
+  // de nadie sin que el admin lo haya pedido con el botón de regenerar.
+  registerForm("embed", "btn-save-embed", ["embed-origin"], () => ({
+    embed: { allowedOrigin: $("embed-origin").value.trim() },
+  }));
+
   // Acá vivía el registro del campo "Liga" (solo lectura, lo administraba el portal). Esta
   // pantalla no tiene portal propio —vive incrustada en fslmanager.vercel.app— así que la pestaña
   // entera se fue. Ver el comentario en index.html, donde vivía el tab-panel.
@@ -652,7 +659,44 @@ function fillConfigForm(config) {
   $("pr-enforce").checked = config.presence.enforce;
   $("pr-grace").value = config.presence.graceSeconds;
 
+  $("embed-origin").value = config.embed.allowedOrigin;
+
   for (const name of Object.keys(forms)) markFormSaved(name);
+}
+
+/**
+ * El token del embed (ver security/embedToken.ts) no viaja en `/api/config` a propósito: no es un
+ * dato de configuración, es un secreto que no tiene por qué pasar por el mismo camino que el resto
+ * del reglamento. Se pide aparte y se guarda solo en memoria del panel — nunca en `forms` ni en
+ * `config.json` del lado del cliente.
+ */
+let embedToken = null;
+
+async function loadEmbedToken() {
+  try {
+    const data = await api("/api/embed-token");
+    embedToken = data.token;
+    renderEmbedSnippet();
+  } catch (err) {
+    $("embed-snippet").value = "No se pudo generar el código: " + err.message;
+  }
+}
+
+/** El snippet trae la dirección de ESTE servidor (`location.origin`) y el slug de ESTA liga
+ * (deducido de `BASE`, igual que el resto del panel): el admin lo pega tal cual, sin completar
+ * nada a mano. */
+function renderEmbedSnippet() {
+  if (!embedToken) return;
+  const slug = BASE.slice(3);
+  $("embed-snippet").value =
+    '<div id="rc-embed"></div>\n' +
+    '<script src="' +
+    window.location.origin +
+    '/embed/embed.js" data-slug="' +
+    slug +
+    '" data-token="' +
+    embedToken +
+    '"></script>';
 }
 
 // ===================================================================== torre de tiempos
@@ -2030,6 +2074,29 @@ function wireButtons() {
 
   $("btn-copy-support").addEventListener("click", copiarMensajeDeSoporte);
 
+  $("btn-embed-regenerate").addEventListener("click", async () => {
+    if (!window.confirm("¿Regenerar el token del embed?\n\nEl código que ya hayas pegado en otra página deja de funcionar al instante.")) {
+      return;
+    }
+    try {
+      const data = await post("/api/embed-token/regenerate");
+      embedToken = data.token;
+      renderEmbedSnippet();
+      toast("Token regenerado. Actualizá el código pegado en tu página.");
+    } catch (err) {
+      toast("No se pudo regenerar: " + err.message, 5000);
+    }
+  });
+
+  $("btn-copy-embed-snippet").addEventListener("click", () => {
+    const value = $("embed-snippet").value;
+    if (!value) return;
+    navigator.clipboard.writeText(value).then(
+      () => toast("Código copiado. Pegalo en tu página."),
+      () => toast("No se pudo copiar — seleccioná el texto a mano y copialo", 5000)
+    );
+  });
+
   $("chip-sin-app").addEventListener("click", () => openModal("modal-network"));
 
   wireWizard();
@@ -2189,6 +2256,7 @@ wireProfiles();
 setupForms();
 
 loadConfigForm().catch((err) => toast("No se pudo cargar la configuración: " + err.message, 5000));
+loadEmbedToken();
 refresh().catch((err) => toast("No se pudo conectar con el backend: " + err.message, 5000));
 
 /**

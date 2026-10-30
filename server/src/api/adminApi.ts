@@ -1,6 +1,7 @@
 import express, { Express, Response } from "express";
 import * as path from "path";
-import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveProfile } from "../config";
+import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveConfig, saveProfile } from "../config";
+import { EmbedTokenIssuer } from "../security/embedToken";
 import { ACTION_LABELS, AUTO_PENALTY_ALLOWED } from "../incident/catalog";
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
@@ -22,6 +23,8 @@ import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
 export interface AdminApiDeps {
   config: AppConfig;
+  /** Firma y valida el token del embed en páginas ajenas. Ver `security/embedToken.ts`. */
+  embedTokens: EmbedTokenIssuer;
   stateTracker: StateTracker;
   formationStart: FormationStart;
   formationPenaltyEngine: PenaltyEngine;
@@ -65,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.13";
+export const APP_VERSION = "1.14";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -114,7 +117,12 @@ export function createAdminApi(deps: AdminApiDeps): Express {
 
   app.use(express.static(path.join(__dirname, "public")));
 
-  app.get("/api/state", (_req, res) => {
+  /**
+   * El DTO completo de `/api/state`, separado del handler para que `/api/embed/state` (ver más
+   * abajo) pueda pedir el mismo estado y redactarlo, en vez de recalcularlo con otra lógica que
+   * tarde o temprano diverja de esta.
+   */
+  function buildFullStateDto() {
     deps.connectivity.refreshTelemetryFlag();
     const now = Date.now();
     // La torre muestra la jornada entera, no solo a los que están conectados ahora mismo; la
@@ -126,7 +134,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     const sessionType = deps.getSessionType();
     const standings = computeStandings(connected, sessionType);
     const gaps = computeGaps(connected, sessionType);
-    res.json({
+    return {
       version: APP_VERSION,
       firstRun: isFirstRun(deps.config),
       leagueName: deps.config.leagueName,
@@ -199,8 +207,41 @@ export function createAdminApi(deps: AdminApiDeps): Express {
          * telemetría perfecta mientras ningún piloto logra alcanzar el puerto de clientes. */
         driversReporting: deps.presenceWatchdog.getReportingCount(),
       },
-    });
-  });
+    };
+  }
+
+  app.get("/api/state", (_req, res) => res.json(buildFullStateDto()));
+
+  /**
+   * La misma foto que `/api/state`, pero para un token que puede terminar visible en el código
+   * fuente de la página de un tercero: se le saca el `driverGuid` de todos lados (el SteamID del
+   * piloto no tiene por qué salir de esta liga) y los datos de red que son de operación interna, no
+   * de la carrera (`sendAddress`/`acServer` — a dónde le mandamos los comandos nosotros— y el ping
+   * de cada auto, que es diagnóstico del vínculo con nuestro backend, no algo que le importe a
+   * quien mira la carrera desde afuera).
+   */
+  function redactForEmbed(full: ReturnType<typeof buildFullStateDto>) {
+    const sinGuid = <T extends { driverGuid?: string }>(o: T): Omit<T, "driverGuid"> => {
+      const { driverGuid, ...resto } = o;
+      return resto;
+    };
+    const { sendAddress, acServer, ...networkSinInterno } = full.network;
+    return {
+      ...full,
+      cars: full.cars.map((car) => {
+        const { driverGuid, pingMs, ...resto } = car;
+        return resto;
+      }),
+      incidents: full.incidents.map((incident) => ({
+        ...incident,
+        parties: incident.parties.map(sinGuid),
+      })),
+      formationPenalties: full.formationPenalties.map(sinGuid),
+      pitPenalties: full.pitPenalties.map(sinGuid),
+      stewardPenalties: full.stewardPenalties.map(sinGuid),
+      network: networkSinInterno,
+    };
+  }
 
   /** Trazado aprendido del circuito. Devuelve 204 mientras no haya suficiente como para dibujar. */
   app.get("/api/track", (_req, res) => {
@@ -322,6 +363,20 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         delete copy[key];
       }
     }
+    // `embed.tokenVersion` es distinto: no es un dato de instalación como el resto de esta
+    // función, es lo que decide qué token vale. Si viajara por acá, pegarle cualquier número al
+    // patch de guardar una regla revocaría el token sin que el admin lo haya pedido. Tiene su
+    // propio endpoint (`POST /api/embed-token/regenerate`) que sí lo toca. `allowedOrigin` sigue
+    // el camino normal: el admin lo edita como cualquier otro campo del panel.
+    const embed = copy.embed;
+    if (embed && typeof embed === "object" && !Array.isArray(embed)) {
+      const kept = { ...(embed as Record<string, unknown>) };
+      delete kept.tokenVersion;
+      if (Object.keys(kept).length === 0) delete copy.embed;
+      else copy.embed = kept;
+    } else {
+      delete copy.embed;
+    }
     return copy;
   }
 
@@ -363,22 +418,34 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     return false;
   }
 
-  app.post("/api/formation/begin", (_req, res) => {
+  /**
+   * De acá para abajo, las acciones que también expone `/api/embed/*` (ver más abajo del todo).
+   * Son funciones nombradas y no closures inline de `app.post` por eso: el router del embed las
+   * registra bajo OTRO prefijo con OTRO middleware de autenticación (Bearer en vez de cookie), y
+   * duplicar el cuerpo del handler sería la forma garantizada de que un día se corrija acá y no
+   * allá. La lógica de negocio no sabe ni le importa por qué canal llegó el pedido.
+   */
+
+  function handleFormationBegin(_req: express.Request, res: Response): void {
     if (!soloEnCarrera(res)) return;
     deps.formationStart.beginFormation();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
-  });
+  }
 
-  app.post("/api/formation/green", (_req, res) => {
+  function handleFormationGreen(_req: express.Request, res: Response): void {
     if (!soloEnCarrera(res)) return;
     deps.formationStart.triggerGreen();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
-  });
+  }
 
-  app.post("/api/formation/reset", (_req, res) => {
+  function handleFormationReset(_req: express.Request, res: Response): void {
     deps.formationStart.reset();
     res.json({ ok: true, lightState: deps.formationStart.getLightState() });
-  });
+  }
+
+  app.post("/api/formation/begin", handleFormationBegin);
+  app.post("/api/formation/green", handleFormationGreen);
+  app.post("/api/formation/reset", handleFormationReset);
 
   /** Las que el comisario puede aplicar a mano. `TIME` es la más habitual en una liga: se suma al
    * resultado final sin interrumpir la carrera. */
@@ -392,7 +459,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * "Sancionar" solo tachaba el incidente y no pasaba nada más, que es lo contrario de lo que el
    * nombre promete.
    */
-  app.post("/api/incidents/:id/resolve", (req, res) => {
+  function handleResolveIncident(req: express.Request, res: Response): void {
     const body = req.body ?? {};
     const status = body.status;
     if (status !== "dismissed" && status !== "warned" && status !== "penalized") {
@@ -435,7 +502,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       });
     }
     res.json({ ok: true, incident, penalty });
-  });
+  }
+
+  app.post("/api/incidents/:id/resolve", handleResolveIncident);
 
   /**
    * Anular una sanción.
@@ -450,7 +519,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * pedirle al panel que sepa de qué motor salió cada sanción es pedirle que repita una
    * clasificación que ya hizo el servidor.
    */
-  app.post("/api/penalties/:id/revoke", (req, res) => {
+  function handleRevokePenalty(req: express.Request, res: Response): void {
     const id = String(req.params.id);
     for (const engine of [deps.formationPenaltyEngine, deps.pitPenaltyEngine, deps.stewardPenaltyEngine]) {
       const revoked = engine.revoke(id);
@@ -462,7 +531,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     // Un 404 acá es casi siempre un doble click sobre el mismo botón, así que el mensaje tiene que
     // contemplar las dos causas y no mandar a investigar un id que existe y ya está anulado.
     res.status(404).json({ ok: false, error: "Esa sanción no existe o ya estaba anulada" });
-  });
+  }
+
+  app.post("/api/penalties/:id/revoke", handleRevokePenalty);
 
   /**
    * Kick manual desde la tabla de pilotos.
@@ -523,6 +594,80 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       now: Date.now(),
     });
   }
+
+  /**
+   * Gestión del token de embed — cookie-autenticadas, como el resto de `/api/...`. No hay ceremonia
+   * de "se muestra una sola vez" (la que sí tiene crear un operador, con usuario y contraseña):
+   * acá el token es una función pura de `(clave de la liga, versión)`, así que `GET` siempre puede
+   * recalcular y devolver el vigente. Lo único que hay que guardar es la versión.
+   */
+  app.get("/api/embed-token", (_req, res) => {
+    res.json({
+      token: deps.embedTokens.issue(deps.config.embed.tokenVersion),
+      allowedOrigin: deps.config.embed.allowedOrigin,
+    });
+  });
+
+  /** Invalida el token vigente: todo lo emitido con la versión anterior deja de servir al instante. */
+  app.post("/api/embed-token/regenerate", (_req, res) => {
+    deps.config.embed.tokenVersion += 1;
+    saveConfig(deps.config);
+    res.json({ token: deps.embedTokens.issue(deps.config.embed.tokenVersion) });
+  });
+
+  /**
+   * Embed en una página ajena (fslmanager.vercel.app). Autenticado con un Bearer en vez de la
+   * cookie del panel —no hay forma de que una cookie `SameSite=Strict` viaje en un `fetch` desde
+   * otro dominio— y con el estado redactado: este token puede terminar visible en el código fuente
+   * de la página de un tercero, así que no tiene que dar acceso a nada que identifique a un piloto
+   * más allá de su nombre en pantalla, ni a los datos de red internos de esta liga.
+   *
+   * Reusa exactamente los mismos handlers que el panel (`handleFormationBegin` y compañía): la
+   * lógica de negocio es una sola, lo único que cambia es por dónde entró el pedido y cómo se
+   * autenticó.
+   */
+  const embedRouter = express.Router();
+
+  embedRouter.use((req, res, next) => {
+    const allowed = deps.config.embed.allowedOrigin;
+    const origin = req.headers.origin;
+    if (!allowed || origin !== allowed) {
+      // Sin origen configurado, o un origen que no es el configurado: no se responde nada, ni con
+      // el token correcto. Es defensa en profundidad y no solo lo que ya hace el navegador con
+      // CORS — un cliente que no sea un navegador no respeta CORS, y el token por sí solo puede
+      // terminar filtrado en cualquier página.
+      res.status(403).json({ ok: false, error: "Origen no autorizado" });
+      return;
+    }
+    res.setHeader("Access-Control-Allow-Origin", allowed);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
+  embedRouter.use((req, res, next) => {
+    const auth = String(req.headers.authorization || "");
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
+    if (!deps.embedTokens.verify(token, deps.config.embed.tokenVersion)) {
+      res.status(401).json({ ok: false, error: "Token inválido" });
+      return;
+    }
+    next();
+  });
+
+  embedRouter.get("/state", (_req, res) => res.json(redactForEmbed(buildFullStateDto())));
+  embedRouter.post("/incidents/:id/resolve", handleResolveIncident);
+  embedRouter.post("/penalties/:id/revoke", handleRevokePenalty);
+  embedRouter.post("/formation/begin", handleFormationBegin);
+  embedRouter.post("/formation/green", handleFormationGreen);
+  embedRouter.post("/formation/reset", handleFormationReset);
+
+  app.use("/api/embed", embedRouter);
 
   /**
    * El panel usa rutas del lado del cliente (`/sanciones`). Sin esto, recargar esa URL o abrirla

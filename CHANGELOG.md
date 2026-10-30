@@ -3,6 +3,45 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.14] — 2026-10-30
+
+**Race Control se puede incrustar como una sección dentro de otra página (fslmanager.vercel.app),
+con sesión propia y sin tocar el login del portal.**
+
+### El panel completo no entra en un `<div>` ajeno, y la cookie de sesión tampoco viaja hasta ahí
+
+**Decisión del usuario:** en vez de ofrecer Race Control como producto aparte, el admin de una liga
+(hoy, `ligafsl`) quiere pegarlo directo en su propia página de administración. El panel completo
+(`app.js`, sin módulos) asume ser la página entera —`overflow:hidden` sobre `html,body`, overlays
+`position:fixed` contra el viewport, un router que hace `pushState` sobre la URL del host— y nada de
+eso funciona metido en un `<div>` de otro layout. Tampoco sirve reusar la cookie de sesión del panel:
+es `__Host-rc_session` con `SameSite=Strict`, así que un `fetch` desde `fslmanager.vercel.app` nunca
+la manda.
+
+**Qué se construyó:** una pantalla nueva y chica (`src/api/public/embed/{embed.js,embed.css}`, sin
+framework, igual que el resto del panel) que se autocontiene en el elemento que le pasen, con
+largada, tabla de autos fusionada (piloto, box, combustible, cortes, incidentes) y sanciones
+aplicadas — el mapa, los tiempos, los neumáticos y la velocidad quedan afuera a propósito; siguen
+existiendo intactos en el panel completo. Se autentica con un Bearer en vez de cookie: un token
+firmado por liga (`security/embedToken.ts`, mismo esquema HMAC sin estado que `pilotToken.ts`) cuya
+revocación es subir un número de versión (`config.embed.tokenVersion`) en vez de rotar la clave —
+"Regenerar" en el panel invalida el token viejo al instante sin tocarle nada a nadie más. El estado
+que viaja por este canal (`GET /api/embed/state`, worker `adminApi.ts`) es el mismo de `/api/state`
+pero redactado: sin `driverGuid` (puede terminar visible en "Ver código fuente" de la página de un
+tercero) ni los datos de red internos (`sendAddress`, `acServer`, `pingMs`). El router exige además
+que el `Origin` coincida exacto con el que el admin configuró (`config.embed.allowedOrigin`, vacío
+por default: sin configurar, no contesta a nadie) — defensa en profundidad además de CORS, porque un
+cliente que no sea un navegador no respeta CORS. El portal solo agrega un bypass de sesión para
+`/l/:slug/api/embed/*` (mismo patrón que ya tenía el canal de pilotos) y proxea tal cual.
+
+El panel completo suma una sección en el cajón de Conexión para fijar el origen permitido y generar
+el snippet (`<div id="rc-embed"></div><script src="…">`) listo para pegar.
+
+**Deuda reconocida:** mientras se construía esto, `RC_PUBLIC_LEAGUE` (un bypass de autenticación sin
+token, ver versiones anteriores) quedó prendido en producción a pedido explícito — se iba a revisar
+recién con el embed terminado. Pendiente: apagarlo ahora que el embed con token ya es una alternativa
+real.
+
 ## [1.13] — 2026-10-29
 
 **El panel copia la paleta y la tipografía de fslmanager.vercel.app tal cual salen del inspector, y

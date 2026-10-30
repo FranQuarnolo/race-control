@@ -621,6 +621,20 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
 
+    /**
+     * El embed en una página ajena (fslmanager.vercel.app) no tiene sesión ni cookie —viaja con un
+     * Bearer propio, ver `security/embedToken.ts`— así que bypassa el chequeo de `req.userId` de
+     * abajo igual que el canal de pilotos. El CORS y la verificación del token los hace el propio
+     * worker (`adminApi.ts`): acá no hay nada que decidir salvo a qué puerto mandarlo. `x-rc-user`
+     * identifica el canal en el journal como lo que es, no como un comisario logueado — el mismo
+     * criterio que ya usa `RC_PUBLIC_LEAGUE` más abajo.
+     */
+    const esCanalDeEmbed = resto.startsWith("/api/embed/");
+    if (esCanalDeEmbed) {
+      proxyToWorker(req, res, { port: league.adminPort, path: resto }, { "x-rc-user": `embed:${slug}` });
+      return;
+    }
+
     if (!req.userId) {
       // Un `fetch` del panel espera JSON; una navegación del navegador, el login.
       if (resto.startsWith("/api/")) res.status(401).json({ ok: false, error: "Sesión vencida." });
