@@ -7,16 +7,27 @@
 const POLL_MS = 1000;
 
 /**
- * Prefijo bajo el que está servido el panel: `/l/<slug>`.
+ * Prefijo de la LIGA: `/l/<slug>`. Lo que no cambia aunque se salte de un servidor a otro — el
+ * token de embed y la lista de servidores viven acá (ver `portal/server.ts`).
  *
  * Todas las ligas comparten un dominio y se distinguen por la ruta. Se deduce de la propia URL en
  * vez de inyectarlo desde el servidor: así el archivo es el mismo byte a byte para todas las ligas
  * y no hay un paso de plantilla que pueda quedar sin aplicar. Queda `""` cuando se abre el panel
  * directo contra el puerto del worker, que es como se toman las capturas de la landing.
  */
-const BASE = (function () {
+const LIGA_BASE = (function () {
   const m = window.location.pathname.match(/^\/l\/[a-z0-9-]+/);
   return m ? m[0] : "";
+})();
+
+/**
+ * Prefijo del SERVIDOR activo: `/l/<slug>/s/<servidorId>`. Es lo que viaja delante de cada
+ * `/api/...` de estado/acciones. A diferencia de `LIGA_BASE`, `switchServidor` lo reescribe cuando
+ * el admin cambia de servidor en el selector — por eso es `let` y no `const`.
+ */
+let BASE = (function () {
+  const m = window.location.pathname.match(/^\/l\/[a-z0-9-]+\/s\/[A-Za-z0-9_-]+/);
+  return m ? m[0] : LIGA_BASE;
 })();
 
 function $(id) {
@@ -35,7 +46,7 @@ function toast(message, durationMs) {
   toast._timer = setTimeout(() => el.classList.remove("show"), durationMs || 2500);
 }
 
-async function api(path, options) {
+async function request(base, path, options) {
   let res;
   const opts = Object.assign({}, options);
   // `X-RC-Request` va en TODA request, no solo en los POST: es la marca que el portal exige para
@@ -43,13 +54,13 @@ async function api(path, options) {
   // que sin esto un CSRF pasaría.
   opts.headers = Object.assign({ "X-RC-Request": "1" }, options && options.headers);
   try {
-    res = await fetch(BASE + path, opts);
+    res = await fetch(base + path, opts);
   } catch (err) {
     throw new Error("Se cortó la conexión con Race Control. Probá recargar la página.");
   }
   // 401 solo puede venir del portal: la sesión venció mientras el panel seguía haciendo polling.
   // Recargar lo manda al login con `volver`, así vuelve a donde estaba.
-  if (res.status === 401 && BASE) {
+  if (res.status === 401 && base) {
     window.location.reload();
     throw new Error("Sesión vencida");
   }
@@ -67,8 +78,27 @@ async function api(path, options) {
   return res.json();
 }
 
+/** Para `/api/...`: el servidor elegido en este momento (ver `BASE`/`switchServidor`). */
+function api(path, options) {
+  return request(BASE, path, options);
+}
+
+/** Para lo que es de la LIGA entera y no de un servidor puntual: el token de embed, la lista de
+ * servidores del selector. */
+function apiLiga(path, options) {
+  return request(LIGA_BASE, path, options);
+}
+
 function post(path, body) {
   return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
+function postLiga(path, body) {
+  return apiLiga(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body || {}),
@@ -202,8 +232,17 @@ function wireDrawers() {
  */
 const forms = {};
 
-function registerForm(name, buttonId, fieldIds, buildPayload, onSaved) {
-  const form = { button: $(buttonId), fieldIds, buildPayload, onSaved, saved: null };
+function registerForm(name, buttonId, fieldIds, buildPayload, onSaved, save) {
+  const form = {
+    button: $(buttonId),
+    fieldIds,
+    buildPayload,
+    onSaved,
+    saved: null,
+    // Por defecto pega contra `/api/config` (de este servidor); `embed` pasa su propio `save`
+    // porque su dato vive en la liga y no en ningún servidor puntual.
+    save: save || ((payload) => post("/api/config", payload)),
+  };
   forms[name] = form;
   for (const id of fieldIds) {
     const el = $(id);
@@ -239,7 +278,7 @@ function refreshFormButton(name) {
 async function saveForm(name) {
   const form = forms[name];
   try {
-    await post("/api/config", form.buildPayload());
+    await form.save(form.buildPayload());
     markFormSaved(name);
     if (form.onSaved) form.onSaved();
     toast("Guardado");
@@ -330,12 +369,18 @@ function setupForms() {
     () => ({ presence: { enforce: $("pr-enforce").checked, graceSeconds: num("pr-grace") } })
   );
 
-  // `tokenVersion` no se toca desde este formulario: `stripManagedFields` en adminApi.ts lo saca
-  // de cualquier patch de `/api/config` justamente para que guardar el origen no revoque el token
-  // de nadie sin que el admin lo haya pedido con el botón de regenerar.
-  registerForm("embed", "btn-save-embed", ["embed-origin"], () => ({
-    embed: { allowedOrigin: $("embed-origin").value.trim() },
-  }));
+  // El origen del embed ya no viaja por `/api/config`: es de la LIGA, no de este servidor puntual
+  // (ver `Liga.embed` en portal/store.ts), así que este formulario pega contra el endpoint de
+  // liga y no contra el genérico. `tokenVersion` no se toca desde acá — eso es lo que hace el
+  // botón de regenerar.
+  registerForm(
+    "embed",
+    "btn-save-embed",
+    ["embed-origin"],
+    () => ({ allowedOrigin: $("embed-origin").value.trim() }),
+    () => renderEmbedSnippet(),
+    (payload) => postLiga("/api/embed-token", payload).then((data) => (embedToken = data.token))
+  );
 
   // Acá vivía el registro del campo "Liga" (solo lectura, lo administraba el portal). Esta
   // pantalla no tiene portal propio —vive incrustada en fslmanager.vercel.app— así que la pestaña
@@ -659,9 +704,9 @@ function fillConfigForm(config) {
   $("pr-enforce").checked = config.presence.enforce;
   $("pr-grace").value = config.presence.graceSeconds;
 
-  $("embed-origin").value = config.embed.allowedOrigin;
-
-  for (const name of Object.keys(forms)) markFormSaved(name);
+  // "embed" no se marca acá: su dato (`embed-origin`) no viene de `/api/config` sino de
+  // `loadEmbedToken`, que lo pide a la liga y hace su propio `markFormSaved("embed")`.
+  for (const name of Object.keys(forms)) if (name !== "embed") markFormSaved(name);
 }
 
 /**
@@ -674,34 +719,79 @@ let embedToken = null;
 
 async function loadEmbedToken() {
   try {
-    const data = await api("/api/embed-token");
+    const data = await apiLiga("/api/embed-token");
     embedToken = data.token;
+    $("embed-origin").value = data.allowedOrigin;
+    markFormSaved("embed");
     renderEmbedSnippet();
   } catch (err) {
     $("embed-snippet").value = "No se pudo generar el código: " + err.message;
   }
 }
 
-/** El snippet trae la dirección de ESTE servidor (`location.origin`) y el slug de ESTA liga
- * (deducido de `BASE`, igual que el resto del panel): el admin lo pega tal cual, sin completar
- * nada a mano.
- *
- * El `src` del script lleva `BASE` (`/l/<slug>`) adelante de `/embed/embed.js`: sin eso apuntaba a
- * la raíz del dominio, que el portal no sabe a qué liga mandar (y que, de paso, nunca llegó a
- * servir nada ahí — ver el bypass de sesión nuevo en `portal/server.ts`). */
+/** El snippet trae la dirección de ESTA LIGA (`location.origin` + `LIGA_BASE`), no de un servidor
+ * puntual: el token y el `embed.js` son de la liga entera (ver `Liga.embed` en portal/store.ts), y
+ * el selector adentro del embed es el que elige a cuál de sus servidores mirar — el admin lo pega
+ * una sola vez y no tiene que volver a tocarlo cuando cambia de carrera. */
 function renderEmbedSnippet() {
   if (!embedToken) return;
-  const slug = BASE.slice(3);
+  const slug = LIGA_BASE.slice(3);
   $("embed-snippet").value =
     '<div id="rc-embed"></div>\n' +
     '<script src="' +
     window.location.origin +
-    BASE +
+    LIGA_BASE +
     '/embed/embed.js" data-slug="' +
     slug +
     '" data-token="' +
     embedToken +
     '"></script>';
+}
+
+// ===================================================================== selector de servidores
+
+/**
+ * Una liga puede correr más de un servidor a la vez (ver `Liga`/`Servidor` en portal/store.ts) —
+ * el admin elige cuál mirar desde acá, sin volver a pegar nada ni recargar la página. Con un solo
+ * servidor el combo queda oculto: ofrecer "elegir" cuando no hay nada para elegir es ruido.
+ */
+async function loadServidorSelector() {
+  if (!LIGA_BASE) return;
+  try {
+    const data = await apiLiga("/api/servidores");
+    pintarSelectorDeServidores(data.servidores || []);
+  } catch (err) {
+    // El combo es secundario: si no se pudo traer la lista, el panel del servidor actual sigue
+    // andando igual. No vale la pena interrumpir con un toast por esto.
+  }
+}
+
+function pintarSelectorDeServidores(servidores) {
+  const select = $("servidor-select");
+  if (servidores.length < 2) {
+    select.hidden = true;
+    return;
+  }
+  const actualId = BASE.split("/s/")[1];
+  clearChildren(select);
+  for (const servidor of servidores) {
+    const option = document.createElement("option");
+    option.value = servidor.id;
+    option.textContent = servidor.nombre;
+    select.appendChild(option);
+  }
+  select.value = actualId;
+  select.hidden = false;
+}
+
+/** Cambia de servidor sin recargar: reescribe `BASE` (de donde leen `api()`/`post()` y el snippet
+ * del embed queda afuera porque es de la liga, no de esto), actualiza la URL para que compartir el
+ * link o recargar la página quede apuntando al mismo lugar, y fuerza un `refresh()` inmediato en
+ * vez de esperar al próximo tick del poll. */
+function switchServidor(servidorId) {
+  BASE = LIGA_BASE + "/s/" + servidorId;
+  history.replaceState(null, "", BASE + "/");
+  refresh().catch((err) => toast("No se pudo cambiar de servidor: " + err.message, 5000));
 }
 
 // ===================================================================== torre de tiempos
@@ -1231,6 +1321,54 @@ async function executeKick(carId) {
     toast("Expulsado: " + (res.driverName || "auto " + carId));
   } catch (err) {
     toast("No se pudo expulsar: " + err.message, 5000);
+  }
+}
+
+// --------------------------------------------------------- terminar evento con doble confirmación
+
+let armedEndEvent = null; // { timer } — mismo patrón que armedKick/armedRevoke.
+
+function disarmEndEvent() {
+  if (!armedEndEvent) return;
+  clearTimeout(armedEndEvent.timer);
+  armedEndEvent = null;
+  const btn = $("btn-end-event");
+  btn.textContent = "Terminar evento";
+  btn.classList.remove("arming");
+}
+
+/** Vacía la bandeja de incidentes y las sanciones. El servidor ya rechaza el pedido si quedan
+ * incidentes sin revisar (ver `handleTerminarEvento`); acá solo se refleja ese bloqueo en el botón
+ * para no dejar armar una confirmación que después el servidor va a rechazar igual. */
+function renderEndEvent(state) {
+  if (armedEndEvent) return; // no pisar el "¿Seguro?" a mitad de la ventana de confirmación
+  const btn = $("btn-end-event");
+  const pendientes = state.pendingIncidents || 0;
+  btn.disabled = pendientes > 0;
+  btn.title = pendientes > 0
+    ? "Quedan " + pendientes + " incidente(s) sin revisar"
+    : "Vacía la bandeja de incidentes y las sanciones aplicadas.";
+}
+
+function onEndEventClick() {
+  if (armedEndEvent) {
+    disarmEndEvent();
+    executeEndEvent();
+    return;
+  }
+  armedEndEvent = { timer: setTimeout(disarmEndEvent, KICK_ARM_MS) };
+  const btn = $("btn-end-event");
+  btn.textContent = "¿Seguro?";
+  btn.classList.add("arming");
+}
+
+async function executeEndEvent() {
+  try {
+    await post("/api/evento/terminar");
+    toast("Evento terminado: se vació la bandeja de incidentes y las sanciones.");
+    refresh();
+  } catch (err) {
+    toast("No se pudo terminar el evento: " + err.message, 5000);
   }
 }
 
@@ -2045,6 +2183,7 @@ async function refresh() {
   renderNetwork(state.network);
   renderMode(state.shadowMode);
   renderPenalties(state.formationPenalties, state.pitPenalties, state.stewardPenalties);
+  renderEndEvent(state);
 
   renderPitZoneSuggestion(state.pitZoneSuggestion || null);
 }
@@ -2058,6 +2197,7 @@ function wireButtons() {
   $("btn-begin").addEventListener("click", action("/api/formation/begin"));
   $("btn-green").addEventListener("click", action("/api/formation/green"));
   $("btn-reset").addEventListener("click", action("/api/formation/reset"));
+  $("btn-end-event").addEventListener("click", onEndEventClick);
 
   $("btn-test-network").addEventListener("click", async (e) => {
     const button = e.currentTarget;
@@ -2086,12 +2226,14 @@ function wireButtons() {
 
   $("btn-copy-support").addEventListener("click", copiarMensajeDeSoporte);
 
+  $("servidor-select").addEventListener("change", (e) => switchServidor(e.target.value));
+
   $("btn-embed-regenerate").addEventListener("click", async () => {
     if (!window.confirm("¿Regenerar el token del embed?\n\nEl código que ya hayas pegado en otra página deja de funcionar al instante.")) {
       return;
     }
     try {
-      const data = await post("/api/embed-token/regenerate");
+      const data = await postLiga("/api/embed-token/regenerate");
       embedToken = data.token;
       renderEmbedSnippet();
       toast("Token regenerado. Actualizá el código pegado en tu página.");
@@ -2269,6 +2411,7 @@ setupForms();
 
 loadConfigForm().catch((err) => toast("No se pudo cargar la configuración: " + err.message, 5000));
 loadEmbedToken();
+loadServidorSelector();
 refresh().catch((err) => toast("No se pudo conectar con el backend: " + err.message, 5000));
 
 /**

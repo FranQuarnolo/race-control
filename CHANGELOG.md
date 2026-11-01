@@ -3,6 +3,54 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.26] — 2026-10-31
+
+### Una liga de verdad corre varios servidores de AC a la vez, y el modelo era 1:1
+
+La liga `fsl` corre, bajo la misma cuenta de hosting, tres carreras en simultáneo (Spa/GT3,
+México/F3, Interlagos/M2) — nunca dos al mismo tiempo en la misma sesión, pero sí las tres en
+práctica a la par. El modelo de Race Control hasta la 1.25 era una liga = un proceso = un puerto
+UDP, heredado de que así habla el protocolo UDP de AC (`UDP_PLUGIN_ADDRESS` apunta a un solo
+destino). Eso seguía siendo cierto por proceso, pero la cuenta de arriba —login, slug, el embed
+pegado una vez en fslmanager.vercel.app— necesitaba poder elegir a cuál de sus carreras activas
+está mirando, sin generar un token nuevo por carrera ni reconfigurar nada cada vez que cambia.
+
+Se separó el concepto en dos: **Liga** (la cuenta — login, slug `/l/<slug>`, membresías, token de
+embed) y **Servidor** (lo que antes era 1:1 con la liga — un proceso worker, un puerto UDP, su
+`dataDir`). Una liga tiene uno o varios servidores. El ruteo pasa a ser `/l/<slug>/s/<servidorId>/
+...`; sin el segmento `/s/<id>` (un bookmark viejo, o entrar a secas), un único redirect 308 manda
+al primer servidor de la liga con el resto del path intacto.
+
+El token de embed —antes atado a la `dataDir` de cada proceso, uno distinto por carrera— pasa a
+vivir en la Liga: uno solo, pegado una vez en la página del admin, que sirve para todos sus
+servidores a la vez. `embed.js` y el panel propio agregan un selector (oculto si la liga tiene un
+único servidor) que cambia de carrera sin recargar la página; regenerar el token invalida el acceso
+a todos los servidores de la liga al mismo tiempo, porque es uno solo. La validación del Bearer de
+embed, que antes vivía repetida en cada worker, se centralizó en el portal (`embedGate`), que es el
+único que conoce a la liga entera — el worker ya no valida nada de esto, confía en lo que le llega
+proxyeado.
+
+Sin migración: no hay datos de producción que preservar (la liga `fsl` real todavía no integró el
+embed), así que `portal.json` de antes de esta versión simplemente no carga — en desarrollo se
+recrea con el CLI (`agregar-servidor` suma un servidor más a una liga existente).
+
+## [1.25] — 2026-10-31
+
+### La bandeja de incidentes crecía sin límite entre sesiones y nada la vaciaba
+
+`IncidentEngine.resetSessionState()` limpia a propósito solo la correlación entre sesiones, no el
+historial: un comisario puede estar revisando la carrera anterior mientras ya arrancó la siguiente.
+Pero eso significaba que, una vez revisado todo y bajado el informe, no había forma de volver a
+arrancar con la bandeja vacía — crecía indefinidamente hasta reiniciar el proceso. Las tres
+sanciones sí se vaciaban solas en cada sesión nueva; los incidentes nunca.
+
+Se agregó el botón **"Terminar evento"**, con doble confirmación (mismo patrón de dos clicks que ya
+usan el kick y anular una sanción), en el panel completo y en el embed. Antes de vaciar nada corre
+`cerrarEventoActual()` como red de seguridad, por si la última sesión nunca mandó `END_SESSION`.
+Queda bloqueado —con 409 del lado del servidor, no solo deshabilitado en la pantalla— mientras
+queden incidentes sin revisar: la idea es cerrar un evento ya resuelto, no perder algo a mitad de
+camino.
+
 ## [1.24] — 2026-10-30
 
 ### El embed se probó en vivo pegado en fslmanager y le faltaba casi todo lo que el panel completo da por sentado

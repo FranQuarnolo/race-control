@@ -155,9 +155,26 @@ Entrá a `https://race-control.fly.dev/login` con tu cuenta de operador. Vas a c
    tres juntos. **Se muestran una sola vez.**
 3. Pasáselos por donde ya hablás con esa persona.
 
-Mirá el contador de **lugares libres** antes de prometer una liga nueva: cada una ocupa un puerto
-UDP de los diez declarados en `fly.toml`, y cuando se acaban el alta falla. Ampliarlo está en
+Mirá el contador de **lugares libres** antes de prometer una liga nueva: cada servidor que arranca
+—el primero lo crea el alta, los que se agreguen después también— ocupa un puerto UDP de los diez
+declarados en `fly.toml`, y cuando se acaban el alta falla. Ampliarlo está en
 [operacion.md](server/docs/operacion.md#ampliar-el-rango-de-puertos-udp) y requiere un `fly deploy`.
+
+### Una liga con más de un servidor (desde la 1.26)
+
+Pensado para el caso real de `fsl`: una sola cuenta de hosting corriendo varias carreras a la vez
+(Spa/GT3, México/F3, Interlagos/M2), cada una en su propio servidor de Assetto Corsa. La liga sigue
+siendo una sola cuenta —un login, un token de embed— pero puede tener más de un servidor adentro.
+
+Para sumarle un servidor a una liga que ya existe, `ssh` a la máquina de Fly y corré:
+
+```
+node dist/portal/cli.js agregar-servidor --liga <slug-de-la-liga> --nombre "México F3"
+```
+
+El admin de esa liga ve un selector —en el panel y en el embed— en cuanto tiene dos o más
+servidores; con uno solo no aparece nada nuevo. Cambiar de servidor no pide volver a loguearse ni
+regenerar el token de embed: es la misma cuenta, el mismo token, mirando otra carrera.
 
 ---
 
@@ -249,7 +266,9 @@ conexión, hay una sección **"Embed externo"** con tres pasos:
    instante: si alguna vez lo filtra sin querer, no hace falta avisar a nadie, alcanza con tocar ese
    botón de nuevo.
 3. **"Copiar código"** le da el `<div>` + `<script>` listo para pegar en su página. Eso es todo lo
-   que tiene que tocar del lado de él; no requiere su propio despliegue de nada.
+   que tiene que tocar del lado de él; no requiere su propio despliegue de nada. Si su liga tiene
+   más de un servidor (ver §4), el embed trae su propio selector para elegir cuál mirar — no hace
+   falta un `<script>` por servidor ni tocar el código una segunda vez.
 
 Explicale que ese token **no es una contraseña de las que repartís vos**: vive en el código fuente
 de su página, visible para cualquiera que la abra, y por eso el embed solo deja leer el estado de

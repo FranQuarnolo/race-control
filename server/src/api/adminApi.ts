@@ -1,7 +1,6 @@
 import express, { Express, Response } from "express";
 import * as path from "path";
-import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveConfig, saveProfile } from "../config";
-import { EmbedTokenIssuer } from "../security/embedToken";
+import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveProfile } from "../config";
 import { ACTION_LABELS, AUTO_PENALTY_ALLOWED } from "../incident/catalog";
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
@@ -23,8 +22,6 @@ import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
 export interface AdminApiDeps {
   config: AppConfig;
-  /** Firma y valida el token del embed en páginas ajenas. Ver `security/embedToken.ts`. */
-  embedTokens: EmbedTokenIssuer;
   stateTracker: StateTracker;
   formationStart: FormationStart;
   formationPenaltyEngine: PenaltyEngine;
@@ -50,6 +47,9 @@ export interface AdminApiDeps {
   /** Kick manual pedido por el admin desde la tabla de pilotos. Se inyecta en vez de llamar a
    * `udpClient.kick` directo para que index.ts lo registre en el journal como manual. */
   manualKick: (carId: number) => void;
+  /** Vacía la bandeja de incidentes y las sanciones aplicadas. Quien llama ya verificó que no
+   * queden incidentes pendientes — ver `handleTerminarEvento`. */
+  terminarEvento: () => void;
   /** El "Send Address": lo único que el admin tiene que copiar al panel de su hosting. */
   buildSendAddress: () => string;
   /** Puertos realmente en uso. Los asigna el portal al arrancar la liga; el panel los muestra
@@ -68,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.24";
+export const APP_VERSION = "1.26";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -421,20 +421,6 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         delete copy[key];
       }
     }
-    // `embed.tokenVersion` es distinto: no es un dato de instalación como el resto de esta
-    // función, es lo que decide qué token vale. Si viajara por acá, pegarle cualquier número al
-    // patch de guardar una regla revocaría el token sin que el admin lo haya pedido. Tiene su
-    // propio endpoint (`POST /api/embed-token/regenerate`) que sí lo toca. `allowedOrigin` sigue
-    // el camino normal: el admin lo edita como cualquier otro campo del panel.
-    const embed = copy.embed;
-    if (embed && typeof embed === "object" && !Array.isArray(embed)) {
-      const kept = { ...(embed as Record<string, unknown>) };
-      delete kept.tokenVersion;
-      if (Object.keys(kept).length === 0) delete copy.embed;
-      else copy.embed = kept;
-    } else {
-      delete copy.embed;
-    }
     return copy;
   }
 
@@ -472,9 +458,8 @@ export function createAdminApi(deps: AdminApiDeps): Express {
 
   /**
    * El subconjunto de `AppConfig` que el modal de Reglas del embed puede leer: el reglamento
-   * completo y nada de lo que describe la instalación (nombre de la liga, puertos, la IP pública)
-   * ni el propio embed (`allowedOrigin`/`tokenVersion` — ver `stripEmbedManagedFields`, el token no
-   * puede ser el que lee o cambia los datos de sí mismo).
+   * completo y nada de lo que describe la instalación (nombre de la liga, puertos, la IP pública).
+   * El token y el origen autorizado del embed ya ni viven acá — son `Liga.embed`, en el portal.
    */
   function redactConfigForEmbed(config: AppConfig) {
     return {
@@ -651,6 +636,23 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.post("/api/cars/:carId/kick", handleCarKick);
 
   /**
+   * "Terminar evento": vacía la bandeja de incidentes y las sanciones aplicadas, para arrancar la
+   * próxima carrera de cero. Bloqueado mientras queden incidentes sin revisar — el botón tiene
+   * doble confirmación en el panel y el embed, pero igual hace falta este chequeo del lado del
+   * servidor: nada impide pegarle directo al endpoint.
+   */
+  function handleTerminarEvento(_req: express.Request, res: Response): void {
+    const pendientes = deps.incidentEngine.getPending().length;
+    if (pendientes > 0) {
+      res.status(409).json({ ok: false, error: "Hay incidentes sin revisar", pendientes });
+      return;
+    }
+    deps.terminarEvento();
+    res.json({ ok: true });
+  }
+  app.post("/api/evento/terminar", handleTerminarEvento);
+
+  /**
    * Informe de carrera, descargable.
    *
    * El panel baja `/api/report.json`: mismo contenido que `/api/report`, pero con
@@ -697,69 +699,20 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   }
 
   /**
-   * Gestión del token de embed — cookie-autenticadas, como el resto de `/api/...`. No hay ceremonia
-   * de "se muestra una sola vez" (la que sí tiene crear un operador, con usuario y contraseña):
-   * acá el token es una función pura de `(clave de la liga, versión)`, así que `GET` siempre puede
-   * recalcular y devolver el vigente. Lo único que hay que guardar es la versión.
-   */
-  app.get("/api/embed-token", (_req, res) => {
-    res.json({
-      token: deps.embedTokens.issue(deps.config.embed.tokenVersion),
-      allowedOrigin: deps.config.embed.allowedOrigin,
-    });
-  });
-
-  /** Invalida el token vigente: todo lo emitido con la versión anterior deja de servir al instante. */
-  app.post("/api/embed-token/regenerate", (_req, res) => {
-    deps.config.embed.tokenVersion += 1;
-    saveConfig(deps.config);
-    res.json({ token: deps.embedTokens.issue(deps.config.embed.tokenVersion) });
-  });
-
-  /**
-   * Embed en una página ajena (fslmanager.vercel.app). Autenticado con un Bearer en vez de la
-   * cookie del panel —no hay forma de que una cookie `SameSite=Strict` viaje en un `fetch` desde
-   * otro dominio— y con el estado redactado: este token puede terminar visible en el código fuente
-   * de la página de un tercero, así que no tiene que dar acceso a nada que identifique a un piloto
-   * más allá de su nombre en pantalla, ni a los datos de red internos de esta liga.
+   * Embed en una página ajena (fslmanager.vercel.app). Hasta acá llegaba un Bearer propio y este
+   * mismo archivo lo validaba contra el origen y la versión del token — ver el historial de este
+   * comentario si hace falta recuperar ese código. Con la liga pudiendo correr varios servidores
+   * (ver `portal/supervisor.ts`), el token pasó a ser por LIGA y no por servidor: lo emite y valida
+   * el portal, que es quien conoce todos los servidores de una liga a la vez, y este worker ya no
+   * tiene forma de validarlo por sí solo sin duplicar esa lista. El worker ahora confía en que todo
+   * pedido que le llega a `/api/embed/*` ya pasó esa validación — igual de lo que ya pasa con la
+   * cookie del panel, que tampoco se revalida acá.
    *
    * Reusa exactamente los mismos handlers que el panel (`handleFormationBegin` y compañía): la
    * lógica de negocio es una sola, lo único que cambia es por dónde entró el pedido y cómo se
-   * autenticó.
+   * autenticó (eso, ahora, es enteramente responsabilidad del portal).
    */
   const embedRouter = express.Router();
-
-  embedRouter.use((req, res, next) => {
-    const allowed = deps.config.embed.allowedOrigin;
-    const origin = req.headers.origin;
-    if (!allowed || origin !== allowed) {
-      // Sin origen configurado, o un origen que no es el configurado: no se responde nada, ni con
-      // el token correcto. Es defensa en profundidad y no solo lo que ya hace el navegador con
-      // CORS — un cliente que no sea un navegador no respeta CORS, y el token por sí solo puede
-      // terminar filtrado en cualquier página.
-      res.status(403).json({ ok: false, error: "Origen no autorizado" });
-      return;
-    }
-    res.setHeader("Access-Control-Allow-Origin", allowed);
-    res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    if (req.method === "OPTIONS") {
-      res.status(204).end();
-      return;
-    }
-    next();
-  });
-
-  embedRouter.use((req, res, next) => {
-    const auth = String(req.headers.authorization || "");
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
-    if (!deps.embedTokens.verify(token, deps.config.embed.tokenVersion)) {
-      res.status(401).json({ ok: false, error: "Token inválido" });
-      return;
-    }
-    next();
-  });
 
   embedRouter.get("/state", (_req, res) => res.json(redactForEmbed(buildFullStateDto())));
   embedRouter.post("/incidents/:id/resolve", handleResolveIncident);
@@ -768,6 +721,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   embedRouter.post("/formation/green", handleFormationGreen);
   embedRouter.post("/formation/reset", handleFormationReset);
   embedRouter.post("/cars/:carId/kick", handleCarKick);
+  embedRouter.post("/evento/terminar", handleTerminarEvento);
 
   /**
    * Reglas y diagnóstico de red, portados al embed en la fase 2 (ver el plan "Ampliar el embed de
@@ -776,20 +730,14 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * reglamento de la liga. El admin que decidió incrustar esto en una página de verdad lo hizo
    * sabiendo que el token queda visible en el código fuente de esa página.
    *
-   * `embed.*` nunca viaja por este canal, ni para leerlo ni para cambiarlo: el token no puede ser
-   * quien administra su propio origen autorizado ni su propia versión.
+   * Usa el mismo filtro de campos que el panel (`stripManagedFields`): no hace falta uno propio
+   * para `embed.*` porque ese dato ya no vive en este `AppConfig` — es `Liga.embed`, en el portal.
    */
-  function stripEmbedManagedFields(patch: Record<string, unknown>): Record<string, unknown> {
-    const stripped = stripManagedFields(patch);
-    delete stripped.embed;
-    return stripped;
-  }
-
   embedRouter.get("/catalog", handleCatalog);
   embedRouter.get("/config", (_req, res) => res.json(redactConfigForEmbed(deps.config)));
 
   embedRouter.post("/config", (req, res) => {
-    const result = applyConfigPatchCore(req.body, stripEmbedManagedFields);
+    const result = applyConfigPatchCore(req.body, stripManagedFields);
     if (!result.ok) {
       res.status(result.status).json({ ok: false, error: result.error });
       return;

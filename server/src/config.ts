@@ -60,16 +60,10 @@ export interface AppConfig {
   activeProfileId: string;
   /** Si está activo, el motor detecta y registra todo pero NO aplica sanciones/kicks reales. */
   shadowMode: boolean;
-  /** Embed de esta liga en una página ajena (ej. fslmanager.vercel.app). Ver `security/embedToken.ts`. */
-  embed: {
-    /** Único origen al que se le contesta con `Access-Control-Allow-Origin`. Vacío = el embed no
-     * responde a nadie, aunque el token sea válido: hay que configurarlo a propósito. */
-    allowedOrigin: string;
-    /** Se mete en la firma del token (ver embedToken.ts). Regenerar el token es incrementar este
-     * número: todo lo emitido con el anterior deja de validar al instante. No se expone en
-     * `POST /api/config` — tiene su propio endpoint de regeneración, igual que `http`/`acUdp`. */
-    tokenVersion: number;
-  };
+  // Hasta la 1.25 había acá un campo `embed: { allowedOrigin, tokenVersion }`: cada worker tenía su
+  // propio token de embed. Con una liga pudiendo correr varios servidores (ver `portal/store.ts`,
+  // `Liga.embed`), el token pasó a ser uno solo por LIGA y lo emite/valida el portal — este config
+  // ya no sabe nada de eso. Si hace falta volver a un token por servidor, es acá donde reaparecería.
 }
 
 /**
@@ -156,7 +150,6 @@ function defaultConfig(): AppConfig {
     ruleProfiles: [],
     activeProfileId: "",
     shadowMode: true,
-    embed: { allowedOrigin: "", tokenVersion: 1 },
   };
 }
 
@@ -492,7 +485,7 @@ export function validateConfig(config: AppConfig): void {
   // mergeConfigInto lo copia tal cual (solo recursa cuando AMBOS lados son objetos). Sin esta
   // guarda, leer config.presence.graceSeconds abajo tumbaría el arranque con un TypeError.
   const defaults = defaultConfig();
-  for (const key of ["http", "acUdp", "formation", "pit", "presence", "infractions", "embed"] as const) {
+  for (const key of ["http", "acUdp", "formation", "pit", "presence", "infractions"] as const) {
     if (!isPlainObject(config[key])) resetToDefaults(config as unknown as Record<string, any>, key, defaults[key]);
   }
   if (!isPlainObject(config.formation.penalty)) resetToDefaults(config.formation, "penalty", defaults.formation.penalty);
@@ -533,15 +526,6 @@ export function validateConfig(config: AppConfig): void {
   validateInfractions(config.infractions);
   validateProfiles(config);
   config.shadowMode = typeof config.shadowMode === "boolean" ? config.shadowMode : true;
-
-  // Un origen es ESQUEMA://HOST[:PUERTO], sin path ni barra final: eso es justo lo que el
-  // navegador manda en la cabecera `Origin` de un fetch, y lo que hay que devolverle calcado en
-  // `Access-Control-Allow-Origin` para que valga. Vacío es válido a propósito (ver el comentario
-  // del campo): es el estado "todavía no configurado", no un error.
-  if (typeof config.embed.allowedOrigin !== "string") config.embed.allowedOrigin = "";
-  const origen = config.embed.allowedOrigin.trim();
-  config.embed.allowedOrigin = origen === "" || /^https?:\/\/[^\s/]+$/.test(origen) ? origen : "";
-  config.embed.tokenVersion = clampIntIn(config.embed.tokenVersion, 1, Number.MAX_SAFE_INTEGER, 1);
 }
 
 /**

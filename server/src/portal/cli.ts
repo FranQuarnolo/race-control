@@ -9,6 +9,7 @@ import { toSlug } from "./store";
  *
  *   node dist/portal/cli.js ligas                                   (lectura, siempre disponible)
  *   node dist/portal/cli.js crear-liga --nombre "Fast Sim" --email admin@liga.com
+ *   node dist/portal/cli.js agregar-servidor --liga fast-sim --nombre "México F3"
  *   node dist/portal/cli.js clave --email admin@liga.com
  *   node dist/portal/cli.js baja  --email admin@liga.com
  *   node dist/portal/cli.js alta  --email admin@liga.com --pago 2026-12-31
@@ -63,14 +64,19 @@ async function main(): Promise<void> {
   const portal = createPortal(config);
 
   if (comando === "ligas") {
-    for (const league of portal.store.leagues()) {
-      const dueño = league.ownerId ? portal.store.findUser(league.ownerId) : undefined;
+    for (const liga of portal.store.ligas()) {
+      const dueño = liga.ownerId ? portal.store.findUser(liga.ownerId) : undefined;
       const cuota = subscriptionOf(dueño);
       const estadoCuenta = !dueño ? "sin dueño" : dueño.active ? cuota.state : "DESACTIVADA";
-      console.log(
-        `${league.slug.padEnd(20)} ${league.status.padEnd(9)} UDP ${league.udpPort}  ` +
-          `${(dueño?.email ?? "-").padEnd(28)} ${estadoCuenta}${league.lastError ? `  — ${league.lastError}` : ""}`
-      );
+      const servidores = portal.store.servidoresDeLiga(liga.id);
+      console.log(`${liga.slug.padEnd(20)} ${(dueño?.email ?? "-").padEnd(28)} ${estadoCuenta}`);
+      if (servidores.length === 0) console.log("  (todavía no tiene servidores)");
+      for (const servidor of servidores) {
+        console.log(
+          `  - ${servidor.nombre.padEnd(24)} ${servidor.status.padEnd(9)} UDP ${servidor.udpPort}` +
+            `${servidor.lastError ? `  — ${servidor.lastError}` : ""}`
+        );
+      }
     }
     return;
   }
@@ -83,12 +89,13 @@ async function main(): Promise<void> {
       process.exit(2);
       return;
     }
-    const creds = await portal.createLeague(
+    const creds = await portal.createLiga(
       { slug: arg("slug") || toSlug(nombre), name: nombre, email, password: arg("clave") },
       { start: false }
     );
-    console.log(`Liga creada: ${creds.league.name}  (/l/${creds.league.slug})`);
-    const sendAddress = portal.supervisor.sendAddressOf(creds.league);
+    const servidor = portal.store.servidoresDeLiga(creds.liga.id)[0];
+    console.log(`Liga creada: ${creds.liga.name}  (/l/${creds.liga.slug})`);
+    const sendAddress = servidor ? portal.supervisor.sendAddressOf(servidor) : "";
     console.log(
       sendAddress
         ? `Send Address que va a ver el admin: ${sendAddress}`
@@ -102,6 +109,32 @@ async function main(): Promise<void> {
     console.log("");
     console.log("La contraseña no se vuelve a mostrar. Si se pierde, generá otra con \"clave\".");
     console.log("La liga arranca cuando vuelvas a levantar el portal.");
+    return;
+  }
+
+  if (comando === "agregar-servidor") {
+    const slug = arg("liga");
+    const nombre = arg("nombre");
+    if (!slug || !nombre) {
+      console.error('Uso: agregar-servidor --liga mi-liga --nombre "México F3"');
+      process.exit(2);
+      return;
+    }
+    const liga = portal.store.findLigaBySlug(slug);
+    if (!liga) {
+      console.error(`No existe ninguna liga en /l/${slug}. Mirá los slugs con "ligas".`);
+      process.exit(1);
+      return;
+    }
+    const servidor = portal.addServidor(liga.id, nombre, { start: false });
+    console.log(`Servidor creado en ${liga.slug}: ${servidor.nombre}  (UDP ${servidor.udpPort})`);
+    const sendAddress = portal.supervisor.sendAddressOf(servidor);
+    console.log(
+      sendAddress
+        ? `Send Address que va a ver el admin: ${sendAddress}`
+        : "SIN Send Address: falta RC_PUBLIC_IP, así que el admin no va a tener qué pegar en su hosting."
+    );
+    console.log("El servidor arranca cuando vuelvas a levantar el portal.");
     return;
   }
 
@@ -132,7 +165,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.error("Comandos: ligas | crear-liga | clave | baja | alta");
+  console.error("Comandos: ligas | crear-liga | agregar-servidor | clave | baja | alta");
   console.error("La cuenta de operador se crea sola con RC_OPERATOR_EMAIL en el arranque del portal.");
   process.exit(2);
 }

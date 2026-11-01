@@ -4,7 +4,10 @@
 // existiendo —adentro del panel, en Conexión— pero no es lo primero que ve alguien que nunca usó
 // el producto: ahí lo único que importa es si ya está llegando o todavía no.
 
-const SLUG = window.location.pathname.split("/").pop();
+// La URL es /conectar/<slug>/<servidorId>: dos segmentos fijos después de "conectar".
+const PARTES = window.location.pathname.split("/").filter(Boolean);
+const SLUG = PARTES[1];
+const SERVIDOR_ID = PARTES[2];
 const INTERVALO_MS = 2000;
 
 function marcarConectado() {
@@ -16,7 +19,7 @@ function marcarConectado() {
   // Con la barra final: sin ella el portal tiene que redirigir, y el panel resolvería sus
   // archivos relativos contra `/l/` hasta que esa redirección llegue.
   setTimeout(() => {
-    window.location.href = "/l/" + SLUG + "/";
+    window.location.href = "/l/" + SLUG + "/s/" + SERVIDOR_ID + "/";
   }, 1800);
 }
 
@@ -42,17 +45,19 @@ function sinDireccion(contacto) {
 }
 
 async function revisar() {
-  const liga = await api("/api/portal/liga/" + encodeURIComponent(SLUG));
-  $("link-panel").href = "/l/" + liga.slug + "/";
-  document.title = liga.name + " — Race Control";
+  const servidor = await api(
+    "/api/portal/liga/" + encodeURIComponent(SLUG) + "/" + encodeURIComponent(SERVIDOR_ID)
+  );
+  $("link-panel").href = "/l/" + servidor.slug + "/s/" + servidor.servidorId + "/";
+  document.title = servidor.name + " — Race Control";
 
-  if (!liga.sendAddress) {
-    sinDireccion(liga.contact);
+  if (!servidor.sendAddress) {
+    sinDireccion(servidor.contact);
     return;
   }
-  $("send-address").textContent = liga.sendAddress;
+  $("send-address").textContent = servidor.sendAddress;
 
-  if (liga.receiving) {
+  if (servidor.receiving) {
     marcarConectado();
     return;
   }

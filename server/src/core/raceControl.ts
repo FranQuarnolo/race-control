@@ -27,7 +27,6 @@ import { PitZoneLearner } from "../track/pitZoneLearner";
 import { TrackLimitsIncident, TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetryStore } from "../telemetry/driverTelemetry";
 import { PilotTokenIssuer } from "../security/pilotToken";
-import { EmbedTokenIssuer } from "../security/embedToken";
 import { LeagueEventsStore } from "../history/leagueEvents";
 import { buildReport } from "../report/raceReport";
 
@@ -177,7 +176,6 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // La clave de esta liga. Se crea sola en el primer arranque y no sale nunca del servidor: lo
   // que viaja es un token firmado con ella, por piloto y con vencimiento.
   const pilotTokens = new PilotTokenIssuer(dataDir);
-  const embedTokens = new EmbedTokenIssuer(dataDir);
 
   const announcer = new BackendAnnouncer(
     udpClient,
@@ -555,6 +553,28 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     leagueEvents.closeCurrent(report);
   };
 
+  /**
+   * "Terminar evento": lo dispara el admin desde el panel o el embed cuando ya revisó todo y bajó
+   * el informe, y quiere arrancar la próxima sesión con la bandeja vacía. `cerrarEventoActual()` va
+   * primero como red de seguridad —por si la sesión en curso nunca mandó `END_SESSION`— y después
+   * se borra todo lo que `resetSessionState`/`resetSession` dejan vivo a propósito entre sesiones
+   * (ver sus comentarios). Quien llama a esto ya verificó que no queden incidentes pendientes.
+   */
+  const terminarEvento = (): void => {
+    cerrarEventoActual();
+    journal.log("evento.terminar", {
+      incidentes: incidentEngine.getAll().length,
+      sanciones:
+        formationPenaltyEngine.getAll().length +
+        pitPenaltyEngine.getAll().length +
+        stewardPenaltyEngine.getAll().length,
+    });
+    incidentEngine.clearAll();
+    formationPenaltyEngine.resetSession();
+    pitPenaltyEngine.resetSession();
+    stewardPenaltyEngine.resetSession();
+  };
+
   // Los tres motores: una sanción de largada o del comisario también se cumple pasando por el pit.
   new PitComplianceTracker(
     stateTracker,
@@ -799,7 +819,6 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
 
   const adminApp = createAdminApi({
     config,
-    embedTokens,
     stateTracker,
     formationStart,
     formationPenaltyEngine,
@@ -821,6 +840,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       journal.log("kick.manual", { carId, driverGuid: car?.driverGuid, driverName: car?.driverName });
       udpClient.kick(carId);
     },
+    terminarEvento,
     buildSendAddress: () => buildSendAddress(connectivity.getStatus().publicIp, config.acUdp.localPort),
     getActivePorts: () => ({ ...activePorts }),
     // Del entorno y no del mensaje de arranque: el worker hereda `process.env` del portal (ver

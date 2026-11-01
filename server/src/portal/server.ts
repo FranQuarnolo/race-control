@@ -14,15 +14,16 @@ import {
 } from "./auth";
 import { LeagueEventsStore } from "../history/leagueEvents";
 import { askWorker, proxyToWorker } from "./proxy";
-import { League, PortalStore, User, normalizeEmail, toSlug } from "./store";
+import { EmbedTokenIssuer } from "../security/embedToken";
+import { Liga, PortalStore, Servidor, User, normalizeEmail, toSlug } from "./store";
 import { Supervisor, assignPorts } from "./supervisor";
 
 /**
  * El portal: una sola puerta a internet, con las ligas detrás.
  *
- * Todo lo que entra pasa por acá. Las rutas `/l/<slug>/...` se reenvían al worker de esa liga
- * después de verificar quién pide y si tiene permiso; lo demás son las pantallas del portal
- * (la landing pública, el login, la lista de ligas y el panel del operador).
+ * Todo lo que entra pasa por acá. Las rutas `/l/<slug>/s/<servidorId>/...` se reenvían al worker de
+ * ESE servidor después de verificar quién pide y si tiene permiso; lo demás son las pantallas del
+ * portal (la landing pública, el login, la lista de ligas y el panel del operador).
  *
  * No hay registro: las cuentas las crea el operador y entrega usuario y contraseña. Es un servicio
  * con suscripción, no un sitio al que cualquiera se da de alta.
@@ -89,11 +90,31 @@ function readCookie(req: Request, name: string): string | undefined {
   return undefined;
 }
 
+/** El body de un POST que el portal atiende directo (sin proxyear): no hay `express.json()` acá
+ * arriba a propósito, porque `proxyToWorker` necesita el stream del request intacto. */
+function readJsonBody(req: Request): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.setEncoding("utf-8");
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      try {
+        const parsed = JSON.parse(raw || "{}");
+        resolve(parsed && typeof parsed === "object" ? parsed : {});
+      } catch {
+        resolve({});
+      }
+    });
+  });
+}
+
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,39}$/;
+/** Lo que genera `newId()` en `store.ts`: base64url de 9 bytes. */
+const SERVIDOR_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 /** Lo que hay que entregarle a un admin nuevo. La contraseña se ve una vez y nunca más. */
 export interface Credenciales {
-  league: League;
+  liga: Liga;
   user: User;
   password: string;
   loginUrl: string;
@@ -104,11 +125,13 @@ export interface Portal {
   store: PortalStore;
   supervisor: Supervisor;
   sessions: SessionStore;
-  /** Crea la liga y la cuenta de su admin, y devuelve lo que hay que pasarle. */
-  createLeague(
-    input: { slug: string; name: string; email: string; password?: string },
+  /** Crea la liga, su cuenta de admin y su primer servidor, y devuelve lo que hay que pasarle. */
+  createLiga(
+    input: { slug: string; name: string; email: string; password?: string; servidorNombre?: string },
     options?: { start?: boolean }
   ): Promise<Credenciales>;
+  /** Un servidor más para una liga que ya existe. */
+  addServidor(ligaId: string, nombre: string, options?: { start?: boolean }): Servidor;
   /** Contraseña nueva para una cuenta que ya existe: la pidió, o se la olvidó. */
   resetPassword(user: User, password?: string): Promise<string>;
   /** Siembra la cuenta del operador si todavía no hay ninguna. Devuelve la clave si la creó. */
@@ -128,6 +151,20 @@ export function createPortal(config: PortalConfig): Portal {
     publicHost: config.publicHost,
     udpBindAddress: config.udpBindAddress,
   });
+
+  // Una `EmbedTokenIssuer` por liga, no por servidor: así el admin pega el snippet una sola vez y
+  // el token le sirve para cualquier servidor que corra bajo esa liga (ver `store.ts`, `Liga.embed`).
+  // La clave vive en `<dataRoot>/ligas/<ligaId>/secrets/embed.key`, al lado de —no adentro de—
+  // ningún `dataDir` de servidor.
+  const embedTokenIssuers = new Map<string, EmbedTokenIssuer>();
+  function embedTokensFor(ligaId: string): EmbedTokenIssuer {
+    let issuer = embedTokenIssuers.get(ligaId);
+    if (!issuer) {
+      issuer = new EmbedTokenIssuer(path.join(config.dataRoot, "ligas", ligaId));
+      embedTokenIssuers.set(ligaId, issuer);
+    }
+    return issuer;
+  }
 
   const sweeper = setInterval(() => sessions.sweep(), 10 * 60 * 1000);
   sweeper.unref();
@@ -163,7 +200,7 @@ export function createPortal(config: PortalConfig): Portal {
    */
   app.use((req, res, next) => {
     const proto = String(req.headers["x-forwarded-proto"] || "");
-    const esCanalDePilotos = /^\/l\/[a-z0-9-]+\/api\/client\//.test(req.path);
+    const esCanalDePilotos = /^\/l\/[a-z0-9-]+\/s\/[A-Za-z0-9_-]+\/api\/client\//.test(req.path);
     if (config.secureCookies && proto === "http" && !esCanalDePilotos) {
       res.redirect(308, `https://${config.publicHost}${req.originalUrl}`);
       return;
@@ -206,7 +243,8 @@ export function createPortal(config: PortalConfig): Portal {
    * Los tres juntos y no uno solo porque cada uno falla distinto: `SameSite` no lo respetan los
    * navegadores viejos, el header obligatorio no lo puede poner un `<form>` cruzado pero sí un
    * `fetch` con CORS mal configurado, y `Origin` no llega en algunos clientes. El canal de
-   * pilotos queda afuera: no usa cookies, así que no hay sesión que robar.
+   * pilotos y el del embed quedan afuera: el primero no usa cookies, y el segundo tiene su propio
+   * esquema de origen+token (ver `embedGate`) que cumple el mismo papel.
    */
   function checkCsrf(req: Request, res: Response, next: NextFunction): void {
     if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
@@ -225,6 +263,42 @@ export function createPortal(config: PortalConfig): Portal {
     next();
   }
 
+  /**
+   * Portero del Bearer de embed: un token por LIGA (ver `Liga.embed`), no por servidor.
+   *
+   * Hasta la 1.25 esto vivía en el worker (`adminApi.ts`) y se repetía por cada proceso. Con una
+   * liga pudiendo correr varios servidores, el token tiene que validarse en un solo lugar que
+   * conozca a la liga entera: acá. El worker ya no valida nada de esto — confía en que, si el
+   * pedido le llegó, es porque pasó por este portero.
+   */
+  function embedGate(req: Request, res: Response, liga: Liga): boolean {
+    const allowed = liga.embed.allowedOrigin;
+    const origin = req.headers.origin;
+    if (!allowed || origin !== allowed) {
+      // Sin origen configurado, o un origen que no es el configurado: no se responde nada, ni con
+      // el token correcto. Es defensa en profundidad y no solo lo que ya hace el navegador con
+      // CORS — un cliente que no sea un navegador no respeta CORS, y el token por sí solo puede
+      // terminar filtrado en cualquier página.
+      res.status(403).json({ ok: false, error: "Origen no autorizado" });
+      return false;
+    }
+    res.setHeader("Access-Control-Allow-Origin", allowed);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return false;
+    }
+    const auth = String(req.headers.authorization || "");
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : undefined;
+    if (!embedTokensFor(liga.id).verify(token, liga.embed.tokenVersion)) {
+      res.status(401).json({ ok: false, error: "Token inválido" });
+      return false;
+    }
+    return true;
+  }
+
   // --- API del portal ---------------------------------------------------------------------------
 
   const portalApi = express.Router();
@@ -241,15 +315,20 @@ export function createPortal(config: PortalConfig): Portal {
     const user = store.findUser(req.userId);
     const leagues = store
       .membershipsOf(req.userId)
-      .map((m) => store.findLeague(m.leagueId))
-      .filter((l): l is League => Boolean(l))
-      .map((l) => ({
-        slug: l.slug,
-        name: l.name,
-        status: l.status,
-        lastError: l.lastError,
-        sendAddress: supervisor.sendAddressOf(l),
-      }));
+      .map((m) => store.findLiga(m.ligaId))
+      .filter((l): l is Liga => Boolean(l))
+      .map((liga) => {
+        // El primer servidor de la liga: con una liga por cuenta y un servidor por liga (el caso
+        // de todos los admins hoy), es "el" servidor. Ver el comentario de `filaDeAdmin`.
+        const primero = store.servidoresDeLiga(liga.id)[0];
+        return {
+          slug: liga.slug,
+          name: liga.name,
+          status: primero?.status ?? "stopped",
+          lastError: primero?.lastError,
+          sendAddress: primero ? supervisor.sendAddressOf(primero) : "",
+        };
+      });
     res.json({
       authenticated: true,
       email: user?.email,
@@ -266,24 +345,27 @@ export function createPortal(config: PortalConfig): Portal {
   /**
    * Lo único que la pantalla de puesta en marcha necesita: qué pegar, y si ya está llegando.
    *
-   * Sale del portal y no del panel de la liga porque es la pantalla que ve alguien que todavía
-   * no entró nunca al panel — y porque el "Send Address" lo sabe el portal (es su IP y el puerto
-   * que él asignó), no el worker.
+   * Es por SERVIDOR y no por liga: con varios servidores en una liga, cada uno tiene su propia
+   * dirección UDP y su propio estado de recepción. Sale del portal y no del panel porque es la
+   * pantalla que ve alguien que todavía no entró nunca al panel — y porque el "Send Address" lo
+   * sabe el portal (es su IP y el puerto que él asignó), no el worker.
    */
-  portalApi.get("/liga/:slug", async (req: SessionRequest, res) => {
-    const league = store.findLeagueBySlug(req.params.slug);
-    if (!league || !req.userId || !store.hasAccess(req.userId, league.id)) {
-      res.status(404).json({ ok: false, error: "No existe esa liga." });
+  portalApi.get("/liga/:slug/:servidorId", async (req: SessionRequest, res) => {
+    const liga = store.findLigaBySlug(req.params.slug);
+    const servidor = liga ? store.findServidor(req.params.servidorId) : undefined;
+    if (!liga || !servidor || servidor.ligaId !== liga.id || !req.userId || !store.hasAccess(req.userId, liga.id)) {
+      res.status(404).json({ ok: false, error: "No existe ese servidor." });
       return;
     }
-    if (league.status === "stopped") supervisor.start(league.id);
-    const state = await askWorker<{ network?: { receivingTelemetry?: boolean } }>(league.adminPort, "/api/state");
+    if (servidor.status === "stopped") supervisor.start(servidor.id);
+    const state = await askWorker<{ network?: { receivingTelemetry?: boolean } }>(servidor.adminPort, "/api/state");
     res.json({
       ok: true,
-      name: league.name,
-      slug: league.slug,
-      status: league.status,
-      sendAddress: supervisor.sendAddressOf(league),
+      name: liga.name,
+      slug: liga.slug,
+      servidorId: servidor.id,
+      status: servidor.status,
+      sendAddress: supervisor.sendAddressOf(servidor),
       /** `null` mientras el worker todavía no contesta: no es lo mismo que "no está llegando". */
       receiving: state ? Boolean(state.network?.receivingTelemetry) : null,
       contact: config.contact,
@@ -326,13 +408,21 @@ export function createPortal(config: PortalConfig): Portal {
     // `user` es la referencia del store y `updateUser` no toca `sessionsVersion` acá, así que
     // sigue siendo la correcta para la sesión que se crea.
     setSessionCookie(res, sessions.create(user.id, user.sessionsVersion));
-    const leagues = store.membershipsOf(user.id);
-    const única = leagues.length === 1 ? store.findLeague(leagues[0].leagueId) : undefined;
+    const memberships = store.membershipsOf(user.id);
+    const única = memberships.length === 1 ? store.findLiga(memberships[0].ligaId) : undefined;
+    const primerServidor = única ? store.servidoresDeLiga(única.id)[0] : undefined;
     res.json({
       ok: true,
       // A dónde mandarlo: el operador a su panel, y el admin de una sola liga directo adentro.
       // Una lista de un solo elemento es una pantalla que solo existe para hacer un click más.
-      destino: user.role === "operador" ? "/operador" : única ? `/l/${única.slug}/` : "/mis-ligas",
+      destino:
+        user.role === "operador"
+          ? "/operador"
+          : única && primerServidor
+          ? `/l/${única.slug}/s/${primerServidor.id}/`
+          : única
+          ? `/l/${única.slug}/`
+          : "/mis-ligas",
     });
   });
 
@@ -365,19 +455,30 @@ export function createPortal(config: PortalConfig): Portal {
     next();
   });
 
-  /** Una fila de la tabla del operador: la cuenta, su liga y en qué estado está cada cosa. */
+  /**
+   * Una fila de la tabla del operador: la cuenta, su liga y en qué estado está cada cosa.
+   *
+   * `status`/`sendAddress`/`udpPort` salen del PRIMER servidor de la liga, no de la liga misma —
+   * una liga ya no tiene puerto propio (ver `store.ts`). Hoy todo admin tiene una liga con un solo
+   * servidor, así que "el primero" es "el único" y esta tabla no necesita cambiar de forma. El día
+   * que un admin tenga varios, esta fila sigue mostrando el primero y el resto se ve adentro del
+   * panel (selector de servidores) — la tabla del operador no es el lugar para administrar eso.
+   */
   function filaDeAdmin(user: User) {
-    const leagues = store.leaguesOwnedBy(user.id).map((l) => ({
-      // El id va al panel porque es lo que `POST /api/operador/ligas/:id` necesita para editarla.
-      // El slug no sirve: justamente puede cambiar en esa misma llamada.
-      id: l.id,
-      slug: l.slug,
-      name: l.name,
-      status: l.status,
-      lastError: l.lastError,
-      sendAddress: supervisor.sendAddressOf(l),
-      udpPort: l.udpPort,
-    }));
+    const leagues = store.ligasOwnedBy(user.id).map((liga) => {
+      const primero = store.servidoresDeLiga(liga.id)[0];
+      return {
+        // El id va al panel porque es lo que `POST /api/operador/ligas/:id` necesita para editarla.
+        // El slug no sirve: justamente puede cambiar en esa misma llamada.
+        id: liga.id,
+        slug: liga.slug,
+        name: liga.name,
+        status: primero?.status ?? "stopped",
+        lastError: primero?.lastError,
+        sendAddress: primero ? supervisor.sendAddressOf(primero) : "",
+        udpPort: primero?.udpPort ?? 0,
+      };
+    });
     return {
       id: user.id,
       email: user.email,
@@ -410,7 +511,8 @@ export function createPortal(config: PortalConfig): Portal {
     res.json({ ok: true, admin: filaDeAdmin(user) });
   });
 
-  /** Alta: una liga y su cuenta, en un solo paso. Devuelve la contraseña una única vez. */
+  /** Alta: una liga, su primer servidor y su cuenta, en un solo paso. Devuelve la contraseña una
+   * única vez. */
   operadorApi.post("/admins", async (req, res) => {
     const body = req.body ?? {};
     const nombre = String(body.leagueName ?? "").trim();
@@ -425,7 +527,7 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
     try {
-      const creds = await createLeague({
+      const creds = await createLiga({
         slug: String(body.slug ?? "").trim() || toSlugSeguro(nombre),
         name: nombre,
         email,
@@ -474,10 +576,12 @@ export function createPortal(config: PortalConfig): Portal {
 
     store.updateUser(user.id, patch);
 
-    // Desactivar apaga la liga; reactivar la vuelve a levantar. Los datos no se tocan nunca: el
-    // worker se detiene, y la carpeta con su configuración, sus sanciones y sus registros queda.
-    if (patch.active === false) for (const l of store.leaguesOwnedBy(user.id)) supervisor.stop(l.id);
-    if (patch.active === true) for (const l of store.leaguesOwnedBy(user.id)) supervisor.start(l.id);
+    // Desactivar apaga TODOS los servidores de todas sus ligas; reactivar los vuelve a levantar.
+    // Los datos no se tocan nunca: el worker se detiene, y la carpeta con su configuración, sus
+    // sanciones y sus registros queda.
+    const servidoresDelUsuario = () => store.ligasOwnedBy(user.id).flatMap((liga) => store.servidoresDeLiga(liga.id));
+    if (patch.active === false) for (const s of servidoresDelUsuario()) supervisor.stop(s.id);
+    if (patch.active === true) for (const s of servidoresDelUsuario()) supervisor.start(s.id);
 
     res.json({ ok: true, admin: filaDeAdmin(store.findUser(user.id)!) });
   });
@@ -500,26 +604,26 @@ export function createPortal(config: PortalConfig): Portal {
   /**
    * Editar la liga: su nombre y su dirección.
    *
-   * El nombre no se guarda en un solo lado. El portal tiene `League.name` —lo que se ve en esta
-   * tabla— y el worker tiene su propio `config.leagueName`, que es lo que muestra el panel arriba
-   * a la izquierda. Para que el cambio se vea de verdad hay que reiniciar la liga: el worker toma
-   * el nombre del portal al arrancar. Son unos segundos sin escuchar telemetría, y por eso el
-   * panel avisa antes de hacerlo.
+   * El nombre no se guarda en un solo lado. El portal tiene `Liga.name` —lo que se ve en esta
+   * tabla— y cada worker de la liga tiene su propio `config.leagueName`, que es lo que muestra el
+   * panel arriba a la izquierda. Para que el cambio se vea de verdad hay que reiniciar los
+   * servidores: cada uno toma el nombre del portal al arrancar. Son unos segundos sin escuchar
+   * telemetría por servidor, y por eso el panel avisa antes de hacerlo.
    */
   operadorApi.post("/ligas/:id", (req, res) => {
-    const league = store.findLeague(req.params.id);
-    if (!league) {
+    const liga = store.findLiga(req.params.id);
+    if (!liga) {
       res.status(404).json({ ok: false, error: "No existe esa liga." });
       return;
     }
     const body = req.body ?? {};
-    const patch: Parameters<typeof store.updateLeague>[1] = {};
+    const patch: Partial<Pick<Liga, "name" | "slug">> = {};
 
     if (typeof body.name === "string" && body.name.trim()) {
       patch.name = body.name.trim().slice(0, 80);
     }
 
-    if (typeof body.slug === "string" && body.slug.trim() && body.slug.trim() !== league.slug) {
+    if (typeof body.slug === "string" && body.slug.trim() && body.slug.trim() !== liga.slug) {
       const slug = toSlug(body.slug);
       if (!SLUG_RE.test(slug)) {
         res.status(400).json({
@@ -528,8 +632,8 @@ export function createPortal(config: PortalConfig): Portal {
         });
         return;
       }
-      const otra = store.findLeagueBySlug(slug);
-      if (otra && otra.id !== league.id) {
+      const otra = store.findLigaBySlug(slug);
+      if (otra && otra.id !== liga.id) {
         res.status(400).json({ ok: false, error: `Ya hay una liga en /l/${slug}.` });
         return;
       }
@@ -541,12 +645,15 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
 
-    store.updateLeague(league.id, patch);
-    // Reiniciar solo si estaba corriendo. Una liga de una cuenta desactivada tiene que seguir
-    // apagada después de renombrarla: si no, editarle el nombre sería la forma de saltearse la baja.
-    if (supervisor.isRunning(league.id)) supervisor.restart(league.id);
+    store.updateLiga(liga.id, patch);
+    // Reiniciar solo los que estaban corriendo. Una liga de una cuenta desactivada tiene que
+    // seguir apagada después de renombrarla: si no, editarle el nombre sería la forma de
+    // saltearse la baja.
+    for (const servidor of store.servidoresDeLiga(liga.id)) {
+      if (supervisor.isRunning(servidor.id)) supervisor.restart(servidor.id);
+    }
 
-    const actualizada = store.findLeague(league.id)!;
+    const actualizada = store.findLiga(liga.id)!;
     res.json({ ok: true, league: { slug: actualizada.slug, name: actualizada.name } });
   });
 
@@ -555,26 +662,32 @@ export function createPortal(config: PortalConfig): Portal {
    * `history/leagueEvents.ts`), y acá se lee directo de disco en vez de pedírselo al worker por
    * `askWorker`. A propósito: una liga desactivada no tiene worker corriendo, y es justo el caso en
    * que más falta hace poder revisar qué pasó la última vez que corrió.
+   *
+   * Es el historial del PRIMER servidor de la liga — mismo criterio que `filaDeAdmin` — porque hoy
+   * nadie tiene más de uno. El día que haga falta elegir cuál, este endpoint pasa a pedir el
+   * servidor explícito; hasta entonces, duplicar esa UI acá sería una pantalla que nadie usa.
    */
   operadorApi.get("/ligas/:id/eventos", (req, res) => {
-    const league = store.findLeague(req.params.id);
-    if (!league) {
+    const liga = store.findLiga(req.params.id);
+    if (!liga) {
       res.status(404).json({ ok: false, error: "No existe esa liga." });
       return;
     }
-    const eventos = new LeagueEventsStore(supervisor.dataDirOf(league.id)).list();
+    const primero = store.servidoresDeLiga(liga.id)[0];
+    const eventos = primero ? new LeagueEventsStore(supervisor.dataDirOf(primero.id)).list() : [];
     res.json({ ok: true, eventos });
   });
 
   /** Borra una entrada del historial. La que está en curso no se puede borrar — ver `remove` en
    * `LeagueEventsStore`. */
   operadorApi.delete("/ligas/:id/eventos/:eventId", (req, res) => {
-    const league = store.findLeague(req.params.id);
-    if (!league) {
+    const liga = store.findLiga(req.params.id);
+    if (!liga) {
       res.status(404).json({ ok: false, error: "No existe esa liga." });
       return;
     }
-    const borrado = new LeagueEventsStore(supervisor.dataDirOf(league.id)).remove(req.params.eventId);
+    const primero = store.servidoresDeLiga(liga.id)[0];
+    const borrado = primero ? new LeagueEventsStore(supervisor.dataDirOf(primero.id)).remove(req.params.eventId) : false;
     if (!borrado) {
       res.status(404).json({ ok: false, error: "No existe ese evento, o todavía está en curso." });
       return;
@@ -589,10 +702,14 @@ export function createPortal(config: PortalConfig): Portal {
   /**
    * Allowlist, no denylist: se enumera lo que pasa y todo lo demás da 404.
    *
-   * El canal de pilotos (`/api/client/*`) es el único que viaja sin sesión, porque lo consume la
-   * app dentro del juego, que no puede tener una. No queda abierto: el worker exige ahí un token
-   * firmado por la liga (ver security/pilotToken.ts), así que el portal lo deja pasar y es el
-   * worker el que decide.
+   * Primero se resuelven las rutas de LIGA (el token de embed, la lista de servidores): son datos
+   * de la cuenta, no de un servidor puntual, así que viven antes de que aparezca `/s/:servidorId`
+   * en el path. Todo lo demás cuelga de un servidor concreto.
+   *
+   * El canal de pilotos (`/s/:id/api/client/*`) es el único que viaja sin sesión, porque lo
+   * consume la app dentro del juego, que no puede tener una. No queda abierto: el worker exige ahí
+   * un token firmado por la liga (ver security/pilotToken.ts), así que el portal lo deja pasar y
+   * es el worker el que decide.
    */
   app.use("/l/:slug", (req: SessionRequest, res) => {
     const slug = req.params.slug;
@@ -600,87 +717,184 @@ export function createPortal(config: PortalConfig): Portal {
       res.status(404).send("No existe esa liga.");
       return;
     }
-    const league = store.findLeagueBySlug(slug);
-    if (!league) {
+    const liga = store.findLigaBySlug(slug);
+    if (!liga) {
       res.status(404).send("No existe esa liga.");
       return;
     }
 
-    // `/l/fsl` sin barra final rompe todo lo relativo del panel: el navegador resolvería
-    // `styles.css` contra `/l/` y pediría `/l/styles.css`. Una redirección y se acabó.
-    const [soloRuta, query] = req.originalUrl.split("?");
-    if (soloRuta === `/l/${slug}`) {
-      res.redirect(308, `/l/${slug}/${query ? `?${query}` : ""}`);
-      return;
-    }
-
-    const resto = req.url === "/" ? "/" : req.url;
-    const esCanalDePilotos = resto.startsWith("/api/client/");
-    if (esCanalDePilotos) {
-      proxyToWorker(req, res, { port: league.clientPort, path: resto });
-      return;
-    }
+    const query = req.originalUrl.split("?")[1];
+    const qs = query ? `?${query}` : "";
+    // `req.url` acá adentro trae la query pegada (Express no la separa al recortar el prefijo del
+    // mount) — sin este `.split`, un `?x=1` termina duplicado en el redirect de más abajo
+    // (`.../?x=1?x=1`) porque `qs` ya lo tiene aparte.
+    const resto = (req.url === "/" ? "/" : req.url).split("?")[0];
 
     /**
-     * El embed en una página ajena (fslmanager.vercel.app) no tiene sesión ni cookie —viaja con un
-     * Bearer propio, ver `security/embedToken.ts`— así que bypassa el chequeo de `req.userId` de
-     * abajo igual que el canal de pilotos. El CORS y la verificación del token los hace el propio
-     * worker (`adminApi.ts`): acá no hay nada que decidir salvo a qué puerto mandarlo. `x-rc-user`
-     * identifica el canal en el journal como lo que es, no como un comisario logueado — el mismo
-     * criterio que ya usa `RC_PUBLIC_LEAGUE` más abajo.
+     * Token de embed: cookie-autenticado (lo pide el panel), opera sobre `Liga.embed` directo, sin
+     * pasar por ningún worker — funciona aunque ningún servidor de la liga esté corriendo.
      */
-    const esCanalDeEmbed = resto.startsWith("/api/embed/");
-    if (esCanalDeEmbed) {
-      proxyToWorker(req, res, { port: league.adminPort, path: resto }, { "x-rc-user": `embed:${slug}` });
+    if (resto === "/api/embed-token") {
+      if (!req.userId || !store.hasAccess(req.userId, liga.id)) {
+        res.status(401).json({ ok: false, error: "Sesión vencida." });
+        return;
+      }
+      checkCsrf(req, res, async () => {
+        if (req.method === "GET") {
+          res.json({ token: embedTokensFor(liga.id).issue(liga.embed.tokenVersion), allowedOrigin: liga.embed.allowedOrigin });
+          return;
+        }
+        if (req.method === "POST") {
+          const body = await readJsonBody(req);
+          if (typeof body.allowedOrigin === "string") {
+            const origen = body.allowedOrigin.trim();
+            // Un origen es ESQUEMA://HOST[:PUERTO], sin path ni barra final: eso es justo lo que
+            // el navegador manda en la cabecera `Origin` de un fetch. Vacío es válido a propósito:
+            // es el estado "todavía no configurado", no un error.
+            const válido = origen === "" || /^https?:\/\/[^\s/]+$/.test(origen);
+            store.updateLigaEmbed(liga.id, { allowedOrigin: válido ? origen : liga.embed.allowedOrigin });
+          }
+          const actualizada = store.findLiga(liga.id)!;
+          res.json({ token: embedTokensFor(actualizada.id).issue(actualizada.embed.tokenVersion), allowedOrigin: actualizada.embed.allowedOrigin });
+          return;
+        }
+        res.status(405).end();
+      });
+      return;
+    }
+
+    /** Invalida el token vigente: todo lo emitido con la versión anterior deja de servir al
+     * instante, para TODOS los servidores de la liga a la vez (es un solo token por liga). */
+    if (resto === "/api/embed-token/regenerate") {
+      if (!req.userId || !store.hasAccess(req.userId, liga.id)) {
+        res.status(401).json({ ok: false, error: "Sesión vencida." });
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).end();
+        return;
+      }
+      checkCsrf(req, res, () => {
+        store.updateLigaEmbed(liga.id, { tokenVersion: liga.embed.tokenVersion + 1 });
+        const actualizada = store.findLiga(liga.id)!;
+        res.json({ token: embedTokensFor(actualizada.id).issue(actualizada.embed.tokenVersion) });
+      });
+      return;
+    }
+
+    /** Lista de servidores de la liga, para el selector del panel (cookie). */
+    if (resto === "/api/servidores") {
+      if (!req.userId || !store.hasAccess(req.userId, liga.id)) {
+        res.status(401).json({ ok: false, error: "Sesión vencida." });
+        return;
+      }
+      if (req.method !== "GET") {
+        res.status(405).end();
+        return;
+      }
+      const servidores = store.servidoresDeLiga(liga.id).map((s) => ({ id: s.id, nombre: s.nombre, status: s.status }));
+      res.json({ ok: true, servidores });
+      return;
+    }
+
+    /** Lo mismo, para el selector del embed en una página ajena (Bearer de liga). */
+    if (resto === "/api/embed/servidores") {
+      if (!embedGate(req, res, liga)) return;
+      if (req.method !== "GET") {
+        res.status(405).end();
+        return;
+      }
+      const servidores = store.servidoresDeLiga(liga.id).map((s) => ({ id: s.id, nombre: s.nombre, activo: s.status === "running" }));
+      res.json({ ok: true, servidores });
       return;
     }
 
     /**
-     * `embed.js`/`embed.css` (`src/api/public/embed/`) los pide el navegador de quien mira
-     * fslmanager.vercel.app, que no tiene sesión con Race Control — si esto le exigiera
-     * `req.userId` como el resto de acá abajo, el `<script src="…/embed/embed.js">` recibiría la
-     * redirección al login en vez del archivo, y fallaría en silencio (un script que "ejecuta" un
-     * 302 a una página HTML no hace nada). No hay nada secreto en estos dos archivos — el token
-     * vive en el propio `<script>` del snippet, no acá — así que alcanza con dejarlos pasar igual
-     * que el canal de pilotos y el de datos del embed.
+     * `embed.js`/`embed.css` (`src/api/public/embed/`) y los logos de marca
+     * (`src/api/public/brands/*.svg`) los pide el navegador de quien mira fslmanager.vercel.app,
+     * que no tiene sesión con Race Control — si esto le exigiera `req.userId` como el panel, el
+     * `<script src="…/embed/embed.js">` recibiría la redirección al login en vez del archivo, y
+     * fallaría en silencio (un script que "ejecuta" un 302 a una página HTML no hace nada). No hay
+     * nada secreto en estos archivos — el token vive en el propio `<script>` del snippet, no acá —
+     * así que alcanza con dejarlos pasar. Son evento-agnósticos: el contenido es idéntico entre
+     * workers de la misma liga, así que van al PRIMER servidor sin que importe cuál.
      */
     const esAssetDeEmbed = resto.startsWith("/embed/");
-    if (esAssetDeEmbed) {
-      proxyToWorker(req, res, { port: league.adminPort, path: resto });
+    const esAssetDeBrands = resto.startsWith("/brands/");
+    if (esAssetDeEmbed || esAssetDeBrands) {
+      const primero = store.servidoresDeLiga(liga.id)[0];
+      if (!primero) {
+        res.status(404).send("Esta liga todavía no tiene servidores.");
+        return;
+      }
+      proxyToWorker(req, res, { port: primero.adminPort, path: resto + qs });
+      return;
+    }
+
+    // --- De acá para abajo, todo cuelga de UN servidor concreto -----------------------------------
+
+    const matchServidor = resto.match(/^\/s\/([^/]+)((?:\/.*)?)$/);
+    if (!matchServidor || !SERVIDOR_ID_RE.test(matchServidor[1])) {
+      // Sin `/s/<id>` en el path: ni el panel puede resolver sus archivos relativos, ni el portal
+      // sabe a qué proceso mandar el pedido. En vez de un 404 seco, se manda al primer servidor de
+      // la liga con el resto del path pegado atrás — cubre tanto `/l/fsl` a secas (el caso típico:
+      // alguien que recién entra) como un bookmark viejo de antes de que existiera el selector.
+      const primero = store.servidoresDeLiga(liga.id)[0];
+      if (!primero) {
+        res.status(404).send("Esta liga todavía no tiene servidores.");
+        return;
+      }
+      res.redirect(308, `/l/${slug}/s/${primero.id}${resto}${qs}`);
+      return;
+    }
+
+    const servidorId = matchServidor[1];
+    const sub = matchServidor[2] || "/";
+    const servidor = store.findServidor(servidorId);
+    if (!servidor || servidor.ligaId !== liga.id) {
+      res.status(404).send("No existe ese servidor.");
+      return;
+    }
+
+    const esCanalDePilotos = sub.startsWith("/api/client/");
+    if (esCanalDePilotos) {
+      proxyToWorker(req, res, { port: servidor.clientPort, path: sub + qs });
       return;
     }
 
     /**
-     * Los logos de marca (`src/api/public/brands/*.svg`) los pide el mismo navegador sin sesión
-     * que pide `embed.js` — por el mismo motivo de arriba, con el agravante de que acá ni siquiera
-     * hay snippet con token de por medio: son imágenes públicas, sin dato de la liga adentro.
+     * El embed en una página ajena no tiene sesión ni cookie —viaja con el Bearer de la liga, ver
+     * `embedGate`— así que bypassa el chequeo de `req.userId` de abajo igual que el canal de
+     * pilotos. `x-rc-user` identifica el canal en el journal como lo que es, no como un comisario
+     * logueado — el mismo criterio que ya usa `RC_PUBLIC_LEAGUE` más abajo.
      */
-    const esAssetDeBrands = resto.startsWith("/brands/");
-    if (esAssetDeBrands) {
-      proxyToWorker(req, res, { port: league.adminPort, path: resto });
+    const esCanalDeEmbed = sub.startsWith("/api/embed/");
+    if (esCanalDeEmbed) {
+      if (!embedGate(req, res, liga)) return;
+      proxyToWorker(req, res, { port: servidor.adminPort, path: sub + qs }, { "x-rc-user": `embed:${slug}` });
       return;
     }
 
     if (!req.userId) {
       // Un `fetch` del panel espera JSON; una navegación del navegador, el login.
-      if (resto.startsWith("/api/")) res.status(401).json({ ok: false, error: "Sesión vencida." });
+      if (sub.startsWith("/api/")) res.status(401).json({ ok: false, error: "Sesión vencida." });
       else res.redirect(`/login?volver=${encodeURIComponent(req.originalUrl)}`);
       return;
     }
-    if (!store.hasAccess(req.userId, league.id)) {
+    if (!store.hasAccess(req.userId, liga.id)) {
       res.status(403).send("No tenés acceso a esta liga.");
       return;
     }
     // La suscripción es del dueño, no de cada comisario: si el dueño está desactivado, la liga
     // entera queda cerrada aunque un comisario suyo siga teniendo su cuenta en pie.
-    const dueño = league.ownerId ? store.findUser(league.ownerId) : undefined;
+    const dueño = liga.ownerId ? store.findUser(liga.ownerId) : undefined;
     if (dueño && !dueño.active) {
       res.status(403).send("Esta liga está desactivada. Hablá con quien te dio el acceso.");
       return;
     }
-    if (league.status !== "running") {
-      // Pedirla es la señal más clara de que alguien la quiere usar: si está parada, se levanta.
-      if (league.status === "stopped") supervisor.start(league.id);
+    if (servidor.status !== "running") {
+      // Pedirlo es la señal más clara de que alguien lo quiere usar: si está parado, se levanta.
+      if (servidor.status === "stopped") supervisor.start(servidor.id);
     }
 
     checkCsrf(req, res, () => {
@@ -690,17 +904,17 @@ export function createPortal(config: PortalConfig): Portal {
       // `X-RC-User` es lo que convierte el registro del worker en auditoría de verdad: sin eso,
       // en una liga con varios comisarios el journal diría "alguien kickeó al piloto 7".
       const email = store.findUser(req.userId!)?.email ?? "?";
-      proxyToWorker(req, res, { port: league.adminPort, path: resto }, { "x-rc-user": email });
+      proxyToWorker(req, res, { port: servidor.adminPort, path: sub + qs }, { "x-rc-user": email });
     });
   });
 
   /**
    * Rama `feature/panel-simplificado-fsl`: la pantalla fusionada va a vivir incrustada dentro de
    * fslmanager.vercel.app, no detrás de un login propio. `RC_PUBLIC_LEAGUE` (el slug de la liga)
-   * hace que la raíz del dominio sirva ese panel directo, sin sesión ni CSRF: no hay cookie que
-   * proteger, así que `checkCsrf` no pinta nada acá. Sin la variable de entorno, el comportamiento
-   * de siempre (login, selección de liga) sigue intacto — esto es estrictamente aditivo y no debería
-   * existir en `main`.
+   * hace que la raíz del dominio sirva el panel del PRIMER servidor de esa liga, directo, sin
+   * sesión ni CSRF: no hay cookie que proteger, así que `checkCsrf` no pinta nada acá. Sin la
+   * variable de entorno, el comportamiento de siempre (login, selección de liga) sigue intacto —
+   * esto es estrictamente aditivo y no debería existir en `main`.
    */
   const PUBLIC_LEAGUE_SLUG = process.env.RC_PUBLIC_LEAGUE || "";
   if (PUBLIC_LEAGUE_SLUG) {
@@ -716,15 +930,16 @@ export function createPortal(config: PortalConfig): Portal {
         next();
         return;
       }
-      const league = store.findLeagueBySlug(PUBLIC_LEAGUE_SLUG);
-      if (!league) {
+      const liga = store.findLigaBySlug(PUBLIC_LEAGUE_SLUG);
+      const primero = liga ? store.servidoresDeLiga(liga.id)[0] : undefined;
+      if (!liga || !primero) {
         next();
         return;
       }
-      if (league.status !== "running") {
-        if (league.status === "stopped") supervisor.start(league.id);
+      if (primero.status !== "running") {
+        if (primero.status === "stopped") supervisor.start(primero.id);
       }
-      proxyToWorker(req, res, { port: league.adminPort, path: req.url }, { "x-rc-user": `embed:${PUBLIC_LEAGUE_SLUG}` });
+      proxyToWorker(req, res, { port: primero.adminPort, path: req.url }, { "x-rc-user": `embed:${PUBLIC_LEAGUE_SLUG}` });
     });
   }
 
@@ -738,7 +953,7 @@ export function createPortal(config: PortalConfig): Portal {
   app.get("/login", pagina("login.html"));
   app.get("/mis-ligas", pagina("mis-ligas.html"));
   app.get("/operador", pagina("operador.html"));
-  app.get("/conectar/:slug", pagina("conectar.html"));
+  app.get("/conectar/:slug/:servidorId", pagina("conectar.html"));
   app.get("/", pagina("index.html"));
 
   app.use((_req, res) => res.status(404).send("No encontrado."));
@@ -750,19 +965,20 @@ export function createPortal(config: PortalConfig): Portal {
   }
 
   /**
-   * Crea la liga y la cuenta de su admin de una sola vez.
+   * Crea la liga, su cuenta de admin y su primer servidor de una sola vez.
    *
-   * Van juntas a propósito: una liga sin dueño es un puerto UDP reservado que nadie usa, y una
-   * cuenta sin liga es alguien que entra y no tiene nada que mirar.
+   * Van juntas a propósito: una liga sin servidor es un puerto UDP que nadie reservó, una liga sin
+   * dueño es un puerto UDP reservado que nadie usa, y una cuenta sin liga es alguien que entra y no
+   * tiene nada que mirar.
    */
-  async function createLeague(
-    input: { slug: string; name: string; email: string; password?: string },
+  async function createLiga(
+    input: { slug: string; name: string; email: string; password?: string; servidorNombre?: string },
     options: { start?: boolean } = {}
   ): Promise<Credenciales> {
     if (!SLUG_RE.test(input.slug)) {
       throw new Error(`"${input.slug}" no sirve como dirección: usá minúsculas, números y guiones (2 a 40 caracteres).`);
     }
-    if (store.findLeagueBySlug(input.slug)) throw new Error(`Ya existe una liga en /l/${input.slug}.`);
+    if (store.findLigaBySlug(input.slug)) throw new Error(`Ya existe una liga en /l/${input.slug}.`);
     if (store.findUserByEmail(input.email)) {
       throw new Error(`Ya hay una cuenta con el email ${normalizeEmail(input.email)}.`);
     }
@@ -776,20 +992,41 @@ export function createPortal(config: PortalConfig): Portal {
 
     const password = input.password || generatePassword();
     const user = store.createUser(input.email, await hashPassword(password), "admin");
-    const league = store.createLeague({
-      slug: input.slug,
-      name: input.name,
-      ownerId: user.id,
+    const liga = store.createLiga({ slug: input.slug, name: input.name, ownerId: user.id });
+    const servidor = store.createServidor({
+      ligaId: liga.id,
+      nombre: input.servidorNombre || input.name,
       udpPort: ports.udpPort,
       adminPort: ports.adminPort,
       clientPort: ports.clientPort,
     });
-    store.addMembership({ userId: user.id, leagueId: league.id, role: "owner" });
+    store.addMembership({ userId: user.id, ligaId: liga.id, role: "owner" });
     // El CLI pasa `start: false`: ahí no hay portal corriendo, y un worker forkeado por un proceso
-    // que termina en dos segundos se muere con él dejando la liga marcada como "en marcha".
-    if (options.start !== false) supervisor.start(league.id);
+    // que termina en dos segundos se muere con él dejando el servidor marcado como "en marcha".
+    if (options.start !== false) supervisor.start(servidor.id);
 
-    return { league, user, password, loginUrl: `${baseUrl()}/login` };
+    return { liga, user, password, loginUrl: `${baseUrl()}/login` };
+  }
+
+  /** Un servidor más para una liga que ya existe — ej. México/F3 sumándose a una cuenta que ya
+   * tenía Spa/GT3. No crea nada más: la cuenta y el acceso son de la liga, no de cada servidor. */
+  function addServidor(ligaId: string, nombre: string, options: { start?: boolean } = {}): Servidor {
+    const liga = store.findLiga(ligaId);
+    if (!liga) throw new Error("No existe esa liga.");
+    const ports = assignPorts(store.usedPorts(), {
+      udpFrom: config.udpPortFrom,
+      udpTo: config.udpPortTo,
+      loopbackFrom: config.loopbackPortFrom,
+    });
+    const servidor = store.createServidor({
+      ligaId,
+      nombre,
+      udpPort: ports.udpPort,
+      adminPort: ports.adminPort,
+      clientPort: ports.clientPort,
+    });
+    if (options.start !== false) supervisor.start(servidor.id);
+    return servidor;
   }
 
   async function resetPassword(user: User, password?: string): Promise<string> {
@@ -838,7 +1075,7 @@ export function createPortal(config: PortalConfig): Portal {
   // intento tardaría distinto que los demás y delataría justo lo que el señuelo esconde.
   void DECOY_HASH;
 
-  return { app, store, supervisor, sessions, createLeague, resetPassword, ensureOperator };
+  return { app, store, supervisor, sessions, createLiga, addServidor, resetPassword, ensureOperator };
 }
 
 /** Estado de la cuota, calculado en el servidor: el reloj del navegador no decide esto. */

@@ -217,6 +217,13 @@ body.link-down #card-race {
   background: var(--red);
   box-shadow: 0 0 7px rgba(224, 85, 85, 0.7);
 }
+/* Segundo paso de "Terminar evento", mismo criterio que `.btn-mini.arming`: cambia de texto y de
+   color entero, no solo el borde, porque un solo click sobre esto no se deshace. */
+.status-button.arming {
+  background: var(--red);
+  color: var(--bg);
+  border-color: var(--red);
+}
 
 /* Switch de modo. Vive entero adentro del cajón de Conexión: el interruptor y el aviso. En los
    controles flotantes no queda nada, ni el control ni el cartel. */

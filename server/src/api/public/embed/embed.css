@@ -64,6 +64,27 @@
   margin-bottom: 12px;
 }
 
+/* Empuja Reglas/Conexión al extremo derecho, dejando "Terminar evento" separado a la izquierda —
+   es una acción destructiva y poco frecuente, no otro botón más del mismo grupo. */
+.rc-embed__terminar-slot {
+  margin-right: auto;
+}
+
+/* Mismo tratamiento visual que `.rc-embed__btn--secondary`: es un control más de la topbar, no
+   un formulario. Oculto por JS (`hidden`) mientras la liga tenga un solo servidor. */
+.rc-embed__servidor-select {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 0.85rem;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-raised);
+  color: var(--text);
+  border-radius: calc(var(--radius) / 2);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
 .rc-embed__dot {
   display: inline-block;
   width: 8px;

@@ -25,9 +25,18 @@
        tener que abrir Reglas. El panel completo con el encabezado de marca sigue intacto en la
        rama main. -->
   <div class="floating floating-left">
+    <!-- Oculto por CSS/JS mientras la liga tenga un solo servidor — ver `pintarSelectorDeServidores`
+         en app.js. Con uno solo, ofrecer "elegir" es una pregunta sin segunda opción. -->
+    <select class="status-button" id="servidor-select" hidden></select>
     <button class="status-button" id="btn-network" aria-haspopup="dialog">
       <span class="dot" aria-hidden="true"></span>
       <span id="btn-network-label">Conexión</span>
+    </button>
+    <!-- Separado de Conexión/Sanciones/Reglas a propósito: es una acción destructiva, no otro
+         cajón de consulta. El estilo "bad" ya existe para el rojo de alerta de Conexión; acá se
+         reusa como "cuidado" fijo, no como estado que cambia solo. -->
+    <button class="status-button bad" id="btn-end-event" title="Vacía la bandeja de incidentes y las sanciones aplicadas. Bloqueado si hay incidentes sin revisar.">
+      Terminar evento
     </button>
   </div>
 

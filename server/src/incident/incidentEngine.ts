@@ -423,6 +423,15 @@ export class IncidentEngine extends EventEmitter {
     this.awaitingPair.clear();
     this.openIncident.clear();
   }
+
+  /** A diferencia de `resetSessionState`, esto SÍ borra el historial completo. Es a propósito: lo
+   * usa "Terminar evento" cuando el comisario ya revisó todo y descargó el informe, no un cambio
+   * de sesión. */
+  clearAll(): void {
+    this.incidents = [];
+    this.awaitingPair.clear();
+    this.openIncident.clear();
+  }
 }
 
 function toParty(carId: number, snapshot: CarSnapshot, event?: ClientEvent): IncidentParty {

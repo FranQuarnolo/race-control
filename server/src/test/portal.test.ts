@@ -11,10 +11,10 @@ import { LeagueEventsStore } from "../history/leagueEvents";
  * El portal es lo único que da a internet, así que lo que se verifica acá es quién pasa y quién
  * no — no que el panel funcione (eso es el worker, y vive en otros tests).
  *
- * Los workers no se levantan: forkear un proceso por liga para comprobar un 403 sería pagar
+ * Los workers no se levantan: forkear un proceso por servidor para comprobar un 403 sería pagar
  * segundos por test para nada. En su lugar, `supervisor.start` se anula y se pone un servidor
- * HTTP de mentira en el puerto de la liga, que devuelve lo que recibió. Así se puede afirmar algo
- * que de otro modo no se ve: QUÉ headers llegan del otro lado.
+ * HTTP de mentira en el puerto de cada servidor, que devuelve lo que recibió. Así se puede afirmar
+ * algo que de otro modo no se ve: QUÉ headers llegan del otro lado.
  */
 
 let portal: Portal;
@@ -101,6 +101,12 @@ async function entrar(email: string, password: string): Promise<string> {
   return setCookie.split(";")[0];
 }
 
+/** El servidor que `createLiga`/`altaDePrueba` crea junto con la liga: hoy toda cuenta de prueba
+ * tiene exactamente uno, así que "el primero" es "el único". */
+function primerServidor(ligaId: string) {
+  return portal.store.servidoresDeLiga(ligaId)[0];
+}
+
 const CLAVE_A = "contrasena-larga-1";
 const CLAVE_B = "contrasena-larga-2";
 const CLAVE_OP = "contrasena-del-operador";
@@ -108,6 +114,8 @@ const CLAVE_OP = "contrasena-del-operador";
 let cookieA = "";
 let cookieB = "";
 let cookieOp = "";
+let ligaAId = "";
+let servidorAId = "";
 let espejoAdmin: { port: number; ultimo: () => Espejo | null };
 let espejoPilotos: { port: number; ultimo: () => Espejo | null };
 
@@ -137,17 +145,19 @@ before(async () => {
   base = `http://127.0.0.1:${port}`;
   cerrar.push(() => server.close());
 
-  await portal.createLeague({ slug: "liga-a", name: "Liga A", email: "ana@example.com", password: CLAVE_A });
-  await portal.createLeague({ slug: "liga-b", name: "Liga B", email: "beto@example.com", password: CLAVE_B });
+  const credsA = await portal.createLiga({ slug: "liga-a", name: "Liga A", email: "ana@example.com", password: CLAVE_A });
+  await portal.createLiga({ slug: "liga-b", name: "Liga B", email: "beto@example.com", password: CLAVE_B });
   await portal.ensureOperator("jefe@example.com", CLAVE_OP);
 
   espejoAdmin = await servidorEspejo();
   espejoPilotos = await servidorEspejo();
-  // Los puertos reales del worker se reemplazan por los de los espejos. `leagues()` devuelve las
-  // mismas referencias que usa el portal, así que alcanza con escribirles encima.
-  const ligaA = portal.store.findLeagueBySlug("liga-a")!;
-  ligaA.adminPort = espejoAdmin.port;
-  ligaA.clientPort = espejoPilotos.port;
+  // Los puertos reales del worker se reemplazan por los de los espejos. `servidoresDeLiga` devuelve
+  // las mismas referencias que usa el portal, así que alcanza con escribirles encima.
+  ligaAId = credsA.liga.id;
+  const servidorA = primerServidor(ligaAId);
+  servidorA.adminPort = espejoAdmin.port;
+  servidorA.clientPort = espejoPilotos.port;
+  servidorAId = servidorA.id;
 
   cookieA = await entrar("ana@example.com", CLAVE_A);
   cookieB = await entrar("beto@example.com", CLAVE_B);
@@ -161,22 +171,22 @@ after(() => {
 
 // --- Quién pasa y quién no ---------------------------------------------------------------------
 
-test("sin sesión, una API de liga contesta 401 en JSON", async () => {
-  const res = await pedir("GET", "/l/liga-a/api/state");
+test("sin sesión, una API de servidor contesta 401 en JSON", async () => {
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/state`);
   assert.equal(res.status, 401);
   assert.equal(res.json().ok, false);
 });
 
 test("sin sesión, una navegación va al login y vuelve a donde estaba", async () => {
-  const res = await pedir("GET", "/l/liga-a/sanciones");
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/sanciones`);
   assert.equal(res.status, 302);
-  assert.equal(res.headers.location, "/login?volver=%2Fl%2Fliga-a%2Fsanciones");
+  assert.equal(res.headers.location, `/login?volver=${encodeURIComponent(`/l/liga-a/s/${servidorAId}/sanciones`)}`);
 });
 
 test("el admin de una liga no entra a la liga de al lado", async () => {
   // Es la propiedad central del multi-liga: una sesión válida no alcanza, tiene que ser válida
   // PARA ESA liga.
-  const res = await pedir("GET", "/l/liga-a/api/state", { cookie: cookieB });
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/state`, { cookie: cookieB });
   assert.equal(res.status, 403);
 });
 
@@ -186,21 +196,32 @@ test("una liga que no existe es 404, y un slug raro también", async () => {
   assert.equal((await pedir("GET", "/l/..%2F..%2Fetc/", { cookie: cookieA })).status, 404);
 });
 
-test("sin la barra final redirige, para que el panel resuelva bien sus archivos", async () => {
+test("un servidor que no existe, o que es de otra liga, es 404", async () => {
+  assert.equal((await pedir("GET", "/l/liga-a/s/no-existe/", { cookie: cookieA })).status, 404);
+  const servidorB = primerServidor((await portal.store.findLigaBySlug("liga-b"))!.id);
+  assert.equal((await pedir("GET", `/l/liga-a/s/${servidorB.id}/`, { cookie: cookieA })).status, 404);
+});
+
+test("sin /s/<id> en el path, redirige al primer servidor de la liga con el resto del path pegado atrás", async () => {
   const res = await pedir("GET", "/l/liga-a?x=1", { cookie: cookieA });
   assert.equal(res.status, 308);
-  assert.equal(res.headers.location, "/l/liga-a/?x=1");
+  assert.equal(res.headers.location, `/l/liga-a/s/${servidorAId}/?x=1`);
+
+  // Lo mismo para un bookmark viejo con un sub-path, de antes de que existiera el selector.
+  const conSubpath = await pedir("GET", "/l/liga-a/sanciones", { cookie: cookieA });
+  assert.equal(conSubpath.status, 308);
+  assert.equal(conSubpath.headers.location, `/l/liga-a/s/${servidorAId}/sanciones`);
 });
 
 // --- CSRF --------------------------------------------------------------------------------------
 
 test("un POST sin la marca de origen no llega al worker", async () => {
-  const res = await pedir("POST", "/l/liga-a/api/config", { cookie: cookieA, body: { leagueName: "X" } });
+  const res = await pedir("POST", `/l/liga-a/s/${servidorAId}/api/config`, { cookie: cookieA, body: { leagueName: "X" } });
   assert.equal(res.status, 403);
 });
 
 test("un POST desde otro origen tampoco", async () => {
-  const res = await pedir("POST", "/l/liga-a/api/config", {
+  const res = await pedir("POST", `/l/liga-a/s/${servidorAId}/api/config`, {
     cookie: cookieA,
     body: { leagueName: "X" },
     headers: { "x-rc-request": "1", origin: "https://sitio-ajeno.example" },
@@ -211,7 +232,7 @@ test("un POST desde otro origen tampoco", async () => {
 test("con la marca y el origen propio, el POST pasa con el cuerpo intacto", async () => {
   // Que el cuerpo llegue entero no es un detalle: el portal no puede parsear el JSON antes de
   // reenviarlo o el worker recibiría un POST vacío.
-  const res = await pedir("POST", "/l/liga-a/api/config", {
+  const res = await pedir("POST", `/l/liga-a/s/${servidorAId}/api/config`, {
     cookie: cookieA,
     body: { leagueName: "Fórmula Sur" },
     headers: { "x-rc-request": "1", origin: "http://race-control.test" },
@@ -223,17 +244,18 @@ test("con la marca y el origen propio, el POST pasa con el cuerpo intacto", asyn
 // --- Lo que llega del otro lado ------------------------------------------------------------------
 
 test("el worker recibe quién pidió, y no la cookie de sesión", async () => {
-  const res = await pedir("GET", "/l/liga-a/api/state", { cookie: cookieA });
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/state`, { cookie: cookieA });
   assert.equal(res.status, 200);
   const visto = espejoAdmin.ultimo()!;
   assert.equal(visto.headers["x-rc-user"], "ana@example.com");
   assert.equal(visto.headers.cookie, undefined);
+  // El `/s/<id>` no viaja al worker: cada worker ya sabe quién es, con el path pelado alcanza.
   assert.equal(visto.url, "/api/state");
 });
 
 test("nadie puede firmar sus acciones con el nombre de otro", async () => {
   // Sin esto, el `x-rc-user` que el worker anota en la auditoría sería el que mandó el atacante.
-  const res = await pedir("GET", "/l/liga-a/api/state", {
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/state`, {
     cookie: cookieA,
     headers: { "x-rc-user": "otro@example.com" },
   });
@@ -246,15 +268,16 @@ test("nadie puede firmar sus acciones con el nombre de otro", async () => {
 test("la app del piloto entra sin sesión y va al puerto de pilotos", async () => {
   // No tiene cookie ni puede tenerla: corre dentro del juego. Quien decide si pasa es el worker,
   // mirando el token firmado (ver pilotToken.test.ts).
-  const res = await pedir("GET", "/l/liga-a/api/client/poll");
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/client/poll`);
   assert.equal(res.status, 200);
   assert.equal(espejoPilotos.ultimo()!.url, "/api/client/poll");
 });
 
 test("el canal de pilotos no sirve para colarse al panel", async () => {
-  const res = await pedir("GET", "/l/liga-a/api/client/../state");
-  // El cliente HTTP normaliza `..` antes de salir, así que lo que llega es `/l/liga-a/api/state`:
-  // sin sesión, 401. Lo que importa es que NO termine en el puerto del panel.
+  const res = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/client/../state`);
+  // El cliente HTTP normaliza `..` antes de salir, así que lo que llega es
+  // `/l/liga-a/s/<id>/api/state`: sin sesión, 401. Lo que importa es que NO termine en el puerto
+  // del panel.
   assert.equal(res.status, 401);
 });
 
@@ -262,10 +285,113 @@ test("el canal de pilotos no sirve para colarse al panel", async () => {
 
 test("sin sesión, embed.js se sirve igual: lo pide el navegador de quien mira la página ajena", async () => {
   // Si esto exigiera sesión como el resto del panel, el <script> del snippet recibiría la
-  // redirección al login en vez del archivo — el bug real que motivó este bypass.
+  // redirección al login en vez del archivo — el bug real que motivó este bypass. Es de la LIGA,
+  // no de un servidor puntual: no lleva `/s/<id>` en el path.
   const res = await pedir("GET", "/l/liga-a/embed/embed.js");
   assert.equal(res.status, 200);
   assert.equal(espejoAdmin.ultimo()!.url, "/embed/embed.js");
+});
+
+// --- Token de embed: por LIGA, no por servidor ----------------------------------------------------
+
+test("sin sesión, el token de embed no se puede ni leer", async () => {
+  assert.equal((await pedir("GET", "/l/liga-a/api/embed-token")).status, 401);
+});
+
+test("con sesión, se puede leer y guardar el origen permitido", async () => {
+  const leido = await pedir("GET", "/l/liga-a/api/embed-token", { cookie: cookieA });
+  assert.equal(leido.status, 200, leido.body);
+  assert.equal(leido.json().allowedOrigin, "");
+  assert.ok(leido.json().token.length > 10);
+
+  const guardado = await pedir("POST", "/l/liga-a/api/embed-token", {
+    cookie: cookieA,
+    body: { allowedOrigin: "https://fslmanager.vercel.app" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(guardado.status, 200, guardado.body);
+  assert.equal(guardado.json().allowedOrigin, "https://fslmanager.vercel.app");
+
+  // Un admin de OTRA liga no puede tocar el embed de esta.
+  assert.equal((await pedir("GET", "/l/liga-a/api/embed-token", { cookie: cookieB })).status, 401);
+});
+
+test("el embed exige el origen configurado y el token vigente, y regenerar invalida el viejo al instante", async () => {
+  const ruta = `/l/liga-a/s/${servidorAId}/api/embed/state`;
+  const origin = "https://fslmanager.vercel.app";
+
+  // Sin Authorization: ni con el origen correcto pasa.
+  assert.equal((await pedir("GET", ruta, { headers: { origin } })).status, 401);
+
+  // Con un origen que no es el configurado: 403, aunque el token sea el correcto.
+  const { token } = (await pedir("GET", "/l/liga-a/api/embed-token", { cookie: cookieA })).json();
+  assert.equal(
+    (await pedir("GET", ruta, { headers: { origin: "https://otro-sitio.example", authorization: `Bearer ${token}` } })).status,
+    403
+  );
+
+  // Origen y token correctos: pasa, y llega al servidor correcto.
+  const ok = await pedir("GET", ruta, { headers: { origin, authorization: `Bearer ${token}` } });
+  assert.equal(ok.status, 200, ok.body);
+  assert.equal(espejoAdmin.ultimo()!.headers["x-rc-user"], "embed:liga-a");
+
+  // Regenerar: el token viejo deja de servir al instante.
+  const regen = await pedir("POST", "/l/liga-a/api/embed-token/regenerate", {
+    cookie: cookieA,
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(regen.status, 200, regen.body);
+  const nuevo = regen.json().token;
+  assert.notEqual(nuevo, token);
+  assert.equal((await pedir("GET", ruta, { headers: { origin, authorization: `Bearer ${token}` } })).status, 401);
+  assert.equal((await pedir("GET", ruta, { headers: { origin, authorization: `Bearer ${nuevo}` } })).status, 200);
+});
+
+// --- Selector de servidores -------------------------------------------------------------------------
+
+test("la lista de servidores para el panel exige cookie; para el embed, Bearer de la liga", async () => {
+  assert.equal((await pedir("GET", "/l/liga-a/api/servidores")).status, 401);
+  const panel = await pedir("GET", "/l/liga-a/api/servidores", { cookie: cookieA });
+  assert.equal(panel.status, 200, panel.body);
+  assert.deepEqual(
+    panel.json().servidores.map((s: { id: string }) => s.id),
+    [servidorAId]
+  );
+
+  const { token } = (await pedir("GET", "/l/liga-a/api/embed-token", { cookie: cookieA })).json();
+  const origin = "https://fslmanager.vercel.app";
+  assert.equal((await pedir("GET", "/l/liga-a/api/embed/servidores")).status, 403);
+  const embed = await pedir("GET", "/l/liga-a/api/embed/servidores", { headers: { origin, authorization: `Bearer ${token}` } });
+  assert.equal(embed.status, 200, embed.body);
+  assert.deepEqual(embed.json().servidores, [{ id: servidorAId, nombre: servidorA().nombre, activo: false }]);
+});
+
+function servidorA() {
+  return primerServidor(ligaAId);
+}
+
+test("una liga con dos servidores rutea a cada uno por separado, sin mezclar sus estados", async () => {
+  const segundo = portal.addServidor(ligaAId, "México F3", { start: false });
+  const espejoDos = await servidorEspejo();
+  segundo.adminPort = espejoDos.port;
+
+  const unoRes = await pedir("GET", `/l/liga-a/s/${servidorAId}/api/state`, { cookie: cookieA });
+  assert.equal(unoRes.status, 200);
+  assert.equal(espejoAdmin.ultimo()!.url, "/api/state");
+  assert.equal(espejoDos.ultimo(), null);
+
+  const dosRes = await pedir("GET", `/l/liga-a/s/${segundo.id}/api/state`, { cookie: cookieA });
+  assert.equal(dosRes.status, 200);
+  assert.equal(espejoDos.ultimo()!.url, "/api/state");
+
+  const lista = await pedir("GET", "/l/liga-a/api/servidores", { cookie: cookieA });
+  assert.deepEqual(
+    lista.json().servidores.map((s: { id: string }) => s.id).sort(),
+    [servidorAId, segundo.id].sort()
+  );
+
+  // Limpieza: que no le pese a los tests que siguen contando "un solo servidor por liga".
+  assert.ok(portal.store.removeServidor(segundo.id));
 });
 
 // --- Portal ---------------------------------------------------------------------------------------
@@ -304,13 +430,14 @@ test("sin IP pública no se inventa media dirección", async () => {
     contact: "",
   });
   otro.supervisor.start = () => {};
-  const { league } = await otro.createLeague({
+  const { liga } = await otro.createLiga({
     slug: "liga-c",
     name: "Liga C",
     email: "caro@example.com",
     password: CLAVE_A,
   });
-  assert.equal(otro.supervisor.sendAddressOf(league), "");
+  const servidor = otro.store.servidoresDeLiga(liga.id)[0];
+  assert.equal(otro.supervisor.sendAddressOf(servidor), "");
 });
 
 test("el login deja entrar y el logout cierra de verdad", async () => {
@@ -319,8 +446,9 @@ test("el login deja entrar y el logout cierra de verdad", async () => {
     headers: { "x-rc-request": "1" },
   });
   assert.equal(login.status, 200);
-  // Con una sola liga, el destino es la liga: la lista intermedia solo agregaría un click.
-  assert.equal(login.json().destino, "/l/liga-a/");
+  // Con una sola liga, el destino es su primer servidor: la lista intermedia solo agregaría un
+  // click, y el selector del servidor vive adentro del panel, no antes de entrar.
+  assert.equal(login.json().destino, `/l/liga-a/s/${servidorAId}/`);
   const cookie = (login.headers["set-cookie"]?.[0] || "").split(";")[0];
 
   assert.equal((await pedir("GET", "/api/portal/me", { cookie })).json().authenticated, true);
@@ -338,7 +466,7 @@ test("una contraseña equivocada no entra", async () => {
 
 test("dos ligas con el mismo email no se pueden crear", async () => {
   await assert.rejects(
-    () => portal.createLeague({ slug: "otra", name: "Otra", email: "ana@example.com" }),
+    () => portal.createLiga({ slug: "otra", name: "Otra", email: "ana@example.com" }),
     /Ya hay una cuenta/
   );
 });
@@ -442,7 +570,7 @@ test("el estado de la cuota lo calcula el servidor", async () => {
   // La cuota vencida avisa, pero NO echa a nadie: cortar en mitad de una carrera por una fecha
   // es peor que cualquier impago. El corte es `active`, y lo decide una persona.
   assert.equal(fila.active, true);
-  assert.equal((await pedir("GET", "/l/liga-a/api/state", { cookie: cookieA })).status, 200);
+  assert.equal((await pedir("GET", `/l/liga-a/s/${servidorAId}/api/state`, { cookie: cookieA })).status, 200);
 });
 
 // --- Edición desde el panel del operador ---------------------------------------------------------
@@ -480,7 +608,7 @@ test("el operador le cambia el nombre y la dirección a una liga", async () => {
   assert.equal(fila.leagues[0].slug, "copa-nueva-2027");
 
   // La dirección vieja deja de existir, y eso es lo que hay que avisarle al admin antes de tocarla.
-  assert.equal((await pedir("GET", "/l/copa-vieja/api/state", { cookie: cookieOp })).status, 404);
+  assert.equal((await pedir("GET", "/l/copa-vieja/", { cookie: cookieOp })).status, 404);
 });
 
 test("una liga no se puede mudar encima de otra", async () => {
@@ -493,7 +621,7 @@ test("una liga no se puede mudar encima de otra", async () => {
   assert.equal(res.status, 400);
   assert.match(res.json().error, /liga-b/);
   // Y la liga de al lado sigue donde estaba.
-  assert.equal(portal.store.findLeagueBySlug("liga-b")!.id !== liga.id, true);
+  assert.equal(portal.store.findLigaBySlug("liga-b")!.id !== liga.id, true);
 });
 
 test("editar una liga que no existe es 404, y sin cambios es 400", async () => {
@@ -517,14 +645,14 @@ test("editar una liga que no existe es 404, y sin cambios es 400", async () => {
 });
 
 test("editar ligas tampoco existe para quien no es operador", async () => {
-  const liga = portal.store.findLeagueBySlug("liga-a")!;
+  const liga = portal.store.findLigaBySlug("liga-a")!;
   const res = await pedir("POST", `/api/operador/ligas/${liga.id}`, {
     cookie: cookieA,
     body: { name: "Mi propia liga renombrada" },
     headers: { "x-rc-request": "1" },
   });
   assert.equal(res.status, 404);
-  assert.equal(portal.store.findLeague(liga.id)!.name, "Liga A");
+  assert.equal(portal.store.findLiga(liga.id)!.name, "Liga A");
 });
 
 test("cambiar el email cambia con qué entra el admin", async () => {
@@ -598,7 +726,7 @@ test("el operador puede elegir la contraseña en vez de que se la generen", asyn
 // --- Historial de eventos --------------------------------------------------------------------------
 
 test("el historial de una liga no existe para quien no es operador", async () => {
-  const liga = portal.store.findLeagueBySlug("liga-a")!;
+  const liga = portal.store.findLigaBySlug("liga-a")!;
   assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieA })).status, 404);
   assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`)).status, 404);
 });
@@ -618,7 +746,7 @@ test("una liga que no existe tampoco tiene historial", async () => {
 
 test("el operador lee el historial de una liga directo del disco, sin pasar por el worker", async () => {
   const { liga, admin } = await altaDePrueba("Copa Con Historial", "historial@example.com");
-  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(liga.id));
+  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(primerServidor(liga.id).id));
   store.startSession({
     track: "ks_barcelona",
     trackConfig: "layout_gp",
@@ -660,7 +788,7 @@ test("el operador lee el historial de una liga directo del disco, sin pasar por 
 
 test("un evento en curso no se puede borrar, y uno terminado sí", async () => {
   const { liga } = await altaDePrueba("Copa Para Borrar", "borrar@example.com");
-  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(liga.id));
+  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(primerServidor(liga.id).id));
   store.startSession({
     track: "ks_monza",
     trackConfig: "",

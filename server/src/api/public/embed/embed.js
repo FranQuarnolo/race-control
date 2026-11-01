@@ -44,10 +44,18 @@
   // (fslmanager.vercel.app), así que una ruta relativa resolvería contra ESE origen y no contra el
   // de Race Control. `script.src` es el único dato que tenemos de dónde vive de verdad este archivo.
   var origin = new URL(script.src, document.baseURI).origin;
-  var API = origin + "/l/" + encodeURIComponent(slug) + "/api/embed";
+  // De la LIGA entera, no de un servidor puntual: acá vive solo `/servidores`, la lista que llena
+  // el selector de abajo. El resto de los datos (`/state`, `/config`, las acciones) son de UN
+  // servidor concreto — ver `API`, que se arma recién cuando se sabe cuál.
+  var LIGA_API = origin + "/l/" + encodeURIComponent(slug) + "/api/embed";
+  // Se completa en `iniciarConServidor`, una vez resuelto con cuál de los servidores de la liga
+  // arrancar (el primero de la lista, salvo que el admin ya haya elegido otro en una sesión previa
+  // de esta misma carga de página — no se persiste entre recargas, ver el comentario del plan).
+  var API = null;
   // Para pedir archivos estáticos que NO viven bajo /api/embed, como los logos de marca —
   // `/brands/*.svg`, servidos por el propio worker detrás de `/l/<liga>/`. Ver el bypass
-  // `esAssetDeBrands` en portal/server.ts.
+  // `esAssetDeBrands` en portal/server.ts. Es de la liga, no del servidor: el contenido es idéntico
+  // entre workers de la misma liga.
   var ASSET_BASE = origin + "/l/" + encodeURIComponent(slug);
 
   // El snippet que se pega en la página ajena es SOLO el div y este <script> — no le pedimos al
@@ -96,6 +104,13 @@
   // cajones que antes solo existían en el panel completo, y el pedido explícito fue poder abrirlos
   // sin salir de la página donde está incrustado el embed.
   var topbar = el("div", "rc-embed__topbar");
+  // Oculto hasta que se sepa cuántos servidores tiene la liga (ver `pintarSelectorDeServidores`):
+  // con uno solo no hay nada que elegir, y recién se sabe después de pedirle la lista a la liga.
+  var servidorSelect = document.createElement("select");
+  servidorSelect.className = "rc-embed__servidor-select";
+  servidorSelect.hidden = true;
+  servidorSelect.addEventListener("change", function () { cambiarServidor(servidorSelect.value); });
+  topbar.appendChild(servidorSelect);
   var btnReglas = boton("Reglas", function () { abrirModal(modalReglasBackdrop); }, "secondary");
   var btnConexion = boton("Conexión", function () { abrirModal(modalConexionBackdrop); }, "secondary");
   // El puntito va antes del texto (mismo orden que ya usa el botón de Conexión del panel completo),
@@ -104,6 +119,10 @@
   btnConexion.insertBefore(conexionDot, btnConexion.firstChild);
   topbar.appendChild(btnReglas);
   topbar.appendChild(btnConexion);
+  // Slot para "Terminar evento": el botón se rearma en cada poll (ver renderTerminar), así que acá
+  // solo va un contenedor fijo, igual que sancionesFilas con las filas de sanciones.
+  var terminarSlot = el("span", "rc-embed__terminar-slot");
+  topbar.appendChild(terminarSlot);
 
   var start = el("div", "rc-embed__start");
 
@@ -582,11 +601,11 @@
 
   // --------------------------------------------------------------------------------------- red
 
-  function pedido(path, opts) {
+  function pedidoA(base, path, opts) {
     opts = opts || {};
     var headers = { Authorization: "Bearer " + token };
     if (opts.body) headers["Content-Type"] = "application/json";
-    return fetch(API + path, {
+    return fetch(base + path, {
       method: opts.method || "GET",
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -603,6 +622,15 @@
       }
       return res.status === 204 ? null : res.json();
     });
+  }
+
+  function pedido(path, opts) {
+    return pedidoA(API, path, opts);
+  }
+
+  /** Lo único que pide la liga entera y no un servidor puntual: la lista del selector. */
+  function pedidoLiga(path, opts) {
+    return pedidoA(LIGA_API, path, opts);
   }
 
   function ejecutar(path, body) {
@@ -1833,6 +1861,24 @@
     });
   }
 
+  /**
+   * Bloqueado mientras haya incidentes sin revisar — mismo chequeo que hace el servidor, para que
+   * el botón ya muestre por qué no se puede antes de que el click vuelva con un 409.
+   */
+  function renderTerminar(state) {
+    terminarSlot.textContent = "";
+    if (state.pendingIncidents > 0) {
+      var disabled = boton("Terminar evento", null, "secondary");
+      disabled.disabled = true;
+      disabled.title = "Quedan " + state.pendingIncidents + " incidente(s) sin revisar";
+      terminarSlot.appendChild(disabled);
+      return;
+    }
+    terminarSlot.appendChild(
+      botonConfirmacion("terminar-evento", "Terminar evento", function () { ejecutar("/evento/terminar"); }, "peligro")
+    );
+  }
+
   function render(state) {
     renderSesion(state.session);
     renderStart(state);
@@ -1840,6 +1886,7 @@
     renderSanciones(state);
     renderConexionEstado(state);
     renderPitZoneSuggestion(state.pitZoneSuggestion || null);
+    renderTerminar(state);
   }
 
   // ----------------------------------------------------------------------------------- arranque
@@ -1850,8 +1897,49 @@
     });
   }
 
-  cargarReglas().catch(function (err) {
-    mostrarError("No se pudo cargar la configuración: " + err.message);
-  });
-  poll();
+  /** La liga puede tener más de un servidor corriendo a la vez (Spa/GT3, México/F3, Interlagos/M2:
+   * el caso real que motivó esto). Con uno solo, el combo queda oculto — no hay nada que elegir. */
+  function pintarSelectorDeServidores(servidores) {
+    if (servidores.length < 2) return;
+    servidorSelect.innerHTML = "";
+    servidores.forEach(function (s) {
+      var opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.nombre;
+      servidorSelect.appendChild(opt);
+    });
+    servidorSelect.hidden = false;
+  }
+
+  function iniciarConServidor(servidorId) {
+    servidorSelect.value = servidorId;
+    API = origin + "/l/" + encodeURIComponent(slug) + "/s/" + encodeURIComponent(servidorId) + "/api/embed";
+    cargarReglas().catch(function (err) {
+      mostrarError("No se pudo cargar la configuración: " + err.message);
+    });
+    poll();
+  }
+
+  /** Cambiar de servidor desde el combo: se corta el poll del anterior (si no, las dos carreras
+   * terminan mezclando sus respuestas en la misma tabla) y se arranca de cero con el nuevo. */
+  function cambiarServidor(servidorId) {
+    if (pollTimer) clearTimeout(pollTimer);
+    lastState = null;
+    iniciarConServidor(servidorId);
+  }
+
+  pedidoLiga("/servidores")
+    .then(function (data) {
+      var servidores = (data && data.servidores) || [];
+      if (servidores.length === 0) {
+        mostrarError("Esta liga todavía no tiene ningún servidor.");
+        return;
+      }
+      pintarSelectorDeServidores(servidores);
+      // Default al primero — el admin lo cambia desde el combo cuando quiere mirar otra carrera.
+      iniciarConServidor(servidores[0].id);
+    })
+    .catch(function (err) {
+      mostrarError("No se pudo conectar con Race Control: " + err.message);
+    });
 })();
