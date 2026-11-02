@@ -62,6 +62,9 @@
   justify-content: flex-end;
   gap: 8px;
   margin-bottom: 12px;
+  /* Relativo para poder centrar el selector de servidores con position:absolute sin tocarle el
+     flujo a Reglas/Conexión/Terminar evento (ver `.rc-embed__servidor-select`). */
+  position: relative;
 }
 
 /* Empuja Reglas/Conexión al extremo derecho, dejando "Terminar evento" separado a la izquierda —
@@ -71,8 +74,15 @@
 }
 
 /* Mismo tratamiento visual que `.rc-embed__btn--secondary`: es un control más de la topbar, no
-   un formulario. Oculto por JS (`hidden`) mientras la liga tenga un solo servidor. */
+   un formulario. Oculto por JS (`hidden`) mientras la liga tenga un solo servidor.
+   Va arriba al medio: `position:absolute` lo saca del flujo de la topbar (pedido explícito del
+   admin, para encontrarlo siempre en el mismo lugar sin importar cuántos botones tenga al lado), y
+   al salir del flujo Reglas/Conexión/Terminar evento se acomodan entre sí como si no estuviera. */
 .rc-embed__servidor-select {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -137,6 +147,18 @@
   .rc-embed__start .rc-embed__lights-wrap,
   .rc-embed__start .rc-embed__botones {
     justify-self: stretch;
+  }
+  /* Centrado con position:absolute (arriba) se superpone a Reglas/Conexión en un embed angosto:
+     acá vuelve al flujo normal, como primera fila propia arriba de esos botones. */
+  .rc-embed__topbar {
+    flex-wrap: wrap;
+  }
+  .rc-embed__servidor-select {
+    position: static;
+    transform: none;
+    order: -1;
+    flex: 1 1 100%;
+    text-align: center;
   }
 }
 
@@ -664,6 +686,16 @@
   color: var(--text);
   padding: 4px 8px;
   font-family: var(--font-body);
+}
+/* Mismo criterio que el panel (`styles.css`): las flechas nativas no ayudan con valores de varios
+   dígitos, se sacan en todo el embed. */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .rc-embed__row select {
   /* Las opciones de sanción/escalación son texto largo ("Drive-Through (pasar por pits)") y a

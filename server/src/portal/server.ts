@@ -458,15 +458,16 @@ export function createPortal(config: PortalConfig): Portal {
   /**
    * Una fila de la tabla del operador: la cuenta, su liga y en qué estado está cada cosa.
    *
-   * `status`/`sendAddress`/`udpPort` salen del PRIMER servidor de la liga, no de la liga misma —
-   * una liga ya no tiene puerto propio (ver `store.ts`). Con una liga de varios servidores (ver
-   * `POST /ligas/:id/servidores` más abajo), esta fila sigue mostrando solo el primero; el resto se
-   * ve y se elige desde adentro del panel o el embed (selector de servidores) — acá alcanza con
-   * poder crearlos, no con listarlos todos.
+   * `status`/`sendAddress`/`udpPort` a nivel liga siguen saliendo del PRIMER servidor —
+   * compatibilidad con lo que ya pintaba la columna "Motor" antes de que una liga pudiera tener
+   * más de uno. `servidores` es la lista completa: la tabla del operador la usa para la columna
+   * "Servidores" (un modal con una pestaña por servidor, ver `operador.js`), con el detalle y el
+   * historial de CADA UNO, no solo el primero.
    */
   function filaDeAdmin(user: User) {
     const leagues = store.ligasOwnedBy(user.id).map((liga) => {
-      const primero = store.servidoresDeLiga(liga.id)[0];
+      const servidoresDeLaLiga = store.servidoresDeLiga(liga.id);
+      const primero = servidoresDeLaLiga[0];
       return {
         // El id va al panel porque es lo que `POST /api/operador/ligas/:id` necesita para editarla.
         // El slug no sirve: justamente puede cambiar en esa misma llamada.
@@ -477,6 +478,16 @@ export function createPortal(config: PortalConfig): Portal {
         lastError: primero?.lastError,
         sendAddress: primero ? supervisor.sendAddressOf(primero) : "",
         udpPort: primero?.udpPort ?? 0,
+        servidores: servidoresDeLaLiga.map((s) => ({
+          id: s.id,
+          nombre: s.nombre,
+          status: s.status,
+          lastError: s.lastError,
+          sendAddress: supervisor.sendAddressOf(s),
+          udpPort: s.udpPort,
+          createdAt: s.createdAt,
+          conectarUrl: `${baseUrl()}/conectar/${liga.slug}/${s.id}`,
+        })),
       };
     });
     return {
@@ -696,36 +707,39 @@ export function createPortal(config: PortalConfig): Portal {
   });
 
   /**
-   * Historial de sesiones de una liga: lo escribe el worker en su propio `dataDir` (ver
-   * `history/leagueEvents.ts`), y acá se lee directo de disco en vez de pedírselo al worker por
-   * `askWorker`. A propósito: una liga desactivada no tiene worker corriendo, y es justo el caso en
-   * que más falta hace poder revisar qué pasó la última vez que corrió.
+   * Historial de sesiones de UN servidor puntual de una liga: lo escribe el worker en su propio
+   * `dataDir` (ver `history/leagueEvents.ts`), y acá se lee directo de disco en vez de pedírselo al
+   * worker por `askWorker`. A propósito: un servidor desactivado o apagado no tiene worker
+   * corriendo, y es justo el caso en que más falta hace poder revisar qué pasó la última vez.
    *
-   * Es el historial del PRIMER servidor de la liga — mismo criterio que `filaDeAdmin` — porque hoy
-   * nadie tiene más de uno. El día que haga falta elegir cuál, este endpoint pasa a pedir el
-   * servidor explícito; hasta entonces, duplicar esa UI acá sería una pantalla que nadie usa.
+   * Es por servidor, no por liga, desde que una liga puede tener varios (`fsl` con Spa/México/
+   * Interlagos a la vez) — el modal de "Servidores" del operador muestra el historial de cada
+   * pestaña por separado, y mezclar todo en un único listado por liga confundiría de qué evento es
+   * cada carrera.
    */
-  operadorApi.get("/ligas/:id/eventos", (req, res) => {
+  operadorApi.get("/ligas/:id/servidores/:servidorId/eventos", (req, res) => {
     const liga = store.findLiga(req.params.id);
     if (!liga) {
       res.status(404).json({ ok: false, error: "No existe esa liga." });
       return;
     }
-    const primero = store.servidoresDeLiga(liga.id)[0];
-    const eventos = primero ? new LeagueEventsStore(supervisor.dataDirOf(primero.id)).list() : [];
+    const servidor = store.servidoresDeLiga(liga.id).find((s) => s.id === req.params.servidorId);
+    const eventos = servidor ? new LeagueEventsStore(supervisor.dataDirOf(servidor.id)).list() : [];
     res.json({ ok: true, eventos });
   });
 
-  /** Borra una entrada del historial. La que está en curso no se puede borrar — ver `remove` en
-   * `LeagueEventsStore`. */
-  operadorApi.delete("/ligas/:id/eventos/:eventId", (req, res) => {
+  /** Borra una entrada del historial de un servidor. La que está en curso no se puede borrar — ver
+   * `remove` en `LeagueEventsStore`. */
+  operadorApi.delete("/ligas/:id/servidores/:servidorId/eventos/:eventId", (req, res) => {
     const liga = store.findLiga(req.params.id);
     if (!liga) {
       res.status(404).json({ ok: false, error: "No existe esa liga." });
       return;
     }
-    const primero = store.servidoresDeLiga(liga.id)[0];
-    const borrado = primero ? new LeagueEventsStore(supervisor.dataDirOf(primero.id)).remove(req.params.eventId) : false;
+    const servidor = store.servidoresDeLiga(liga.id).find((s) => s.id === req.params.servidorId);
+    const borrado = servidor
+      ? new LeagueEventsStore(supervisor.dataDirOf(servidor.id)).remove(req.params.eventId)
+      : false;
     if (!borrado) {
       res.status(404).json({ ok: false, error: "No existe ese evento, o todavía está en curso." });
       return;

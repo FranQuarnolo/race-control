@@ -160,6 +160,12 @@ body.link-down #card-race {
 .floating-right {
   right: 2.5%;
 }
+/* El selector de servidores va solo acá, centrado: es el control que cambia a qué carrera está
+   mirando el admin, no una acción más de ninguno de los dos costados. */
+.floating-center {
+  left: 50%;
+  transform: translateX(-50%);
+}
 
 .version-tag {
   display: flex;
@@ -229,6 +235,17 @@ body.link-down #card-race {
   background: var(--red);
   color: var(--bg);
   border-color: var(--red);
+}
+
+/* Cerrar sesión: solo ícono, sin texto — es la única acción de la barra que no necesita etiqueta
+   para entenderse, y una flecha de más al lado de "Reglas"/"Sanciones aplicadas" competía por
+   espacio en pantallas angostas. */
+.status-button.icon-only {
+  padding: 7px;
+}
+.status-button.icon-only svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* Switch de modo. Vive entero adentro del cajón de Conexión: el interruptor y el aviso. En los
@@ -1199,6 +1216,14 @@ tbody tr.desconectado .c-driver {
 .penalty-form input.seconds[hidden] {
   display: none;
 }
+.penalty-form .seconds-unit {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: -3px;
+}
+.penalty-form .seconds-unit[hidden] {
+  display: none;
+}
 .penalty-form select:disabled {
   opacity: 0.7;
 }
@@ -1503,6 +1528,17 @@ select {
   width: 130px;
   font-size: 13px;
   font-family: inherit;
+}
+/* Las flechas nativas de un input numérico no ayudan acá: los valores van de a varios dígitos
+   (segundos, km/h, vueltas) y clickearlas de a uno es más lento que escribir el número entero. Se
+   sacan en todos los inputs numéricos, panel y embed por igual. */
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 /* Los números entran en 130 px; las opciones de sanción ("Drive-Through (pasar por pits sin
    parar)") no, y cortadas a la mitad dejan de explicar lo que la etiqueta larga venía a explicar. */
@@ -1850,8 +1886,18 @@ button.secondary.peligro:hover:not(:disabled) {
     right: 3%;
     justify-content: flex-end;
   }
+  /* A 2.5% del medio no entra entre floating-left y floating-right sin superponerse: en celular
+     baja a su propia fila, debajo de las otras dos. Nada de esto se nota con un solo servidor
+     (el caso de hoy): el select sigue `hidden` y `:has()` no agrega el padding de más. */
+  .floating-center {
+    top: 64px;
+    max-width: 94%;
+  }
   main {
     padding-top: 86px;
+  }
+  body:has(#servidor-select:not([hidden])) main {
+    padding-top: 130px;
   }
 
   .modal .row,

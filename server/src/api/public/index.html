@@ -24,10 +24,16 @@
        panel pegada contra "Sanciones aplicadas" para saber de un vistazo qué build corre sin
        tener que abrir Reglas. El panel completo con el encabezado de marca sigue intacto en la
        rama main. -->
-  <div class="floating floating-left">
+  <!-- Centrado arriba, aparte de los dos grupos de los costados: es el control que cambia a qué
+       carrera está mirando el admin, no una acción más de ese costado — pedido explícito de que
+       esté siempre en el mismo lugar, bien visible, sin importar cuántos botones tenga cada lado. -->
+  <div class="floating floating-center">
     <!-- Oculto por CSS/JS mientras la liga tenga un solo servidor — ver `pintarSelectorDeServidores`
          en app.js. Con uno solo, ofrecer "elegir" es una pregunta sin segunda opción. -->
     <select class="status-button" id="servidor-select" hidden></select>
+  </div>
+
+  <div class="floating floating-left">
     <button class="status-button" id="btn-network" aria-haspopup="dialog">
       <span class="dot" aria-hidden="true"></span>
       <span id="btn-network-label">Conexión</span>
@@ -44,6 +50,15 @@
     <span class="version-tag" id="panel-version"></span>
     <button class="status-button" id="btn-penalties" aria-haspopup="dialog">Sanciones aplicadas</button>
     <button class="status-button" id="btn-rules" aria-haspopup="dialog">Reglas</button>
+    <!-- Solo tiene sentido con sesión de portal (login en /l/:slug): el embed de fslmanager.vercel.app
+         no tiene cookie que cerrar, y por eso este botón vive acá (app.js) y no en embed/embed.js. -->
+    <button class="status-button icon-only" id="btn-logout" title="Cerrar sesión" aria-label="Cerrar sesión">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        <polyline points="16 17 21 12 16 7"></polyline>
+        <line x1="21" y1="12" x2="9" y2="12"></line>
+      </svg>
+    </button>
   </div>
 
   <!-- Contacto perdido con el motor. Va encima de todo lo demás, porque lo que anuncia es que
@@ -350,7 +365,7 @@
           </div>
           <div class="row">
             <label for="pr-grace">Tiempo de espera antes de expulsar (s)</label>
-            <input type="number" id="pr-grace" min="10" />
+            <input type="number" id="pr-grace" min="10" inputmode="numeric" />
           </div>
           <p class="muted">
             Con esto activado, el piloto que entre sin la app instalada es expulsado del servidor
@@ -365,9 +380,9 @@
       <div class="tab-panel" data-panel="largada" hidden>
         <section>
           <h3>Largada (vuelta de formación)</h3>
-          <div class="row"><label for="f-threshold">Velocidad máxima (km/h)</label><input type="number" id="f-threshold" /></div>
-          <div class="row"><label for="f-tolerance">Tolerancia (s)</label><input type="number" id="f-tolerance" /></div>
-          <div class="row"><label for="f-grace">Vueltas para cumplirla</label><input type="number" id="f-grace" /></div>
+          <div class="row"><label for="f-threshold">Velocidad máxima (km/h)</label><input type="number" id="f-threshold" inputmode="numeric" /></div>
+          <div class="row"><label for="f-tolerance">Tolerancia (s)</label><input type="number" id="f-tolerance" inputmode="decimal" /></div>
+          <div class="row"><label for="f-grace">Vueltas para cumplirla</label><input type="number" id="f-grace" inputmode="numeric" /></div>
           <div class="row"><label for="f-penalty-type">Sanción</label>
             <select id="f-penalty-type">
               <option value="DT">Drive-Through (pasar por pits)</option>
@@ -383,7 +398,7 @@
           </div>
           <div class="row" id="f-time-penalty-row" hidden>
             <label for="f-time-penalty">Segundos de penalización</label>
-            <input type="number" min="1" max="600" id="f-time-penalty" />
+            <input type="number" min="1" max="600" id="f-time-penalty" inputmode="numeric" />
           </div>
           <button id="btn-save-formation" data-form="formation">Guardar</button>
         </section>
@@ -414,12 +429,12 @@
             Calibración automática para este circuito: <span id="p-zone-suggestion-value"></span>.
             <button type="button" id="btn-use-zone-suggestion" class="btn-mini">Usar esta calibración</button>
           </div>
-          <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" /></div>
-          <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" /></div>
-          <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" /></div>
-          <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" /></div>
-          <div class="row"><label for="p-grace">Vueltas para cumplirla</label><input type="number" id="p-grace" /></div>
-          <div class="row"><label for="p-stopgo">Duración del Stop-and-Go (s)</label><input type="number" id="p-stopgo" /></div>
+          <div class="row"><label for="p-zone-start">Zona de pit — inicio</label><input type="number" step="0.001" min="0" max="1" id="p-zone-start" inputmode="decimal" /></div>
+          <div class="row"><label for="p-zone-end">Zona de pit — fin</label><input type="number" step="0.001" min="0" max="1" id="p-zone-end" inputmode="decimal" /></div>
+          <div class="row"><label for="p-threshold">Velocidad legal (km/h)</label><input type="number" id="p-threshold" inputmode="numeric" /></div>
+          <div class="row"><label for="p-tolerance">Tolerancia (s)</label><input type="number" id="p-tolerance" inputmode="decimal" /></div>
+          <div class="row"><label for="p-grace">Vueltas para cumplirla</label><input type="number" id="p-grace" inputmode="numeric" /></div>
+          <div class="row"><label for="p-stopgo">Duración del Stop-and-Go (s)</label><input type="number" id="p-stopgo" inputmode="decimal" /></div>
           <div class="row"><label for="p-penalty-type">Sanción</label>
             <select id="p-penalty-type">
               <option value="DT">Drive-Through (pasar por pits)</option>
@@ -435,7 +450,7 @@
           </div>
           <div class="row" id="p-time-penalty-row" hidden>
             <label for="p-time-penalty">Segundos de penalización</label>
-            <input type="number" min="1" max="600" id="p-time-penalty" />
+            <input type="number" min="1" max="600" id="p-time-penalty" inputmode="numeric" />
           </div>
           <button id="btn-save-pit" data-form="pit">Guardar</button>
         </section>

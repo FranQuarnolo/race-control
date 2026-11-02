@@ -3,6 +3,42 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.28] — 2026-11-02
+
+### El panel de operación seguía con alert()/confirm()/prompt() nativos, y "Ver historial" ya no tenía sentido por liga
+
+El panel de operación (`/operador`) daba de alta un servidor, cambiaba la contraseña de un admin o
+confirmaba una baja con `alert()`/`confirm()`/`prompt()` nativos del navegador — inconsistente con
+el resto de la app, que desde hace rato tiene su propio sistema de modales (`.modal-backdrop`/
+`.modal`, ver `styles.css`). Además la tabla venía creciendo: con una liga pudiendo correr varios
+servidores desde la 1.26, "Ver historial" dejó de tener sentido por liga —tiene que ser por
+servidor, cada uno con su propio journal— y "Clave nueva" competía en el menú de tres puntos con
+acciones que se usan todos los días.
+
+Se migró todo a modales propios. "Editar" ahora abre un modal completo con los datos de la liga y,
+adentro, el cambio de contraseña: un campo de solo lectura con la clave actual enmascarada —no se
+puede mostrar la de verdad, lo que se guarda es un hash scrypt, no la contraseña— y un botón que
+revela dos campos de contraseña nueva que tienen que coincidir. La columna "Servidores" reemplaza
+al botón suelto de alta: abre un modal con una pestaña por servidor de la liga, cada una con su
+propio historial de sesiones, más una pestaña fija "+ agregar servidor" que arma el mensaje de
+soporte para pedirle al hosting que configure el plugin UDP. "Ver historial" y "Clave nueva" salen
+del menú de tres puntos, que queda con Cobré/Editar/Desactivar.
+
+### Repaso de formularios: flechas de los inputs numéricos, teclado del celular, y el selector de servidores mal ubicado
+
+Los inputs numéricos del panel y del embed perdieron las flechas nativas: con valores de varios
+dígitos —segundos, km/h, vueltas— clickearlas de a una es más lento que escribir el número entero.
+De paso ganaron `inputmode` (`numeric` o `decimal` según el campo) para que el teclado que aparece
+en el celular sea el numérico, no el de texto completo. El campo de segundos de la sanción manual
+del panel completo (`penaltyForm` en `app.js`) solo tenía un `title` invisible indicando que el
+valor es en segundos; ahora tiene un tag "s" a la vista, igual que ya tenía su equivalente del
+embed.
+
+El selector de servidores (`#servidor-select`/`.rc-embed__servidor-select`, agregado en la 1.26)
+vivía adentro del grupo de botones de la izquierda en el panel, y mezclado con Reglas/Conexión en
+el embed. Es el control que cambia a qué carrera está mirando el admin, no una acción más de esos
+grupos: pasa a su propio lugar, arriba al medio, en los dos.
+
 ## [1.27] — 2026-11-02
 
 ### El selector de servidores se veía vacío con una sola liga, y sumar un servidor exigía bajar la app

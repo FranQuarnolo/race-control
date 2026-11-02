@@ -23,6 +23,12 @@ function sinComentarios(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, " ");
 }
 
+/** Para buscar llamadas reales a `confirm()`/`alert()`/`prompt()`: sin esto, un comentario que
+ * solo los MENCIONA (como el que explica por qué ya no se usan) los hace aparecer igual. */
+function sinComentariosJs(js: string): string {
+  return js.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+}
+
 test("todo id que operador.js busca con $() existe en operador.html", () => {
   const js = leer(PORTAL, "operador.js");
   const html = leer(PORTAL, "operador.html");
@@ -75,30 +81,39 @@ test("las clases que arma operador.js para el kebab y el historial tienen regla 
 });
 
 /**
- * Las cuatro acciones que antes eran botones sueltos (Editar, Cobré, Desactivar/Reactivar, Clave
- * nueva) tienen que seguir estando, ahora adentro del menú — perder una en la migración al kebab
- * no se nota en pantalla hasta que alguien la busca y no está.
+ * Las tres acciones destructivas o repetidas del día a día (Cobré, Editar, Desactivar/Reactivar)
+ * tienen que seguir en el menú. "Ver historial" y "Clave nueva" se mudaron: la primera adentro del
+ * modal de Servidores (una pestaña por servidor), la segunda adentro del modal de Editar. Que
+ * desaparezcan del menú es intencional — perder a `abrirServidores` de la columna "Servidores" NO
+ * lo es, y es lo que este test cubre del otro lado.
  */
-test("el menú kebab de la tabla de admins conserva las cuatro acciones y suma el historial", () => {
+test("el menú kebab conserva Cobré/Editar/Desactivar, y la columna Servidores abre su modal", () => {
   const js = leer(PORTAL, "operador.js");
 
   assert.ok(/toggleRowMenu\(/.test(js), "falta `toggleRowMenu`: la tabla de admins quedó con los botones sueltos");
-  for (const accion of ["abrirEdicion(admin)", "cobrar(admin)", "alternar(admin)", "nuevaClave(admin)", "abrirHistorial(admin)"]) {
+  for (const accion of ["abrirEdicion(admin)", "cobrar(admin)", "alternar(admin)"]) {
     assert.ok(js.includes(accion), `el menú de la fila no llama a \`${accion}\``);
   }
+  for (const mudada of ["nuevaClave(admin)", "abrirHistorial(admin)", "agregarServidor(admin)"]) {
+    assert.ok(!js.includes(mudada), `\`${mudada}\` ya no debería llamarse desde la fila: se mudó a un modal`);
+  }
+  assert.ok(js.includes("abrirServidores(admin)"), "la columna Servidores no abre el modal de servidores");
 });
 
 /**
- * El historial se lee y se borra contra `/api/operador/ligas/:id/eventos`, y el borrado pide
- * confirmación de dos clicks — igual criterio que el kick del panel: una sesión borrada no se
- * recupera, así que no puede salir de un click fallido en una tabla que puede repintarse sola.
+ * El historial es por servidor, no por liga, desde que una liga puede tener varios (`fsl` con
+ * Spa/México/Interlagos a la vez) — ver `filaDeAdmin` en `server.ts`. El borrado pide confirmación
+ * de dos clicks, igual criterio que el kick del panel: una sesión borrada no se recupera.
  */
-test("el historial habla con /api/operador/ligas/:id/eventos y el borrado pide dos clicks", () => {
+test("el historial habla con /ligas/:id/servidores/:servidorId/eventos y el borrado pide dos clicks", () => {
   const js = leer(PORTAL, "operador.js");
   const server = leer(DIST, "portal", "server.js");
 
-  assert.ok(server.includes("/ligas/:id/eventos"), "el portal no expone la ruta del historial");
-  assert.ok(js.includes("/eventos"), "operador.js nunca pega contra la ruta del historial");
+  assert.ok(
+    server.includes("/ligas/:id/servidores/:servidorId/eventos"),
+    "el portal no expone la ruta del historial por servidor"
+  );
+  assert.ok(/\/servidores\/.*\/eventos/.test(js), "operador.js nunca pega contra la ruta de historial por servidor");
   assert.ok(/"DELETE"/.test(js), "el borrado de un evento no manda método DELETE");
 
   // Primer click arma, segundo ejecuta: sin la ventana de armado, el primer click ya borraría.
@@ -106,11 +121,23 @@ test("el historial habla con /api/operador/ligas/:id/eventos y el borrado pide d
   assert.ok(/4000/.test(js), "el armado del borrado no se desarma solo a los 4 segundos, como el kick del panel");
 });
 
-test("el modal de detalle existe y se abre desde el botón Ver de cada fila", () => {
-  const js = leer(PORTAL, "operador.js");
+/**
+ * El modal de Servidores reemplazó al `prompt()`/`alert()` de "+ agregar servidor" y al `<dialog>`
+ * nativo de detalle de evento: todos los modales de este panel son `.modal-backdrop`/`.modal`, el
+ * mismo sistema que ya usa el panel de carrera (`api/public/styles.css`).
+ */
+test("los modales de operador.html son .modal-backdrop, no <dialog> ni alert/confirm/prompt nativos", () => {
+  const js = sinComentariosJs(leer(PORTAL, "operador.js"));
   const html = leer(PORTAL, "operador.html");
 
-  assert.ok(html.includes('<dialog id="modal-evento">'), "falta el <dialog> de detalle en operador.html");
+  assert.ok(!/<dialog/.test(html), "quedó un <dialog> nativo en operador.html");
+  assert.ok(!/\bconfirm\(/.test(js), "operador.js todavía usa el confirm() nativo del navegador");
+  assert.ok(!/\bprompt\(/.test(js), "operador.js todavía usa el prompt() nativo del navegador");
+  assert.ok(!/\balert\(/.test(js), "operador.js todavía usa el alert() nativo del navegador");
+
+  for (const id of ["modal-editar", "modal-servidores", "modal-evento", "modal-confirmar"]) {
+    assert.ok(html.includes(`id="${id}"`), `falta el modal #${id} en operador.html`);
+  }
   assert.ok(/verDetalle\(/.test(js), "falta `verDetalle`: el botón Ver de la fila no abre nada");
-  assert.ok(/showModal\(\)/.test(js), "nadie llama a `showModal()`: el <dialog> nunca se muestra");
+  assert.ok(/function confirmar\(/.test(js), "falta el modal de confirmación genérico que reemplaza a confirm()");
 });

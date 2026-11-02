@@ -394,6 +394,29 @@ test("una liga con dos servidores rutea a cada uno por separado, sin mezclar sus
   assert.ok(portal.store.removeServidor(segundo.id));
 });
 
+/**
+ * El modal de "Servidores" del operador (`operador.js`) necesita la lista completa, no solo el
+ * primero: `filaDeAdmin` (`portal/server.ts`) la expone entera para que cada servidor tenga su
+ * propia pestaña, con su propio Send Address e historial.
+ */
+test("la fila del operador trae todos los servidores de la liga, no solo el primero", async () => {
+  const segundo = portal.addServidor(ligaAId, "México F3", { start: false });
+
+  const fila = (await pedir("GET", "/api/operador/admins", { cookie: cookieOp }))
+    .json()
+    .admins.find((a: { email: string }) => a.email === "ana@example.com");
+
+  assert.deepEqual(
+    fila.leagues[0].servidores.map((s: { id: string }) => s.id).sort(),
+    [servidorAId, segundo.id].sort()
+  );
+  const srvSegundo = fila.leagues[0].servidores.find((s: { id: string }) => s.id === segundo.id);
+  assert.equal(srvSegundo.nombre, "México F3");
+  assert.ok(srvSegundo.conectarUrl.includes(segundo.id));
+
+  assert.ok(portal.store.removeServidor(segundo.id));
+});
+
 // --- Portal ---------------------------------------------------------------------------------------
 
 test("sin sesión el portal no cuenta nada de nadie", async () => {
@@ -725,17 +748,24 @@ test("el operador puede elegir la contraseña en vez de que se la generen", asyn
 
 // --- Historial de eventos --------------------------------------------------------------------------
 
-test("el historial de una liga no existe para quien no es operador", async () => {
+test("el historial de un servidor no existe para quien no es operador", async () => {
   const liga = portal.store.findLigaBySlug("liga-a")!;
-  assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieA })).status, 404);
-  assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`)).status, 404);
+  const servidorId = primerServidor(liga.id).id;
+  assert.equal(
+    (await pedir("GET", `/api/operador/ligas/${liga.id}/servidores/${servidorId}/eventos`, { cookie: cookieA })).status,
+    404
+  );
+  assert.equal((await pedir("GET", `/api/operador/ligas/${liga.id}/servidores/${servidorId}/eventos`)).status, 404);
 });
 
 test("una liga que no existe tampoco tiene historial", async () => {
-  assert.equal((await pedir("GET", "/api/operador/ligas/no-existe/eventos", { cookie: cookieOp })).status, 404);
+  assert.equal(
+    (await pedir("GET", "/api/operador/ligas/no-existe/servidores/no-existe/eventos", { cookie: cookieOp })).status,
+    404
+  );
   assert.equal(
     (
-      await pedir("DELETE", "/api/operador/ligas/no-existe/eventos/E1", {
+      await pedir("DELETE", "/api/operador/ligas/no-existe/servidores/no-existe/eventos/E1", {
         cookie: cookieOp,
         headers: { "x-rc-request": "1" },
       })
@@ -744,9 +774,10 @@ test("una liga que no existe tampoco tiene historial", async () => {
   );
 });
 
-test("el operador lee el historial de una liga directo del disco, sin pasar por el worker", async () => {
+test("el operador lee el historial de un servidor directo del disco, sin pasar por el worker", async () => {
   const { liga, admin } = await altaDePrueba("Copa Con Historial", "historial@example.com");
-  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(primerServidor(liga.id).id));
+  const servidorId = primerServidor(liga.id).id;
+  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(servidorId));
   store.startSession({
     track: "ks_barcelona",
     trackConfig: "layout_gp",
@@ -766,7 +797,7 @@ test("el operador lee el historial de una liga directo del disco, sin pasar por 
     incidents: [],
   });
 
-  const res = await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieOp });
+  const res = await pedir("GET", `/api/operador/ligas/${liga.id}/servidores/${servidorId}/eventos`, { cookie: cookieOp });
   assert.equal(res.status, 200, res.body);
   const eventos = res.json().eventos;
   assert.equal(eventos.length, 1);
@@ -781,14 +812,15 @@ test("el operador lee el historial de una liga directo del disco, sin pasar por 
     body: { active: false },
     headers: { "x-rc-request": "1" },
   });
-  const tras = await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieOp });
+  const tras = await pedir("GET", `/api/operador/ligas/${liga.id}/servidores/${servidorId}/eventos`, { cookie: cookieOp });
   assert.equal(tras.status, 200);
   assert.equal(tras.json().eventos.length, 1);
 });
 
 test("un evento en curso no se puede borrar, y uno terminado sí", async () => {
   const { liga } = await altaDePrueba("Copa Para Borrar", "borrar@example.com");
-  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(primerServidor(liga.id).id));
+  const servidorId = primerServidor(liga.id).id;
+  const store = new LeagueEventsStore(portal.supervisor.dataDirOf(servidorId));
   store.startSession({
     track: "ks_monza",
     trackConfig: "",
@@ -799,20 +831,21 @@ test("un evento en curso no se puede borrar, y uno terminado sí", async () => {
   const enCurso = store.list()[0].id;
 
   const headers = { "x-rc-request": "1" };
+  const base = `/api/operador/ligas/${liga.id}/servidores/${servidorId}/eventos`;
 
   // Mientras está en curso, ni el operador lo puede borrar: el worker lo sigue escribiendo.
-  const intento = await pedir("DELETE", `/api/operador/ligas/${liga.id}/eventos/${enCurso}`, { cookie: cookieOp, headers });
+  const intento = await pedir("DELETE", `${base}/${enCurso}`, { cookie: cookieOp, headers });
   assert.equal(intento.status, 404);
 
   store.closeCurrent(null);
-  const borrado = await pedir("DELETE", `/api/operador/ligas/${liga.id}/eventos/${enCurso}`, { cookie: cookieOp, headers });
+  const borrado = await pedir("DELETE", `${base}/${enCurso}`, { cookie: cookieOp, headers });
   assert.equal(borrado.status, 200, borrado.body);
 
-  const eventos = (await pedir("GET", `/api/operador/ligas/${liga.id}/eventos`, { cookie: cookieOp })).json().eventos;
+  const eventos = (await pedir("GET", base, { cookie: cookieOp })).json().eventos;
   assert.equal(eventos.length, 0);
 
   // Un id que no existe también es 404, y no un 200 que no borró nada.
-  const inexistente = await pedir("DELETE", `/api/operador/ligas/${liga.id}/eventos/no-existe`, { cookie: cookieOp, headers });
+  const inexistente = await pedir("DELETE", `${base}/no-existe`, { cookie: cookieOp, headers });
   assert.equal(inexistente.status, 404);
 });
 

@@ -406,6 +406,7 @@
   // -- Largada --
   var campoFThreshold = campoNumero();
   var campoFTolerance = campoNumero();
+  campoFTolerance.inputMode = "decimal";
   var campoFGrace = campoNumero();
   var campoFPenaltyType = selectSancion();
   var campoFEscalation = selectEscalacion();
@@ -460,14 +461,18 @@
   campoPZoneStart.step = "0.001";
   campoPZoneStart.min = "0";
   campoPZoneStart.max = "1";
+  campoPZoneStart.inputMode = "decimal";
   var campoPZoneEnd = campoNumero();
   campoPZoneEnd.step = "0.001";
   campoPZoneEnd.min = "0";
   campoPZoneEnd.max = "1";
+  campoPZoneEnd.inputMode = "decimal";
   var campoPThreshold = campoNumero();
   var campoPTolerance = campoNumero();
+  campoPTolerance.inputMode = "decimal";
   var campoPGrace = campoNumero();
   var campoPStopGo = campoNumero();
+  campoPStopGo.inputMode = "decimal";
   var campoPPenaltyType = selectSancion();
   var campoPEscalation = selectEscalacion();
   var campoPTimePenalty = campoNumero();
@@ -735,6 +740,7 @@
   function campoNumero() {
     var input = document.createElement("input");
     input.type = "number";
+    input.inputMode = "numeric";
     return input;
   }
 
@@ -1037,6 +1043,7 @@
     } else {
       control = document.createElement("input");
       control.type = field.type === "checkbox" ? "checkbox" : "number";
+      if (control.type === "number") control.inputMode = "numeric";
       if (field.min !== undefined) control.min = String(field.min);
       if (field.max !== undefined) control.max = String(field.max);
     }
@@ -1420,6 +1427,7 @@
 
     var seconds = document.createElement("input");
     seconds.type = "number";
+    seconds.inputMode = "numeric";
     seconds.min = "1";
     seconds.max = "600";
     seconds.value = "5";

@@ -180,6 +180,16 @@ function wireDrawers() {
   $("btn-network").addEventListener("click", () => openModal("modal-network"));
   $("btn-rules").addEventListener("click", () => openModal("modal-rules"));
   $("btn-penalties").addEventListener("click", () => openModal("modal-penalties"));
+  // `request("", ...)` pega contra la raíz del dominio: logout es del portal, no de un servidor
+  // puntual ni de la liga (no hay `/l/:slug` delante).
+  $("btn-logout").addEventListener("click", async () => {
+    try {
+      await request("", "/api/portal/logout", { method: "POST" });
+    } catch (_) {
+      // Si falló la llamada la sesión probablemente ya estaba vencida: igual mandamos al login.
+    }
+    window.location.href = "/login";
+  });
   window.addEventListener("hashchange", applyOverlayHash);
   applyOverlayHash();
   wireRulesTabs();
@@ -1726,9 +1736,16 @@ function penaltyForm(incident, card, carRow) {
   seconds.max = "600";
   seconds.value = "5";
   seconds.className = "seconds";
+  seconds.inputMode = "numeric";
   seconds.title = "Segundos que se suman al resultado final";
+  // El campo no tenía ninguna marca visible de que el número es en segundos, solo este `title`
+  // (invisible hasta que alguien pasa el mouse encima). El "s" de al lado lo deja a la vista.
+  const secondsUnit = document.createElement("span");
+  secondsUnit.className = "seconds-unit";
+  secondsUnit.textContent = "s";
   what.addEventListener("change", () => {
     seconds.hidden = what.value !== "TIME";
+    secondsUnit.hidden = seconds.hidden;
   });
 
   const confirm = document.createElement("button");
@@ -1793,7 +1810,7 @@ function penaltyForm(incident, card, carRow) {
   const label = document.createElement("span");
   label.className = "meta";
   label.textContent = "Sancionar a";
-  form.append(label, who, what, seconds, confirm, cancel);
+  form.append(label, who, what, seconds, secondsUnit, confirm, cancel);
   return form;
 }
 
@@ -2320,10 +2337,10 @@ function supportMessage(address) {
   ].join("\n");
 }
 
-// Acá vivía `wireLogout`, el ícono de salir que cerraba la sesión del portal. Esta pantalla no
-// tiene sesión que cerrar: vive incrustada en fslmanager.vercel.app sin login propio (ver el
-// middleware `RC_PUBLIC_LEAGUE` en `portal/server.ts`). El panel completo de la rama main, que sí
-// tiene login, conserva el botón intacto.
+// `wireLogout` vive adentro de `wireDrawers`, al lado de los otros botones de `.floating-right`:
+// esta pantalla SÍ tiene sesión que cerrar cuando se la abre en `/l/:slug` con login propio. El
+// embed Bearer de fslmanager.vercel.app (`embed/embed.js`, HTML aparte) no tiene cookie ni botón
+// de salir — quedó sin tocar a propósito.
 
 // ===================================================================== wizard de primer arranque
 

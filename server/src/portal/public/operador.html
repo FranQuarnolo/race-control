@@ -25,7 +25,8 @@
     <form class="sub-caja" id="form-alta" hidden>
       <h2>Liga nueva</h2>
       <p class="muted">
-        Se crea la liga y la cuenta de su admin en un solo paso. La contraseña se muestra una vez.
+        Se crea la liga, su primer servidor y la cuenta de su admin en un solo paso. La contraseña
+        se muestra una vez.
       </p>
 
       <div class="campos">
@@ -54,47 +55,6 @@
       <p class="error" id="error-alta" hidden></p>
     </form>
 
-    <!-- Edición. Un solo formulario para los dos lados del alta: la liga y la cuenta que entra. -->
-    <form class="sub-caja" id="form-editar" hidden>
-      <h2>Editar <span id="editar-quien"></span></h2>
-      <p class="muted">
-        Se cambia solo lo que toques. Lo que dejes como está, queda como está.
-      </p>
-
-      <div class="campos">
-        <div>
-          <label for="ed-leagueName">Nombre de la liga</label>
-          <input id="ed-leagueName" type="text" autocomplete="off" />
-          <p class="ayuda aviso" id="ed-aviso-nombre" hidden>
-            Al guardarlo se reinicia el motor de la liga: unos segundos sin escuchar telemetría.
-          </p>
-        </div>
-        <div>
-          <label for="ed-slug">Dirección</label>
-          <input id="ed-slug" type="text" autocomplete="off" />
-          <p class="ayuda aviso" id="ed-aviso-slug" hidden>
-            Cambia el link del panel y el de los pilotos. El anterior deja de funcionar.
-          </p>
-        </div>
-        <div>
-          <label for="ed-email">Email del admin</label>
-          <input id="ed-email" type="email" autocomplete="off" />
-          <p class="ayuda">Es con lo que entra al panel.</p>
-        </div>
-        <div>
-          <label for="ed-password">Contraseña nueva <span class="muted">(opcional)</span></label>
-          <input id="ed-password" type="text" autocomplete="off" placeholder="dejalo vacío para no tocarla" />
-          <p class="ayuda">Mínimo 8 caracteres. Al cambiarla se cierran sus sesiones abiertas.</p>
-        </div>
-      </div>
-
-      <div class="botonera">
-        <button type="submit">Guardar</button>
-        <button type="button" id="btn-cancelar-editar" class="secundario">Cancelar</button>
-      </div>
-      <p class="error" id="error-editar" hidden></p>
-    </form>
-
     <!-- Credenciales recién creadas. Es lo único que no se puede volver a ver. -->
     <div class="sub-caja credenciales" id="credenciales" hidden>
       <h2>Pasale esto al admin</h2>
@@ -112,36 +72,15 @@
       </p>
     </div>
 
-    <!-- Historial de sesiones de una liga. Se abre desde "Ver historial" en el menú de la fila. -->
-    <div class="sub-caja" id="historial" hidden>
-      <h2>Historial de <span id="historial-liga"></span></h2>
-      <p class="muted">Una fila por sesión del servidor: práctica, clasificación o carrera.</p>
-      <table class="tabla" id="tabla-historial">
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Circuito</th>
-            <th>Sesión</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="filas-historial"></tbody>
-      </table>
-      <p class="muted" id="sin-eventos" hidden>Todavía no hay ninguna sesión registrada.</p>
-      <div class="botonera">
-        <button type="button" id="btn-cerrar-historial" class="secundario">Cerrar</button>
-      </div>
-    </div>
-
     <table class="tabla" id="tabla">
       <thead>
         <tr>
-          <th>Admin</th>
+          <th>Usuario</th>
           <th>Liga</th>
+          <th>Servidores</th>
+          <th>Último ingreso</th>
           <th>Motor</th>
           <th>Cuota</th>
-          <th>Último ingreso</th>
           <th>Acciones</th>
         </tr>
       </thead>
@@ -153,62 +92,202 @@
   <p class="error" id="error" hidden></p>
   <p class="pie">Race Control <span id="version"></span></p>
 
-  <!-- Detalle de una sesión: lo mismo que ya baja /api/report, mostrado en lugar de descargado. -->
-  <dialog id="modal-evento">
-    <h2 id="evento-titulo"></h2>
-    <p class="muted" id="evento-subtitulo"></p>
+  <!-- ======================================================================= modal: editar -->
+  <div class="modal-backdrop" id="modal-editar" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-editar-title">
+      <header>
+        <h2 id="modal-editar-title">Editar <span id="editar-quien"></span></h2>
+        <button class="btn-close" type="button" id="btn-cerrar-editar" aria-label="Cerrar">&times;</button>
+      </header>
+      <form id="form-editar">
+        <p class="muted">Se cambia solo lo que toques. Lo que dejes como está, queda como está.</p>
 
-    <h3>Clasificación</h3>
-    <table class="tabla" id="tabla-evento-clasificacion">
-      <thead>
-        <tr>
-          <th>Pos.</th>
-          <th>Piloto</th>
-          <th>Auto</th>
-          <th>Vueltas</th>
-          <th>Mejor vuelta</th>
-          <th>Penalización</th>
-          <th>Estado</th>
-        </tr>
-      </thead>
-      <tbody id="filas-evento-clasificacion"></tbody>
-    </table>
-    <p class="muted" id="evento-sin-clasificacion" hidden>Sin clasificación todavía.</p>
+        <div class="campos">
+          <div>
+            <label for="ed-leagueName">Nombre de la liga</label>
+            <input id="ed-leagueName" type="text" autocomplete="off" />
+            <p class="ayuda aviso" id="ed-aviso-nombre" hidden>
+              Al guardarlo se reinicia el motor de la liga: unos segundos sin escuchar telemetría.
+            </p>
+          </div>
+          <div>
+            <label for="ed-slug">Dirección</label>
+            <input id="ed-slug" type="text" autocomplete="off" />
+            <p class="ayuda aviso" id="ed-aviso-slug" hidden>
+              Cambia el link del panel y el de los pilotos. El anterior deja de funcionar.
+            </p>
+          </div>
+          <div>
+            <label for="ed-email">Email del admin</label>
+            <input id="ed-email" type="email" autocomplete="off" />
+            <p class="ayuda">Es con lo que entra al panel.</p>
+          </div>
+        </div>
 
-    <h3>Sanciones</h3>
-    <table class="tabla" id="tabla-evento-sanciones">
-      <thead>
-        <tr>
-          <th>Piloto</th>
-          <th>Origen</th>
-          <th>Tipo</th>
-          <th>Estado</th>
-          <th>Motivo</th>
-        </tr>
-      </thead>
-      <tbody id="filas-evento-sanciones"></tbody>
-    </table>
-    <p class="muted" id="evento-sin-sanciones" hidden>Sin sanciones.</p>
+        <section>
+          <h3>Contraseña</h3>
+          <div class="row-stack">
+            <label for="ed-password-actual">Contraseña actual</label>
+            <input id="ed-password-actual" type="text" value="••••••••" readonly disabled />
+          </div>
+          <button type="button" class="secundario" id="btn-toggle-clave">Cambiar contraseña</button>
+          <div id="ed-clave-nueva" hidden>
+            <div class="campos">
+              <div>
+                <label for="ed-password-1">Contraseña nueva</label>
+                <input id="ed-password-1" type="password" autocomplete="new-password" />
+              </div>
+              <div>
+                <label for="ed-password-2">Repetir contraseña nueva</label>
+                <input id="ed-password-2" type="password" autocomplete="new-password" />
+              </div>
+            </div>
+            <p class="ayuda">Mínimo 8 caracteres, y las dos tienen que coincidir.</p>
+          </div>
+        </section>
 
-    <h3>Incidentes</h3>
-    <table class="tabla" id="tabla-evento-incidentes">
-      <thead>
-        <tr>
-          <th>Tipo</th>
-          <th>Pilotos</th>
-          <th>Vuelta</th>
-          <th>Detalle</th>
-          <th>Resolución</th>
-        </tr>
-      </thead>
-      <tbody id="filas-evento-incidentes"></tbody>
-    </table>
-    <p class="muted" id="evento-sin-incidentes" hidden>Sin incidentes.</p>
-
-    <div class="botonera">
-      <button type="button" id="btn-cerrar-modal-evento" class="secundario">Cerrar</button>
+        <div class="botonera">
+          <button type="submit">Guardar</button>
+          <button type="button" id="btn-cancelar-editar" class="secundario">Cancelar</button>
+        </div>
+        <p class="error" id="error-editar" hidden></p>
+      </form>
     </div>
-  </dialog>
+  </div>
+
+  <!-- ==================================================================== modal: servidores -->
+  <!-- Una pestaña por servidor de la liga, más una pestaña fija "+" para sumar uno nuevo. Las
+       pestañas de servidores existentes se arman en JS (son tantas como servidores tenga la liga);
+       la del "+" es la única fija de este HTML. -->
+  <div class="modal-backdrop" id="modal-servidores" hidden>
+    <div class="modal modal-tabs" role="dialog" aria-modal="true" aria-labelledby="modal-servidores-title">
+      <header>
+        <h2 id="modal-servidores-title">Servidores de <span id="srv-liga-nombre"></span></h2>
+        <button class="btn-close" type="button" id="btn-cerrar-servidores" aria-label="Cerrar">&times;</button>
+      </header>
+
+      <div class="tabs" role="tablist" id="srv-tabs">
+        <button class="tab" type="button" role="tab" aria-selected="false" data-tab="nuevo" id="tab-nuevo">+ Nuevo</button>
+      </div>
+
+      <div id="srv-panels">
+        <div class="tab-panel" id="srv-panel-nuevo" data-panel="nuevo" hidden>
+          <section>
+            <h3>Agregar servidor</h3>
+            <p class="muted">
+              Arranca solo, igual que al dar de alta la liga. El admin lo ve apenas tenga dos o más
+              para elegir.
+            </p>
+            <div class="row-stack">
+              <label for="srv-nuevo-nombre">Nombre del servidor nuevo</label>
+              <input type="text" id="srv-nuevo-nombre" autocomplete="off" placeholder="México F3" />
+            </div>
+            <button type="button" id="btn-crear-servidor">Crear servidor</button>
+            <p class="error" id="error-servidor-nuevo" hidden></p>
+          </section>
+          <section id="srv-nuevo-resultado" hidden>
+            <h3>Listo: <span id="srv-nuevo-resultado-nombre"></span></h3>
+            <p class="muted">
+              Pegale este mensaje al soporte de su hosting para que configure el plugin UDP en esta
+              dirección — ese campo casi nunca es self-service, así que lo normal es que lo tengan
+              que hacer ellos desde un ticket.
+            </p>
+            <div class="row-stack">
+              <label for="srv-nuevo-mensaje">Mensaje para el soporte del hosting</label>
+              <textarea id="srv-nuevo-mensaje" rows="14" readonly></textarea>
+            </div>
+            <button type="button" class="secundario" id="btn-copiar-mensaje-soporte">Copiar mensaje</button>
+            <div class="row-stack">
+              <label for="srv-nuevo-link">Link para que el admin conecte este servidor</label>
+              <input type="text" id="srv-nuevo-link" readonly />
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detalle de una sesión del historial: lo mismo que ya baja /api/report, mostrado en lugar de
+       descargado. Se abre encima del modal de Servidores. -->
+  <div class="modal-backdrop" id="modal-evento" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="evento-titulo">
+      <header>
+        <h2 id="evento-titulo"></h2>
+        <button class="btn-close" type="button" id="btn-cerrar-modal-evento" aria-label="Cerrar">&times;</button>
+      </header>
+      <p class="muted" id="evento-subtitulo"></p>
+
+      <section>
+        <h3>Clasificación</h3>
+        <table class="tabla" id="tabla-evento-clasificacion">
+          <thead>
+            <tr>
+              <th>Pos.</th>
+              <th>Piloto</th>
+              <th>Auto</th>
+              <th>Vueltas</th>
+              <th>Mejor vuelta</th>
+              <th>Penalización</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="filas-evento-clasificacion"></tbody>
+        </table>
+        <p class="muted" id="evento-sin-clasificacion" hidden>Sin clasificación todavía.</p>
+      </section>
+
+      <section>
+        <h3>Sanciones</h3>
+        <table class="tabla" id="tabla-evento-sanciones">
+          <thead>
+            <tr>
+              <th>Piloto</th>
+              <th>Origen</th>
+              <th>Tipo</th>
+              <th>Estado</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody id="filas-evento-sanciones"></tbody>
+        </table>
+        <p class="muted" id="evento-sin-sanciones" hidden>Sin sanciones.</p>
+      </section>
+
+      <section>
+        <h3>Incidentes</h3>
+        <table class="tabla" id="tabla-evento-incidentes">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Pilotos</th>
+              <th>Vuelta</th>
+              <th>Detalle</th>
+              <th>Resolución</th>
+            </tr>
+          </thead>
+          <tbody id="filas-evento-incidentes"></tbody>
+        </table>
+        <p class="muted" id="evento-sin-incidentes" hidden>Sin incidentes.</p>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================================================================== modal: confirmación -->
+  <!-- Reemplaza los `confirm()` nativos de cobrar/activar-desactivar: mismo lineamiento visual que
+       el resto, y no bloquea el hilo de una pantalla que puede tener otra pestaña del operador
+       mirando la misma liga. -->
+  <div class="modal-backdrop" id="modal-confirmar" hidden>
+    <div class="modal angosta" role="alertdialog" aria-modal="true" aria-labelledby="confirmar-titulo">
+      <header>
+        <h2 id="confirmar-titulo"></h2>
+      </header>
+      <p class="muted" id="confirmar-mensaje"></p>
+      <div class="botonera">
+        <button type="button" id="btn-confirmar-ok"></button>
+        <button type="button" id="btn-confirmar-cancelar" class="secundario">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/portal.js"></script>
   <script src="/operador.js"></script>
