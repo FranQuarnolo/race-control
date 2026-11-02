@@ -192,6 +192,12 @@ body.link-down #card-race {
   border-color: var(--accent);
   color: var(--accent);
 }
+/* Mismo bug que ya documenta `.empty`/`#wizard-overlay` más abajo: sin esto, el `display: flex` de
+   `.status-button` le gana a la regla nativa del navegador para `[hidden]`, y el combo quedaba a la
+   vista (vacío) con una sola liga porque `select.hidden = true` no alcanzaba para ocultarlo. */
+#servidor-select[hidden] {
+  display: none;
+}
 .status-button .dot {
   width: 9px;
   height: 9px;

@@ -3,6 +3,28 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.27] — 2026-11-02
+
+### El selector de servidores se veía vacío con una sola liga, y sumar un servidor exigía bajar la app
+
+Al probar la 1.26 contra una liga real, el combo del selector (`#servidor-select`, en el panel)
+quedaba siempre visible y vacío aunque la liga tuviera un único servidor. Causa: `.status-button`
+define `display: flex` sin condición, y le gana a la regla nativa del navegador para `[hidden]` —el
+mismo bug de CSS que ya está documentado y resuelto para `.empty`, `#wizard-overlay` y el resto de
+esa familia en `styles.css`. A este elemento nuevo le faltó la excepción.
+
+Aparte, la 1.26 solo dejaba agregar un servidor a una liga existente por CLI (`agregar-servidor`),
+que exige el portal apagado —reescribe `portal.json` por fuera del proceso que lo tiene en
+memoria, y quien escribe segundo pisa al primero—. Tenía sentido mientras fuera un caso raro; dejó
+de tenerlo en cuanto hizo falta hacerlo más de una vez para probar el selector contra una liga real.
+Se agregó `POST /api/operador/ligas/:id/servidores` y un botón "+ agregar servidor" en `/operador`,
+que llaman al mismo `addServidor` que ya usa el alta de liga pero corriendo dentro del proceso
+vivo — cero downtime, no hay archivo que se pise.
+
+De paso, se reordenó el menú de tres puntitos de `/operador` por frecuencia de uso real (Cobré y
+Ver historial arriba, Desactivar siempre al final) en vez del orden en que se fueron agregando los
+botones con el tiempo.
+
 ## [1.26] — 2026-10-31
 
 ### Una liga de verdad corre varios servidores de AC a la vez, y el modelo era 1:1

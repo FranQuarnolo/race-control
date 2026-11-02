@@ -169,11 +169,15 @@ function toggleRowMenu(admin, anchor) {
     menu.appendChild(b);
   };
 
-  item("Editar", "", () => abrirEdicion(admin));
+  // Orden por frecuencia de uso real: lo rutinario (cobrar, revisar historial) arriba, lo
+  // ocasional en el medio, y lo destructivo (Desactivar) siempre al final — mismo criterio por el
+  // que ya tiene su propia clase "peligro".
   item("Cobré", "", () => cobrar(admin));
-  item(admin.active ? "Desactivar" : "Reactivar", admin.active ? "peligro" : "", () => alternar(admin));
-  item("Clave nueva", "", () => nuevaClave(admin));
   item("Ver historial", "", () => abrirHistorial(admin), admin.leagues.length === 0);
+  item("Editar", "", () => abrirEdicion(admin));
+  item("+ agregar servidor", "", () => agregarServidor(admin), admin.leagues.length === 0);
+  item("Clave nueva", "", () => nuevaClave(admin));
+  item(admin.active ? "Desactivar" : "Reactivar", admin.active ? "peligro" : "", () => alternar(admin));
 
   document.body.appendChild(menu);
   const r = anchor.getBoundingClientRect();
@@ -253,6 +257,23 @@ async function nuevaClave(admin) {
   if (!confirm("Generar una contraseña nueva para " + admin.email + "?\n\nLa anterior deja de valer y se cierran sus sesiones.")) return;
   const res = await api("/api/operador/admins/" + admin.id + "/clave", {});
   mostrarCredenciales({ email: admin.email, password: res.password });
+  await recargar();
+}
+
+/** Un servidor más para la primera liga del admin (ver nota en `filaDeAdmin`, server.ts: con una
+ * sola cuenta por admin, "la primera" es "la única"). Arranca solo — igual que al dar de alta la
+ * liga— y el selector del panel/embed lo suma apenas tiene dos o más para elegir. */
+async function agregarServidor(admin) {
+  const liga = admin.leagues[0];
+  const nombre = (prompt('Nombre del servidor nuevo (ej. "México F3"):') || "").trim();
+  if (!nombre) return;
+  const res = await api("/api/operador/ligas/" + liga.id + "/servidores", { nombre });
+  const direccion = res.servidor.sendAddress || "sin IP pública configurada";
+  alert(
+    "Servidor creado: " + res.servidor.nombre +
+      "\n\nSend Address (para el UDP Plugin Address de esa carrera en su hosting):\n" + direccion +
+      "\n\nLink para que el admin lo conecte:\n" + res.conectarUrl
+  );
   await recargar();
 }
 

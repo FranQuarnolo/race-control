@@ -459,10 +459,10 @@ export function createPortal(config: PortalConfig): Portal {
    * Una fila de la tabla del operador: la cuenta, su liga y en qué estado está cada cosa.
    *
    * `status`/`sendAddress`/`udpPort` salen del PRIMER servidor de la liga, no de la liga misma —
-   * una liga ya no tiene puerto propio (ver `store.ts`). Hoy todo admin tiene una liga con un solo
-   * servidor, así que "el primero" es "el único" y esta tabla no necesita cambiar de forma. El día
-   * que un admin tenga varios, esta fila sigue mostrando el primero y el resto se ve adentro del
-   * panel (selector de servidores) — la tabla del operador no es el lugar para administrar eso.
+   * una liga ya no tiene puerto propio (ver `store.ts`). Con una liga de varios servidores (ver
+   * `POST /ligas/:id/servidores` más abajo), esta fila sigue mostrando solo el primero; el resto se
+   * ve y se elige desde adentro del panel o el embed (selector de servidores) — acá alcanza con
+   * poder crearlos, no con listarlos todos.
    */
   function filaDeAdmin(user: User) {
     const leagues = store.ligasOwnedBy(user.id).map((liga) => {
@@ -655,6 +655,44 @@ export function createPortal(config: PortalConfig): Portal {
 
     const actualizada = store.findLiga(liga.id)!;
     res.json({ ok: true, league: { slug: actualizada.slug, name: actualizada.name } });
+  });
+
+  /**
+   * Un servidor más para una liga que ya tiene admin y token de embed propios — el caso real de
+   * `fsl` corriendo Spa/GT3, México/F3 e Interlagos/M2 a la vez bajo la misma cuenta.
+   *
+   * Hasta acá esto era solo un comando de CLI (`agregar-servidor`), a propósito: los comandos de
+   * escritura del CLI exigen el portal apagado, porque reescriben `portal.json` por fuera del
+   * proceso que lo tiene en memoria. Ese costo (bajar la app para sumar un servidor) dejó de tener
+   * sentido en cuanto una liga real necesitó hacerlo más de una vez — este endpoint corre DENTRO
+   * del proceso vivo, con el mismo `addServidor` que ya usa `createLiga`, así que no hay archivo
+   * que se pise: cero downtime.
+   */
+  operadorApi.post("/ligas/:id/servidores", (req, res) => {
+    const liga = store.findLiga(req.params.id);
+    if (!liga) {
+      res.status(404).json({ ok: false, error: "No existe esa liga." });
+      return;
+    }
+    const nombre = String((req.body ?? {}).nombre ?? "").trim().slice(0, 80);
+    if (!nombre) {
+      res.status(400).json({ ok: false, error: "El servidor necesita un nombre." });
+      return;
+    }
+    try {
+      const servidor = addServidor(liga.id, nombre);
+      res.json({
+        ok: true,
+        servidor: {
+          id: servidor.id,
+          nombre: servidor.nombre,
+          sendAddress: supervisor.sendAddressOf(servidor),
+        },
+        conectarUrl: `${baseUrl()}/conectar/${liga.slug}/${servidor.id}`,
+      });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   /**
