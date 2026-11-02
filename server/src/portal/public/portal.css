@@ -310,10 +310,11 @@ input[type="date"] {
   font-family: inherit;
 }
 
-/* Aclaración debajo de un campo. Va pegada al input, no al siguiente: el margen de arriba es
-   negativo porque el input ya trae el suyo abajo y si no quedaría flotando en el medio. */
+/* Aclaración debajo de un campo. Separada del input (no pegada: los inputs no traen margen propio
+   abajo, así que un margen negativo acá los solapaba) pero más cerca de él que del siguiente label,
+   para que se lea como parte de ese campo y no como un renglón suelto entre dos. */
 .ayuda {
-  margin: -8px 0 12px;
+  margin: 6px 0 12px;
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--muted);
@@ -491,7 +492,10 @@ input[type="date"] {
 }
 .modal header h2 { flex: 1 1 auto; font-size: 16px; margin: 0; }
 
-.modal-tabs { width: min(640px, 94vw); height: 640px; max-height: 90vh; }
+/* Más ancho que el default de `.modal`: con 640px el borde de los inputs de cada pestaña (el
+   "Nombre del servidor nuevo", el link para conectar) quedaba contra el límite del recorte
+   horizontal del modal (`.modal { overflow-x: hidden }` vía el `overflow` corto), sin aire. */
+.modal-tabs { width: min(760px, 94vw); height: 640px; max-height: 90vh; }
 
 .tabs {
   display: flex;

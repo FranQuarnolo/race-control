@@ -77,12 +77,16 @@
    un formulario. Oculto por JS (`hidden`) mientras la liga tenga un solo servidor.
    Va arriba al medio: `position:absolute` lo saca del flujo de la topbar (pedido explícito del
    admin, para encontrarlo siempre en el mismo lugar sin importar cuántos botones tenga al lado), y
-   al salir del flujo Reglas/Conexión/Terminar evento se acomodan entre sí como si no estuviera. */
+   al salir del flujo Reglas/Conexión/Terminar evento se acomodan entre sí como si no estuviera.
+   Un poco más arriba del centro exacto de la fila (-62% en vez de -50%) y un poco más ancho que el
+   contenido mínimo: centrado "a la mitad en punto" quedaba más pegado al contenido de abajo que
+   Reglas/Conexión a los suyos, por ser un control más alto que esos botones. */
 .rc-embed__servidor-select {
   position: absolute;
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -62%);
+  min-width: 150px;
   font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -93,6 +97,21 @@
   border-radius: calc(var(--radius) / 2);
   padding: 6px 10px;
   cursor: pointer;
+}
+
+/* Al lado del selector: qué circuito tiene cargado el servidor elegido, porque el nombre que el
+   admin le haya puesto al crearlo (`servidor.nombre`) puede no decir nada de la carrera en sí. */
+.rc-embed__servidor-circuito {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(calc(-50% + 90px), -62%);
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .rc-embed__dot {
@@ -156,6 +175,15 @@
   .rc-embed__servidor-select {
     position: static;
     transform: none;
+    order: -1;
+    flex: 1 1 100%;
+    text-align: center;
+  }
+  /* Mismo criterio que el select: vuelve al flujo, debajo de él en su propia fila. */
+  .rc-embed__servidor-circuito {
+    position: static;
+    transform: none;
+    margin-left: 0;
     order: -1;
     flex: 1 1 100%;
     text-align: center;

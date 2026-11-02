@@ -780,6 +780,7 @@ function pintarSelectorDeServidores(servidores) {
   const select = $("servidor-select");
   if (servidores.length < 2) {
     select.hidden = true;
+    $("servidor-circuito").hidden = true;
     return;
   }
   const actualId = BASE.split("/s/")[1];
@@ -788,10 +789,46 @@ function pintarSelectorDeServidores(servidores) {
     const option = document.createElement("option");
     option.value = servidor.id;
     option.textContent = servidor.nombre;
+    // Para `servidorSeleccionadoActivo()`: con el servidor parado no tiene sentido invitar a
+    // arrancar la formación, aunque el combo en sí siga mostrándolo como opción.
+    option.dataset.status = servidor.status;
     select.appendChild(option);
   }
   select.value = actualId;
   select.hidden = false;
+  $("servidor-circuito").hidden = false;
+}
+
+/** `false` solo cuando hay selector (dos o más servidores) Y el elegido no está `running`: con un
+ * solo servidor el concepto no aplica, y ahí siempre se considera activo. */
+function servidorSeleccionadoActivo() {
+  const select = $("servidor-select");
+  if (select.hidden) return true;
+  const opt = select.selectedOptions[0];
+  return !opt || opt.dataset.status === "running";
+}
+
+/** `ks_barcelona` → `Barcelona`. Mismo criterio que `prettyTrack`/`prettyLayout` en
+ * `report/raceReport.ts`: no hay paquete compartido entre servidor y portal, así que se repite acá
+ * la versión mínima que necesita este rótulo. */
+const PREFIJOS_PISTA = /^(ks_|acu_|rt_|at_|pm_|tcl_|vrc_)/i;
+function prettyTrackName(session) {
+  if (!session || !session.track) return "";
+  const base = session.track.replace(PREFIJOS_PISTA, "").replace(/[_-]+/g, " ").trim();
+  const nombre = base ? base.charAt(0).toUpperCase() + base.slice(1) : session.track;
+  if (!session.trackConfig) return nombre;
+  const layout = session.trackConfig.replace(/^layout_/i, "").replace(/[_-]+/g, " ").trim();
+  if (!layout) return nombre;
+  const capa = layout.length <= 4 ? layout.toUpperCase() : layout.charAt(0).toUpperCase() + layout.slice(1);
+  return nombre + " · " + capa;
+}
+
+/** Al lado del selector: qué circuito tiene cargado CADA servidor es lo que de verdad identifica
+ * la carrera, más allá del nombre figurativo que el admin le haya puesto al crearlo. */
+function renderServidorCircuito(session) {
+  const el = $("servidor-circuito");
+  if (el.hidden) return;
+  el.textContent = prettyTrackName(session) || "—";
 }
 
 /** Cambia de servidor sin recargar: reescribe `BASE` (de donde leen `api()`/`post()` y el snippet
@@ -2109,8 +2146,10 @@ function renderStart(lightState, session) {
     $("start-hint").textContent = "";
     return;
   }
+  // Con el servidor seleccionado parado, invitar a "arrancar la formación" es una instrucción para
+  // una carrera que todavía no existe — se calla en vez de confundir.
   const hints = {
-    idle: "Arrancá la formación cuando la parrilla esté completa.",
+    idle: servidorSeleccionadoActivo() ? "Arrancá la formación cuando la parrilla esté completa." : "",
     formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
   };
   $("start-hint").textContent = hints[lightState] || "";
@@ -2192,6 +2231,7 @@ async function refresh() {
   renderStart(state.lightState, state.session);
   renderLights(state.lightState);
   renderSessionIndicator(state.session);
+  renderServidorCircuito(state.session);
   renderFinishedReport(state);
   // Los grupos de incidentes van antes de pintar la tabla: cada fila lee de ahí sus columnas de
   // Cuts/Insi y el contenido de su propio detalle.

@@ -161,10 +161,33 @@ body.link-down #card-race {
   right: 2.5%;
 }
 /* El selector de servidores va solo acá, centrado: es el control que cambia a qué carrera está
-   mirando el admin, no una acción más de ninguno de los dos costados. */
+   mirando el admin, no una acción más de ninguno de los dos costados. Un poco más arriba que
+   Conexión/Sanciones (10px contra los 14px de `.floating`) y el propio `<select>` un poco más
+   ancho (`#servidor-select` más abajo): así queda separado de la tabla a la misma distancia que el
+   resto de la barra, en vez de sentirse más pegado por ser un control más alto que los botones. */
 .floating-center {
   left: 50%;
+  top: 10px;
   transform: translateX(-50%);
+}
+#servidor-select {
+  min-width: 170px;
+}
+
+/* Al lado del selector: qué circuito tiene cargado el servidor elegido, para que el nombre
+   figurativo que el admin le puso al crearlo no sea la única pista de cuál es cuál. */
+.servidor-circuito {
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.servidor-circuito[hidden] {
+  display: none;
 }
 
 .version-tag {

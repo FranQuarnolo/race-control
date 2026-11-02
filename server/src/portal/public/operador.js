@@ -461,6 +461,13 @@ function panelServidor(servidor) {
   filaLink.appendChild(inputLink);
   datos.appendChild(filaLink);
 
+  const filaBorrar = el("div", "row");
+  filaBorrar.appendChild(el("label", "", "Borrar"));
+  const contBorrar = el("span");
+  contBorrar.appendChild(boton("Borrar servidor", "peligro", () => borrarServidor(servidor)));
+  filaBorrar.appendChild(contBorrar);
+  datos.appendChild(filaBorrar);
+
   panel.appendChild(datos);
 
   const historial = el("section");
@@ -700,6 +707,36 @@ async function crearServidor() {
     $("error-servidor-nuevo").hidden = false;
   } finally {
     btn.disabled = false;
+  }
+}
+
+/**
+ * Borra un servidor entero de la liga (no una entrada del historial). A diferencia del borrado de
+ * eventos de la tabla de historial, que pide doble click porque son muchas filas repetidas, esto
+ * aparece una sola vez por pestaña — el modal de confirmación genérico (mismo que usa `alternar`
+ * para desactivar una cuenta) alcanza y es más visible para algo que corta la conexión del
+ * hosting.
+ */
+async function borrarServidor(servidor) {
+  const liga = servidoresAdmin.liga;
+  const ok = await confirmar(
+    "Borrar servidor",
+    "Se borra \"" + servidor.nombre + "\" y se corta la conexión con el hosting. " +
+      "El historial que ya tenga guardado en disco no se toca.",
+    { labelOk: "Borrar servidor", peligro: true }
+  );
+  if (!ok) return;
+
+  await api("/api/operador/ligas/" + liga.id + "/servidores/" + servidor.id, undefined, "DELETE");
+
+  await recargar();
+  const actualizado = admins.find((a) => a.id === servidoresAdmin.admin.id);
+  const ligaActualizada = actualizado && actualizado.leagues.find((l) => l.id === liga.id);
+  if (actualizado && ligaActualizada) {
+    servidoresAdmin = { admin: actualizado, liga: ligaActualizada };
+    pintarTabsServidores(ligaActualizada);
+    const primero = ligaActualizada.servidores[0];
+    seleccionarTabServidor(primero ? primero.id : "nuevo");
   }
 }
 

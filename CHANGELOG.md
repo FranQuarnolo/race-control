@@ -3,6 +3,40 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.29] — 2026-11-02
+
+### Borrar un servidor pedía reinstalar la liga entera, y varios detalles de pulido quedaron sueltos de la 1.28
+
+No había forma de sacar un servidor de una liga una vez creado — ni con error de tipeo en el
+nombre, ni para dar de baja una carrera que ya terminó, había que convivir con él. Se agregó
+"Borrar servidor" al modal de Servidores de `/operador`: para el worker antes de sacarlo del store
+(si no, `usedPorts()` seguiría contando como ocupado el puerto UDP del proceso huérfano) y pasa por
+el mismo modal de confirmación genérico que ya usa "Desactivar cuenta" — no el de doble click de
+las filas de historial, porque esto aparece una sola vez por pestaña. De paso se confirmó que no
+hay forma de "ver" ni "recordar" la contraseña de un admin: se guarda como hash scrypt, nunca en
+claro, y la única vía sigue siendo generar una clave nueva.
+
+Quedaron sueltos además cinco detalles de la 1.26/1.28 que una sesión de uso real sacó a la luz:
+
+- Las aclaraciones debajo de los inputs del modal "Editar" (`.ayuda`) tenían un margen negativo
+  basado en una premisa falsa — que el input de arriba ya trae margen propio abajo, cosa que no
+  pasa en ningún lado de la hoja de estilos — y terminaban pegadas y amontonadas contra el campo.
+  Se corrigió el margen y se le sumaron placeholders a los campos de ese modal, que no tenían.
+- El modal de Servidores (`.modal-tabs`) medía 640px: el borde de sus propios inputs (el nombre del
+  servidor nuevo, el link de conexión) quedaba pegado al recorte horizontal del modal. Se ensanchó
+  a 760px.
+- El selector de servidores, recién reposicionado en la 1.28, quedaba un poco más abajo y más
+  angosto que el resto de los controles de esa fila en el panel y en el embed. Se subió unos
+  pixels y se le dio más ancho mínimo en los dos.
+- Con el servidor elegido parado, el panel y el embed seguían invitando a "arrancar la formación
+  cuando la parrilla esté completa" — una instrucción para una carrera que no existe. Ese texto
+  ahora se calla si el servidor seleccionado no está activo.
+- El nombre que el admin le pone a un servidor es figurativo ("México F3") y no dice qué circuito
+  tiene cargado en este momento. Se agregó, al lado del selector en el panel y en el embed, el
+  nombre del circuito (y su variante/layout) leído de la sesión en curso — mismo recorte de prefijos
+  de autor de contenido que ya usaba el informe de carrera, duplicado ahí porque no hay un paquete
+  compartido entre server y frontend en este repo.
+
 ## [1.28] — 2026-11-02
 
 ### El panel de operación seguía con alert()/confirm()/prompt() nativos, y "Ver historial" ya no tenía sentido por liga

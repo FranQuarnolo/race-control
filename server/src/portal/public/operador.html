@@ -105,21 +105,21 @@
         <div class="campos">
           <div>
             <label for="ed-leagueName">Nombre de la liga</label>
-            <input id="ed-leagueName" type="text" autocomplete="off" />
+            <input id="ed-leagueName" type="text" autocomplete="off" placeholder="Liga Argentina de Simracing" />
             <p class="ayuda aviso" id="ed-aviso-nombre" hidden>
               Al guardarlo se reinicia el motor de la liga: unos segundos sin escuchar telemetría.
             </p>
           </div>
           <div>
             <label for="ed-slug">Dirección</label>
-            <input id="ed-slug" type="text" autocomplete="off" />
+            <input id="ed-slug" type="text" autocomplete="off" placeholder="liga-argentina-de-simracing" />
             <p class="ayuda aviso" id="ed-aviso-slug" hidden>
               Cambia el link del panel y el de los pilotos. El anterior deja de funcionar.
             </p>
           </div>
           <div>
             <label for="ed-email">Email del admin</label>
-            <input id="ed-email" type="email" autocomplete="off" />
+            <input id="ed-email" type="email" autocomplete="off" placeholder="admin@ejemplo.com" />
             <p class="ayuda">Es con lo que entra al panel.</p>
           </div>
         </div>
@@ -135,11 +135,11 @@
             <div class="campos">
               <div>
                 <label for="ed-password-1">Contraseña nueva</label>
-                <input id="ed-password-1" type="password" autocomplete="new-password" />
+                <input id="ed-password-1" type="password" autocomplete="new-password" placeholder="Mínimo 8 caracteres" />
               </div>
               <div>
                 <label for="ed-password-2">Repetir contraseña nueva</label>
-                <input id="ed-password-2" type="password" autocomplete="new-password" />
+                <input id="ed-password-2" type="password" autocomplete="new-password" placeholder="Repetí la misma" />
               </div>
             </div>
             <p class="ayuda">Mínimo 8 caracteres, y las dos tienen que coincidir.</p>

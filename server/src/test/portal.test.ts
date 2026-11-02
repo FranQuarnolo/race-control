@@ -849,6 +849,61 @@ test("un evento en curso no se puede borrar, y uno terminado sí", async () => {
   assert.equal(inexistente.status, 404);
 });
 
+// --- Borrado de un servidor --------------------------------------------------------------------
+
+test("el operador borra un servidor: para el worker antes de sacarlo del store", async () => {
+  const { liga } = await altaDePrueba("Copa Con Dos Servidores", "dosservidores@example.com");
+  const segundo = portal.addServidor(liga.id, "México F3", { start: false });
+
+  // `supervisor.start` ya está anulado para todo el archivo (no se forkean workers de verdad); acá
+  // se espía `stop` para el único dato que ese mock no deja ver por sí solo: que el portal lo llama
+  // ANTES de sacar el servidor del store, no después — si no, `usedPorts()` dejaría de contar el
+  // puerto de un proceso que en los hechos seguiría vivo.
+  const detenidos: string[] = [];
+  const stopOriginal = portal.supervisor.stop.bind(portal.supervisor);
+  portal.supervisor.stop = (id: string) => {
+    detenidos.push(id);
+    assert.ok(portal.store.findServidor(id), "se llamó a stop() después de sacar el servidor del store");
+    stopOriginal(id);
+  };
+  try {
+    const res = await pedir("DELETE", `/api/operador/ligas/${liga.id}/servidores/${segundo.id}`, {
+      cookie: cookieOp,
+      headers: { "x-rc-request": "1" },
+    });
+    assert.equal(res.status, 200, res.body);
+  } finally {
+    portal.supervisor.stop = stopOriginal;
+  }
+
+  assert.deepEqual(detenidos, [segundo.id]);
+  assert.equal(portal.store.findServidor(segundo.id), undefined);
+  assert.deepEqual(portal.store.servidoresDeLiga(liga.id).map((s) => s.id), [primerServidor(liga.id).id]);
+});
+
+test("borrar un servidor que no existe, o de una liga que no existe, da 404", async () => {
+  const { liga } = await altaDePrueba("Copa Sin Segundo Servidor", "sinsegundo@example.com");
+  const headers = { "x-rc-request": "1" };
+
+  assert.equal(
+    (await pedir("DELETE", `/api/operador/ligas/${liga.id}/servidores/no-existe`, { cookie: cookieOp, headers })).status,
+    404
+  );
+  assert.equal(
+    (await pedir("DELETE", `/api/operador/ligas/no-existe/servidores/no-existe`, { cookie: cookieOp, headers })).status,
+    404
+  );
+  assert.equal(
+    (
+      await pedir("DELETE", `/api/operador/ligas/${liga.id}/servidores/${primerServidor(liga.id).id}`, {
+        cookie: cookieA,
+        headers,
+      })
+    ).status,
+    404
+  );
+});
+
 test("las pantallas del portal salen con sus cabeceras de seguridad", async () => {
   const res = await pedir("GET", "/");
   assert.equal(res.status, 200);

@@ -707,6 +707,30 @@ export function createPortal(config: PortalConfig): Portal {
   });
 
   /**
+   * Borra un servidor de una liga. A diferencia de borrar un evento del historial (debajo), esto
+   * SÍ puede deshacer trabajo real: por eso el frontend lo arma con el mismo patrón de doble click
+   * que ya usa para esos eventos, y acá se para el worker ANTES de sacarlo del store — si no,
+   * `usedPorts()` (que calcula los puertos ocupados a partir de `store.servidores`) dejaría de
+   * contar los puertos de un proceso que en los hechos sigue vivo, y un servidor nuevo podría
+   * terminar pidiendo el mismo puerto UDP que el huérfano todavía tiene abierto.
+   */
+  operadorApi.delete("/ligas/:id/servidores/:servidorId", (req, res) => {
+    const liga = store.findLiga(req.params.id);
+    if (!liga) {
+      res.status(404).json({ ok: false, error: "No existe esa liga." });
+      return;
+    }
+    const servidor = store.servidoresDeLiga(liga.id).find((s) => s.id === req.params.servidorId);
+    if (!servidor) {
+      res.status(404).json({ ok: false, error: "No existe ese servidor." });
+      return;
+    }
+    supervisor.stop(servidor.id);
+    store.removeServidor(servidor.id);
+    res.json({ ok: true });
+  });
+
+  /**
    * Historial de sesiones de UN servidor puntual de una liga: lo escribe el worker en su propio
    * `dataDir` (ver `history/leagueEvents.ts`), y acá se lee directo de disco en vez de pedírselo al
    * worker por `askWorker`. A propósito: un servidor desactivado o apagado no tiene worker

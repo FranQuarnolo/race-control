@@ -111,6 +111,11 @@
   servidorSelect.hidden = true;
   servidorSelect.addEventListener("change", function () { cambiarServidor(servidorSelect.value); });
   topbar.appendChild(servidorSelect);
+  // Nombre del circuito que tiene cargado el servidor elegido, al lado del select — ver
+  // `renderServidorCircuito`. Oculto junto con el select mientras haya uno solo o no haya datos.
+  var servidorCircuito = el("span", "rc-embed__servidor-circuito");
+  servidorCircuito.hidden = true;
+  topbar.appendChild(servidorCircuito);
   var btnReglas = boton("Reglas", function () { abrirModal(modalReglasBackdrop); }, "secondary");
   var btnConexion = boton("Conexión", function () { abrirModal(modalConexionBackdrop); }, "secondary");
   // El puntito va antes del texto (mismo orden que ya usa el botón de Conexión del panel completo),
@@ -1644,6 +1649,37 @@
     return minutos2 + ":" + String(segundos2).padStart(2, "0") + "." + String(centisimos).padStart(2, "0");
   }
 
+  /** Mismo recorte que `prettyTrackName` en app.js y `prettyTrack`/`prettyLayout` en raceReport.ts —
+   *  duplicado a propósito, no hay paquete compartido entre server/portal/frontend en este repo. */
+  var PREFIJOS_PISTA = /^(ks_|acu_|rt_|at_|pm_|tcl_|vrc_)/i;
+
+  function prettyTrackName(session) {
+    if (!session || !session.track) return "";
+    var nombre = session.track.replace(PREFIJOS_PISTA, "").replace(/[_-]+/g, " ").trim();
+    nombre = nombre.replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+    if (session.trackConfig) {
+      var layout = session.trackConfig.replace(/^layout_/i, "").replace(/[_-]+/g, " ").trim();
+      if (layout) {
+        layout = layout.length <= 4 ? layout.toUpperCase() : layout.replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+        nombre += " — " + layout;
+      }
+    }
+    return nombre;
+  }
+
+  /** Oculto el select con un solo servidor: no hay hint que mostrar sobre algo sin alternativa. */
+  function servidorSeleccionadoActivo() {
+    if (servidorSelect.hidden) return true;
+    var opt = servidorSelect.options[servidorSelect.selectedIndex];
+    return !opt || opt.dataset.activo !== "false";
+  }
+
+  function renderServidorCircuito(session) {
+    var nombre = prettyTrackName(session);
+    servidorCircuito.textContent = nombre;
+    servidorCircuito.hidden = !nombre || servidorSelect.hidden;
+  }
+
   function renderSesion(session) {
     if (!session) {
       sessionType.textContent = "--";
@@ -1703,8 +1739,11 @@
       hint.textContent = "";
       return;
     }
+    // Con el servidor seleccionado parado, invitar a "arrancar la formación" es una instrucción
+    // para una carrera que todavía no existe — se calla en vez de confundir (mismo criterio que
+    // renderStart en app.js).
     var hints = {
-      idle: "Arrancá la formación cuando la parrilla esté completa.",
+      idle: servidorSeleccionadoActivo() ? "Arrancá la formación cuando la parrilla esté completa." : "",
       formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
     };
     hint.textContent = hints[lightState] || "";
@@ -1889,6 +1928,7 @@
 
   function render(state) {
     renderSesion(state.session);
+    renderServidorCircuito(state.session);
     renderStart(state);
     renderTabla(state);
     renderSanciones(state);
@@ -1914,6 +1954,7 @@
       var opt = document.createElement("option");
       opt.value = s.id;
       opt.textContent = s.nombre;
+      opt.dataset.activo = String(!!s.activo);
       servidorSelect.appendChild(opt);
     });
     servidorSelect.hidden = false;

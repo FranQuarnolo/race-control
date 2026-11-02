@@ -122,6 +122,25 @@ test("el historial habla con /ligas/:id/servidores/:servidorId/eventos y el borr
 });
 
 /**
+ * Borrar un servidor entero (no una fila de historial) corta de verdad la conexión con el hosting
+ * y para el worker — a diferencia del borrado de un evento, acá un doble click por fila no tiene
+ * sentido porque el botón aparece una sola vez por pestaña, así que usa el modal de confirmación
+ * genérico (mismo que `alternar` para desactivar una cuenta) en vez del armado por timeout.
+ */
+test("borrar un servidor pasa por el modal de confirmación y pega DELETE a /ligas/:id/servidores/:servidorId", () => {
+  const js = leer(PORTAL, "operador.js");
+  const server = leer(DIST, "portal", "server.js");
+
+  assert.ok(/operadorApi\.delete\(\s*"\/ligas\/:id\/servidores\/:servidorId"/.test(server), "el portal no expone la ruta de borrado de un servidor");
+  assert.ok(js.includes("function borrarServidor("), "falta `borrarServidor` en operador.js");
+  assert.ok(/borrarServidor\([^)]*\)\s*\{[\s\S]*?confirmar\(/.test(js), "borrarServidor no pasa por el modal de confirmación genérico");
+  assert.ok(
+    /borrarServidor\([^)]*\)\s*\{[\s\S]*?"\/api\/operador\/ligas\/"[\s\S]*?\/servidores\/"[\s\S]*?"DELETE"/.test(js),
+    "borrarServidor no manda DELETE a /ligas/:id/servidores/:servidorId"
+  );
+});
+
+/**
  * El modal de Servidores reemplazó al `prompt()`/`alert()` de "+ agregar servidor" y al `<dialog>`
  * nativo de detalle de evento: todos los modales de este panel son `.modal-backdrop`/`.modal`, el
  * mismo sistema que ya usa el panel de carrera (`api/public/styles.css`).
