@@ -10,6 +10,21 @@ const ETIQUETAS_ESTADO = {
   failed: "con problemas",
 };
 
+/**
+ * Qué pastilla mostrar para un servidor: su `status` dice si el PROCESO está vivo, no si del otro
+ * lado hay un servidor de Assetto Corsa mandando algo.
+ *
+ * Decían "Conectado" dos cosas muy distintas: una liga andando y una recién creada a la que nadie
+ * le configuró todavía el UDP Plugin Address en el hosting. La segunda se ve igual de verde y no
+ * recibe un solo paquete, así que el operador daba por lista una puesta en marcha a medio hacer.
+ */
+function pastillaDeEstado(estado) {
+  if (estado.status === "running" && !estado.conectado) {
+    return { clase: "starting", texto: "Esperando conexión", titulo: "El proceso está arriba, pero todavía no llegó un solo paquete UDP desde el servidor de Assetto Corsa. Falta configurar el UDP Plugin Address en el hosting." };
+  }
+  return { clase: estado.status, texto: ETIQUETAS_ESTADO[estado.status] || estado.status, titulo: "" };
+}
+
 const ETIQUETAS_CUOTA = {
   "sin-cuota": "sin cargar",
   "al-dia": "al día",
@@ -132,8 +147,10 @@ function pintar() {
     // --- el motor
     const tdMotor = el("td");
     for (const liga of admin.leagues) {
-      const pastilla = el("span", "estado " + liga.status, ETIQUETAS_ESTADO[liga.status] || liga.status);
+      const estado = pastillaDeEstado(liga);
+      const pastilla = el("span", "estado " + estado.clase, estado.texto);
       if (liga.lastError) pastilla.title = liga.lastError;
+      else if (estado.titulo) pastilla.title = estado.titulo;
       tdMotor.appendChild(pastilla);
     }
     if (!admin.leagues.length) tdMotor.appendChild(el("span", "muted", "—"));
@@ -446,7 +463,7 @@ function panelServidor(servidor) {
   filaNombre.appendChild(inputNombre);
   const errorNombre = el("p", "error");
   errorNombre.hidden = true;
-  const btnNombre = boton("Guardar nombre", "secundario", () =>
+  const btnNombre = boton("Guardar nombre", "secundario accion-del-campo", () =>
     renombrarServidor(servidor, inputNombre, errorNombre, btnNombre)
   );
   filaNombre.appendChild(btnNombre);
@@ -456,8 +473,10 @@ function panelServidor(servidor) {
   const filaEstado = el("div", "row");
   filaEstado.appendChild(el("label", "", "Estado"));
   const spanEstado = el("span");
-  const pastillaEstado = el("span", "estado " + servidor.status, ETIQUETAS_ESTADO[servidor.status] || servidor.status);
+  const estadoServidor = pastillaDeEstado(servidor);
+  const pastillaEstado = el("span", "estado " + estadoServidor.clase, estadoServidor.texto);
   if (servidor.lastError) pastillaEstado.title = servidor.lastError;
+  else if (estadoServidor.titulo) pastillaEstado.title = estadoServidor.titulo;
   spanEstado.appendChild(pastillaEstado);
   filaEstado.appendChild(spanEstado);
   datos.appendChild(filaEstado);

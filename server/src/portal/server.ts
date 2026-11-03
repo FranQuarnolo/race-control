@@ -464,7 +464,7 @@ export function createPortal(config: PortalConfig): Portal {
    * "Servidores" (un modal con una pestaña por servidor, ver `operador.js`), con el detalle y el
    * historial de CADA UNO, no solo el primero.
    */
-  function filaDeAdmin(user: User) {
+  function filaDeAdmin(user: User, conectados: Map<string, boolean>) {
     const leagues = store.ligasOwnedBy(user.id).map((liga) => {
       const servidoresDeLaLiga = store.servidoresDeLiga(liga.id);
       const primero = servidoresDeLaLiga[0];
@@ -476,12 +476,16 @@ export function createPortal(config: PortalConfig): Portal {
         name: liga.name,
         status: primero?.status ?? "stopped",
         lastError: primero?.lastError,
+        // Encendido no es conectado: el proceso puede estar impecable y no haber recibido un solo
+        // paquete porque nadie configuró todavía el UDP en el hosting. Ver `conexionesDeLiga`.
+        conectado: primero ? Boolean(conectados.get(primero.id)) : false,
         sendAddress: primero ? supervisor.sendAddressOf(primero) : "",
         udpPort: primero?.udpPort ?? 0,
         servidores: servidoresDeLaLiga.map((s) => ({
           id: s.id,
           nombre: s.nombre,
           status: s.status,
+          conectado: Boolean(conectados.get(s.id)),
           lastError: s.lastError,
           sendAddress: supervisor.sendAddressOf(s),
           udpPort: s.udpPort,
@@ -503,23 +507,26 @@ export function createPortal(config: PortalConfig): Portal {
     };
   }
 
-  operadorApi.get("/admins", (_req, res) => {
+  operadorApi.get("/admins", async (_req, res) => {
+    // Un solo sondeo para toda la tabla: `conexionesDeLiga` ya pregunta en paralelo, y hacerlo por
+    // fila volvería a serializar justo lo que esa función evita.
+    const conectados = await conexionesDeLiga(store.servidores());
     const admins = store
       .users()
       .filter((u) => u.role === "admin")
-      .map(filaDeAdmin)
+      .map((u) => filaDeAdmin(u, conectados))
       // Primero lo que requiere acción: vencidos, después por vencer, después el resto.
       .sort((a, b) => ordenDeAtencion(a) - ordenDeAtencion(b) || a.email.localeCompare(b.email));
     res.json({ ok: true, admins, udpLibres: puertosUdpLibres() });
   });
 
-  operadorApi.get("/admins/:id", (req, res) => {
+  operadorApi.get("/admins/:id", async (req, res) => {
     const user = store.findUser(req.params.id);
     if (!user || user.role !== "admin") {
       res.status(404).json({ ok: false, error: "No existe esa cuenta." });
       return;
     }
-    res.json({ ok: true, admin: filaDeAdmin(user) });
+    res.json({ ok: true, admin: filaDeAdmin(user, await conexionesDeLiga(store.servidores())) });
   });
 
   /** Alta: una liga, su primer servidor y su cuenta, en un solo paso. Devuelve la contraseña una
@@ -549,14 +556,17 @@ export function createPortal(config: PortalConfig): Portal {
         ok: true,
         password: creds.password,
         loginUrl: creds.loginUrl,
-        admin: filaDeAdmin(store.findUser(creds.user.id)!),
+        // Recién creado: el worker todavía está arrancando, así que no hace falta ir a preguntarle
+        // si recibe telemetría — la respuesta segura es "todavía no" y el primer refresco de la
+        // tabla la corrige sola.
+        admin: filaDeAdmin(store.findUser(creds.user.id)!, new Map()),
       });
     } catch (err) {
       res.status(400).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
   });
 
-  operadorApi.post("/admins/:id", (req, res) => {
+  operadorApi.post("/admins/:id", async (req, res) => {
     const user = store.findUser(req.params.id);
     if (!user || user.role !== "admin") {
       res.status(404).json({ ok: false, error: "No existe esa cuenta." });
@@ -594,7 +604,7 @@ export function createPortal(config: PortalConfig): Portal {
     if (patch.active === false) for (const s of servidoresDelUsuario()) supervisor.stop(s.id);
     if (patch.active === true) for (const s of servidoresDelUsuario()) supervisor.start(s.id);
 
-    res.json({ ok: true, admin: filaDeAdmin(store.findUser(user.id)!) });
+    res.json({ ok: true, admin: filaDeAdmin(store.findUser(user.id)!, await conexionesDeLiga(store.servidores())) });
   });
 
   /** Contraseña nueva, porque se la olvidó o porque hay que echarlo de una sesión que no reconoce. */
@@ -816,7 +826,7 @@ export function createPortal(config: PortalConfig): Portal {
    * un token firmado por la liga (ver security/pilotToken.ts), así que el portal lo deja pasar y
    * es el worker el que decide.
    */
-  app.use("/l/:slug", (req: SessionRequest, res) => {
+  app.use("/l/:slug", async (req: SessionRequest, res) => {
     const slug = req.params.slug;
     if (!SLUG_RE.test(slug)) {
       res.status(404).send("No existe esa liga.");
@@ -897,7 +907,15 @@ export function createPortal(config: PortalConfig): Portal {
         res.status(405).end();
         return;
       }
-      const servidores = store.servidoresDeLiga(liga.id).map((s) => ({ id: s.id, nombre: s.nombre, status: s.status }));
+      const propios = store.servidoresDeLiga(liga.id);
+      const conectados = await conexionesDeLiga(propios);
+      const servidores = propios.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        status: s.status,
+        /** Encendido NO es lo mismo que recibiendo: ver `conexionesDeLiga`. */
+        conectado: Boolean(conectados.get(s.id)),
+      }));
       res.json({ ok: true, servidores });
       return;
     }
@@ -909,7 +927,14 @@ export function createPortal(config: PortalConfig): Portal {
         res.status(405).end();
         return;
       }
-      const servidores = store.servidoresDeLiga(liga.id).map((s) => ({ id: s.id, nombre: s.nombre, activo: s.status === "running" }));
+      const propios = store.servidoresDeLiga(liga.id);
+      const conectados = await conexionesDeLiga(propios);
+      const servidores = propios.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        activo: s.status === "running",
+        conectado: Boolean(conectados.get(s.id)),
+      }));
       res.json({ ok: true, servidores });
       return;
     }
@@ -941,15 +966,20 @@ export function createPortal(config: PortalConfig): Portal {
     const matchServidor = resto.match(/^\/s\/([^/]+)((?:\/.*)?)$/);
     if (!matchServidor || !SERVIDOR_ID_RE.test(matchServidor[1])) {
       // Sin `/s/<id>` en el path: ni el panel puede resolver sus archivos relativos, ni el portal
-      // sabe a qué proceso mandar el pedido. En vez de un 404 seco, se manda al primer servidor de
-      // la liga con el resto del path pegado atrás — cubre tanto `/l/fsl` a secas (el caso típico:
+      // sabe a qué proceso mandar el pedido. En vez de un 404 seco, se manda a un servidor de la
+      // liga con el resto del path pegado atrás — cubre tanto `/l/fsl` a secas (el caso típico:
       // alguien que recién entra) como un bookmark viejo de antes de que existiera el selector.
-      const primero = store.servidoresDeLiga(liga.id)[0];
-      if (!primero) {
+      //
+      // Cuál, lo decide `servidorPorDefecto` y no el orden del array: los servidores se guardan en
+      // orden de creación, así que borrar el que estaba en uso y crear otro lo manda al final, y
+      // entrar "al primero" dejaba al admin mirando un panel sin señal mientras su carrera corría
+      // en el de al lado. F5 no lo arreglaba, porque elegía igual de mal todas las veces.
+      const elegido = await servidorPorDefecto(store.servidoresDeLiga(liga.id));
+      if (!elegido) {
         res.status(404).send("Esta liga todavía no tiene servidores.");
         return;
       }
-      res.redirect(308, `/l/${slug}/s/${primero.id}${resto}${qs}`);
+      res.redirect(308, `/l/${slug}/s/${elegido.id}${resto}${qs}`);
       return;
     }
 
@@ -1132,6 +1162,45 @@ export function createPortal(config: PortalConfig): Portal {
     });
     if (options.start !== false) supervisor.start(servidor.id);
     return servidor;
+  }
+
+  /**
+   * Qué servidores de la liga están **conectados de verdad**, y no solo encendidos.
+   *
+   * `status === "running"` dice que el proceso vive, nada más. Un servidor recién creado, al que
+   * todavía nadie le configuró el "UDP Plugin Address" en el hosting, está `running` y no recibe
+   * un solo paquete. Confundir las dos cosas costaba caro en dos lugares: el operador mostraba
+   * "Conectado" sobre un servidor mudo, y —peor— entrar a `/l/<slug>` mandaba al admin al primer
+   * servidor del array aunque su carrera estuviera corriendo en el de al lado, sin forma de
+   * notarlo salvo abrir el combo y probar de a uno.
+   *
+   * Las consultas van en paralelo: son todas a loopback, pero `askWorker` espera hasta 2 s cada
+   * una y en serie una liga con cinco servidores pagaría diez.
+   */
+  async function conexionesDeLiga(servidores: Servidor[]): Promise<Map<string, boolean>> {
+    const pares = await Promise.all(
+      servidores.map(async (s): Promise<[string, boolean]> => {
+        if (s.status !== "running") return [s.id, false];
+        const state = await askWorker<{ network?: { receivingTelemetry?: boolean } }>(s.adminPort, "/api/state");
+        return [s.id, Boolean(state?.network?.receivingTelemetry)];
+      })
+    );
+    return new Map(pares);
+  }
+
+  /**
+   * A qué servidor entrar cuando el pedido no nombra uno: el primero que esté recibiendo
+   * telemetría; si ninguno recibe, el primero encendido; y si tampoco, el primero a secas — así la
+   * pantalla explica que no hay señal en vez de dar un 404 que no ayuda a nadie.
+   */
+  async function servidorPorDefecto(servidores: Servidor[]): Promise<Servidor | undefined> {
+    if (servidores.length === 0) return undefined;
+    const conectados = await conexionesDeLiga(servidores);
+    return (
+      servidores.find((s) => conectados.get(s.id)) ??
+      servidores.find((s) => s.status === "running") ??
+      servidores[0]
+    );
   }
 
   async function resetPassword(user: User, password?: string): Promise<string> {

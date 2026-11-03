@@ -104,18 +104,29 @@
   // cajones que antes solo existían en el panel completo, y el pedido explícito fue poder abrirlos
   // sin salir de la página donde está incrustado el embed.
   var topbar = el("div", "rc-embed__topbar");
+  // Los tres controles del servidor van adentro de un contenedor propio, no sueltos en la topbar.
+  // Antes cada uno se centraba por su cuenta con `position:absolute` y el circuito se corría con un
+  // `calc(-50% + 90px)` calculado contra el ancho del select: ensanchar el select lo dejaba tapado.
+  // Con un solo contenedor absoluto y flex adentro, el ancho lo decide el contenido.
+  var servidorSlot = el("span", "rc-embed__servidor-slot");
   // Oculto hasta que se sepa cuántos servidores tiene la liga (ver `pintarSelectorDeServidores`):
   // con uno solo no hay nada que elegir, y recién se sabe después de pedirle la lista a la liga.
   var servidorSelect = document.createElement("select");
   servidorSelect.className = "rc-embed__servidor-select";
   servidorSelect.hidden = true;
   servidorSelect.addEventListener("change", function () { cambiarServidor(servidorSelect.value); });
-  topbar.appendChild(servidorSelect);
+  servidorSlot.appendChild(servidorSelect);
+  // Reemplaza al combo cuando la liga tiene un solo servidor: no hay nada que elegir, pero saber
+  // en cuál estás parado sigue importando.
+  var servidorNombre = el("span", "rc-embed__servidor-nombre");
+  servidorNombre.hidden = true;
+  servidorSlot.appendChild(servidorNombre);
   // Nombre del circuito que tiene cargado el servidor elegido, al lado del select — ver
   // `renderServidorCircuito`. Oculto junto con el select mientras haya uno solo o no haya datos.
   var servidorCircuito = el("span", "rc-embed__servidor-circuito");
   servidorCircuito.hidden = true;
-  topbar.appendChild(servidorCircuito);
+  servidorSlot.appendChild(servidorCircuito);
+  topbar.appendChild(servidorSlot);
   var btnReglas = boton("Reglas", function () { abrirModal(modalReglasBackdrop); }, "secondary");
   var btnConexion = boton("Conexión", function () { abrirModal(modalConexionBackdrop); }, "secondary");
   // El puntito va antes del texto (mismo orden que ya usa el botón de Conexión del panel completo),
@@ -1686,7 +1697,9 @@
   function renderServidorCircuito(session) {
     var nombre = prettyTrackName(session);
     servidorCircuito.textContent = nombre;
-    servidorCircuito.hidden = !nombre || servidorSelect.hidden;
+    // Se muestra tanto al lado del combo como al lado del nombre suelto: con un solo servidor el
+    // circuito sigue siendo el dato que identifica la carrera.
+    servidorCircuito.hidden = !nombre || (servidorSelect.hidden && servidorNombre.hidden);
   }
 
   function renderSesion(session) {
@@ -1731,10 +1744,17 @@
     semaforo.textContent = labels[lightState] || lightState;
 
     var esCarrera = !state.session || state.session.sessionType === RACE_SESSION_TYPE;
+    // Sin señal se apaga la largada entera, no solo el renglón de ayuda: "Formación" y "Verde"
+    // mandan órdenes por el chat del servidor de Assetto Corsa, y contra un servidor del que no
+    // entra un paquete esas órdenes se pierden mientras el semáforo del panel igual cambia de
+    // color. Mismo criterio que renderStart en app.js.
+    var conectado = hayServidorConectado(state);
+    var operable = esCarrera && conectado;
+
     var allowed = START_ACTIONS[lightState] || START_ACTIONS.idle;
-    btnBegin.disabled = !allowed.begin || !esCarrera;
-    btnGreen.disabled = !allowed.green || !esCarrera;
-    btnReset.disabled = !allowed.reset;
+    btnBegin.disabled = !allowed.begin || !operable;
+    btnGreen.disabled = !allowed.green || !operable;
+    btnReset.disabled = !allowed.reset || !conectado;
 
     // Mismo criterio que renderStart en app.js: el aviso de "Carrera en curso" depende solo del
     // semáforo, no de la sesión — así un admin que recién abrió el embed en medio de una carrera
@@ -1744,16 +1764,14 @@
     // Fuera de carrera no hay parrilla que formar ni nadie a quien sancionar por adelantarse —
     // mismo criterio que app.js: se vacía el renglón en vez de explicarlo, los botones ya quedan
     // deshabilitados arriba.
-    if (!esCarrera) {
+    if (!operable) {
       hint.textContent = "";
       return;
     }
-    // Con el servidor seleccionado parado, o sin señal del servidor de carrera, invitar a "arrancar
-    // la formación" es una instrucción para una carrera que todavía no existe — se calla en vez de
-    // confundir (mismo criterio que renderStart en app.js).
-    var hayCarreraPosible = servidorSeleccionadoActivo() && hayServidorConectado(state);
+    // Con el servidor seleccionado parado, invitar a "arrancar la formación" es una instrucción
+    // para una carrera que todavía no existe — se calla en vez de confundir.
     var hints = {
-      idle: hayCarreraPosible ? "Arrancá la formación cuando la parrilla esté completa." : "",
+      idle: servidorSeleccionadoActivo() ? "Arrancá la formación cuando la parrilla esté completa." : "",
       formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
     };
     hint.textContent = hints[lightState] || "";
@@ -1961,10 +1979,32 @@
     });
   }
 
+  /**
+   * Cuál mirar cuando el admin todavía no eligió: el primero que esté recibiendo telemetría.
+   *
+   * No alcanza con `servidores[0]`: la lista viene en orden de creación, así que borrar el
+   * servidor en uso y crear otro lo manda al final, y el embed arrancaba mostrando el que estaba
+   * mudo. Tampoco alcanza con `activo`, que solo dice que el proceso está encendido — un servidor
+   * al que nunca le configuraron el UDP en el hosting está activo y no recibe nada.
+   */
+  function servidorPorDefecto(servidores) {
+    for (var i = 0; i < servidores.length; i++) if (servidores[i].conectado) return servidores[i];
+    for (var j = 0; j < servidores.length; j++) if (servidores[j].activo) return servidores[j];
+    return servidores[0];
+  }
+
   /** La liga puede tener más de un servidor corriendo a la vez (Spa/GT3, México/F3, Interlagos/M2:
-   * el caso real que motivó esto). Con uno solo, el combo queda oculto — no hay nada que elegir. */
+   * el caso real que motivó esto). Con uno solo el combo queda oculto —no hay nada que elegir—
+   * pero el nombre igual se muestra: saber en cuál estás parado no deja de importar por ser el
+   * único. */
   function pintarSelectorDeServidores(servidores) {
-    if (servidores.length < 2) return;
+    if (servidores.length < 2) {
+      servidorSelect.hidden = true;
+      servidorNombre.textContent = servidores.length ? servidores[0].nombre : "";
+      servidorNombre.hidden = !servidores.length;
+      return;
+    }
+    servidorNombre.hidden = true;
     servidorSelect.innerHTML = "";
     servidores.forEach(function (s) {
       var opt = document.createElement("option");
@@ -1974,6 +2014,27 @@
       servidorSelect.appendChild(opt);
     });
     servidorSelect.hidden = false;
+  }
+
+  /**
+   * El operador puede crear o borrar un servidor con el embed abierto. Hasta acá eso solo se
+   * notaba recargando la página: el borrado dejaba el embed pegado a un id que ya solo devuelve
+   * 404, y el alta no aparecía nunca en el combo.
+   */
+  function revisarServidores() {
+    pedidoLiga("/servidores")
+      .then(function (data) {
+        var servidores = (data && data.servidores) || [];
+        if (!servidores.length) return;
+        var actual = servidorSelect.value;
+        pintarSelectorDeServidores(servidores);
+        var sigue = servidores.some(function (s) { return s.id === actual; });
+        if (!sigue) cambiarServidor(servidorPorDefecto(servidores).id);
+        else servidorSelect.value = actual;
+      })
+      .catch(function () {
+        // Igual que en app.js: la lista es secundaria, el servidor actual sigue andando.
+      });
   }
 
   function iniciarConServidor(servidorId) {
@@ -2001,8 +2062,10 @@
         return;
       }
       pintarSelectorDeServidores(servidores);
-      // Default al primero — el admin lo cambia desde el combo cuando quiere mirar otra carrera.
-      iniciarConServidor(servidores[0].id);
+      iniciarConServidor(servidorPorDefecto(servidores).id);
+      // Mismo intervalo que el panel: la lista cambia de higos a brevas y cada chequeo sondea por
+      // loopback a todos los workers de la liga, así que no va pegado al poll de estado.
+      setInterval(revisarServidores, 10000);
     })
     .catch(function (err) {
       mostrarError("No se pudo conectar con Race Control: " + err.message);

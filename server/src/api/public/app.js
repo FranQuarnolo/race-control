@@ -765,25 +765,61 @@ function renderEmbedSnippet() {
  * el admin elige cuál mirar desde acá, sin volver a pegar nada ni recargar la página. Con un solo
  * servidor el combo queda oculto: ofrecer "elegir" cuando no hay nada para elegir es ruido.
  */
-async function loadServidorSelector() {
+async function revisarServidores() {
   if (!LIGA_BASE) return;
+  let servidores;
   try {
     const data = await apiLiga("/api/servidores");
-    pintarSelectorDeServidores(data.servidores || []);
+    servidores = data.servidores || [];
   } catch (err) {
     // El combo es secundario: si no se pudo traer la lista, el panel del servidor actual sigue
     // andando igual. No vale la pena interrumpir con un toast por esto.
+    return;
   }
+  pintarSelectorDeServidores(servidores);
+
+  // El servidor que estábamos mirando dejó de existir: lo borró el operador mientras el panel
+  // estaba abierto. Hasta acá eso dejaba la pantalla pegada a un id que de ahí en más solo
+  // devuelve 404, y la única salida era F5. Se salta al que corresponda —conectado o no, el
+  // pedido fue "que pase a ver los restantes".
+  const actualId = BASE.split("/s/")[1];
+  if (servidores.length && !servidores.some((s) => s.id === actualId)) {
+    switchServidor(servidorPorDefecto(servidores).id);
+  }
+}
+
+/**
+ * Cuál mirar cuando no hay uno elegido, o cuando el elegido se borró.
+ *
+ * No es `servidores[0]`: la lista viene en orden de creación, así que borrar el servidor en uso y
+ * crear otro manda el nuevo al final, y "el primero" pasa a ser cualquier cosa. Tampoco alcanza
+ * con `status === "running"`, que solo dice que el proceso está vivo — un servidor al que nunca le
+ * configuraron el UDP en el hosting está running y mudo. Mismo criterio que `servidorPorDefecto`
+ * en portal/server.ts y en embed.js.
+ */
+function servidorPorDefecto(servidores) {
+  return (
+    servidores.find((s) => s.conectado) || servidores.find((s) => s.status === "running") || servidores[0]
+  );
 }
 
 function pintarSelectorDeServidores(servidores) {
   const select = $("servidor-select");
+  const nombre = $("servidor-nombre");
+  const actualId = BASE.split("/s/")[1];
+
+  // Con un solo servidor no hay nada que elegir, pero el nombre igual se muestra: saber en qué
+  // servidor estás parado no deja de importar porque sea el único.
   if (servidores.length < 2) {
     select.hidden = true;
-    $("servidor-circuito").hidden = true;
+    const único = servidores[0];
+    nombre.textContent = único ? único.nombre : "";
+    nombre.hidden = !único;
+    $("servidor-circuito").hidden = !único;
     return;
   }
-  const actualId = BASE.split("/s/")[1];
+
+  nombre.hidden = true;
   clearChildren(select);
   for (const servidor of servidores) {
     const option = document.createElement("option");
@@ -2145,15 +2181,24 @@ function renderStart(lightState, session, network) {
   // recién abierto no sabe en qué sesión está el servidor, y bloquear por las dudas dejaría al
   // admin sin poder largar justo cuando más lo necesita. El backend tiene el chequeo de verdad.
   const esCarrera = !session || session.sessionType === RACE_SESSION_TYPE;
+
+  // Sin señal del servidor de carrera se apaga la tarjeta entera, no solo el renglón de ayuda:
+  // "Formación" y "Verde" mandan órdenes por el chat del servidor de Assetto Corsa, y contra un
+  // servidor del que no entra un paquete esas órdenes se pierden mientras el semáforo del panel
+  // igual cambia de color. El admin quedaba mirando un verde que ningún piloto vio nunca.
+  const conectado = hayServidorConectado(network);
+  const operable = esCarrera && conectado;
+
   const card = $("card-start");
-  card.classList.toggle("off-session", !esCarrera);
+  card.classList.toggle("off-session", !operable);
 
   const allowed = START_ACTIONS[lightState] || START_ACTIONS.idle;
-  $("btn-begin").disabled = !allowed.begin || !esCarrera;
-  $("btn-green").disabled = !allowed.green || !esCarrera;
-  // "Reiniciar" sigue disponible siempre a propósito: es la salida de emergencia. Si alguien armó
-  // una formación y el servidor cambió de sesión, tiene que poder apagarla.
-  $("btn-reset").disabled = !allowed.reset;
+  $("btn-begin").disabled = !allowed.begin || !operable;
+  $("btn-green").disabled = !allowed.green || !operable;
+  // "Reiniciar" sigue disponible aunque no sea una carrera: es la salida de emergencia, y si
+  // alguien armó una formación y el servidor cambió de sesión tiene que poder apagarla. Sin señal
+  // sí se bloquea, porque tampoco hay a quién mandarle el reinicio.
+  $("btn-reset").disabled = !allowed.reset || !conectado;
 
   // Con el verde dado, el renglón de ayuda se calla y habla el aviso grande: a esa altura el
   // admin ya no necesita instrucciones, necesita confirmar de un vistazo que la carrera corre.
@@ -2161,17 +2206,14 @@ function renderStart(lightState, session, network) {
   card.classList.toggle("racing", racing);
   $("race-live").hidden = !racing;
 
-  if (!esCarrera) {
+  if (!operable) {
     $("start-hint").textContent = "";
     return;
   }
-  // Con el servidor seleccionado parado, o sin señal del servidor de carrera, invitar a "arrancar
-  // la formación" es una instrucción para una carrera que todavía no existe — se calla en vez de
-  // confundir. Sin señal es el caso que más confundía: el panel se ve entero y operable, y el
-  // renglón parecía estar diciendo que ya se podía largar.
-  const hayCarreraPosible = servidorSeleccionadoActivo() && hayServidorConectado(network);
+  // Con el servidor seleccionado parado, invitar a "arrancar la formación" es una instrucción para
+  // una carrera que todavía no existe — se calla en vez de confundir.
   const hints = {
-    idle: hayCarreraPosible ? "Arrancá la formación cuando la parrilla esté completa." : "",
+    idle: servidorSeleccionadoActivo() ? "Arrancá la formación cuando la parrilla esté completa." : "",
     formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
   };
   $("start-hint").textContent = hints[lightState] || "";
@@ -2490,7 +2532,12 @@ setupForms();
 
 loadConfigForm().catch((err) => toast("No se pudo cargar la configuración: " + err.message, 5000));
 loadEmbedToken();
-loadServidorSelector();
+revisarServidores();
+
+/** El operador puede crear o borrar un servidor con el panel del admin abierto. Hasta acá eso solo
+ * se notaba apretando F5. No va pegado al poll de estado porque la lista cambia de higos a brevas
+ * y cada chequeo sondea por loopback a todos los workers de la liga. */
+setInterval(revisarServidores, 10000);
 refresh().catch((err) => toast("No se pudo conectar con el backend: " + err.message, 5000));
 
 /**

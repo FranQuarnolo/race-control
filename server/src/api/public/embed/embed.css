@@ -47,6 +47,39 @@
   box-sizing: border-box;
 }
 
+/* Barra de scroll propia (fina y ámbar) para las cajas que scrollean adentro del embed: la torre de
+   tiempos y los modales. Todo bajo `.rc-embed` a propósito, igual que el resto de esta hoja: el
+   embed se inyecta en una página ajena y pisarle la barra de scroll al documento entero sería
+   exactamente el tipo de efecto colateral que el prefijo `rc-embed` existe para evitar.
+   `scrollbar-*` es lo que entiende Firefox; `::-webkit-scrollbar`, Chrome y Edge. */
+.rc-embed,
+.rc-embed * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201, 168, 76, 0.6) transparent;
+}
+.rc-embed ::-webkit-scrollbar,
+.rc-embed::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.rc-embed ::-webkit-scrollbar-track,
+.rc-embed::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rc-embed ::-webkit-scrollbar-thumb,
+.rc-embed::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.6);
+  border-radius: 999px;
+}
+.rc-embed ::-webkit-scrollbar-thumb:hover,
+.rc-embed::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+.rc-embed ::-webkit-scrollbar-corner,
+.rc-embed::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .rc-embed__banner {
   background: color-mix(in srgb, var(--red), transparent 75%);
   border: 1px solid var(--red);
@@ -73,20 +106,32 @@
   margin-right: auto;
 }
 
-/* Mismo tratamiento visual que `.rc-embed__btn--secondary`: es un control más de la topbar, no
-   un formulario. Oculto por JS (`hidden`) mientras la liga tenga un solo servidor.
-   Va arriba al medio: `position:absolute` lo saca del flujo de la topbar (pedido explícito del
-   admin, para encontrarlo siempre en el mismo lugar sin importar cuántos botones tenga al lado), y
-   al salir del flujo Reglas/Conexión/Terminar evento se acomodan entre sí como si no estuviera.
-   Un poco más arriba del centro exacto de la fila (-62% en vez de -50%) y un poco más ancho que el
-   contenido mínimo: centrado "a la mitad en punto" quedaba más pegado al contenido de abajo que
-   Reglas/Conexión a los suyos, por ser un control más alto que esos botones. */
-.rc-embed__servidor-select {
+/* El selector, el nombre y el circuito van juntos acá adentro, arriba al medio. `position:absolute`
+   los saca del flujo de la topbar (pedido explícito del admin, para encontrarlos siempre en el
+   mismo lugar sin importar cuántos botones tenga al lado), y al salir del flujo Reglas/Conexión/
+   Terminar evento se acomodan entre sí como si no estuvieran. Un poco más arriba del centro exacto
+   de la fila (-62% en vez de -50%): centrado "a la mitad en punto" quedaba más pegado al contenido
+   de abajo que Reglas/Conexión a los suyos, por ser un control más alto que esos botones.
+   El contenedor es uno solo para los tres a propósito: antes cada uno se centraba por su cuenta y
+   el circuito se corría con un `calc(-50% + 90px)` atado al ancho del select, así que ensanchar el
+   select lo dejaba tapado. */
+.rc-embed__servidor-slot {
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -62%);
-  min-width: 150px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Mismo tratamiento visual que `.rc-embed__btn--secondary`: es un control más de la topbar, no
+   un formulario. Oculto por JS (`hidden`) mientras la liga tenga un solo servidor.
+   210 y no 150: el nombre lo escribe el operador y suele ser del tipo "Interlagos M2 - Fecha 4";
+   a 150 px se recortaba justo el final, que es lo que distingue una carrera de la otra. */
+.rc-embed__servidor-select {
+  min-width: 210px;
+  max-width: 40vw;
   font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -99,14 +144,24 @@
   cursor: pointer;
 }
 
+/* Reemplaza al combo cuando la liga tiene un solo servidor: elegir entre una opción no es elegir,
+   pero saber a qué carrera estás mirando sigue importando. */
+.rc-embed__servidor-nombre {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  white-space: nowrap;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Al lado del selector: qué circuito tiene cargado el servidor elegido, porque el nombre que el
    admin le haya puesto al crearlo (`servidor.nombre`) puede no decir nada de la carrera en sí. */
 .rc-embed__servidor-circuito {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(calc(-50% + 90px), -62%);
-  margin-left: 8px;
   color: var(--muted);
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -168,25 +223,22 @@
     justify-self: stretch;
   }
   /* Centrado con position:absolute (arriba) se superpone a Reglas/Conexión en un embed angosto:
-     acá vuelve al flujo normal, como primera fila propia arriba de esos botones. */
+     acá el contenedor vuelve al flujo normal, como primera fila propia arriba de esos botones, con
+     sus tres controles centrados y envolviendo si no entran en un renglón. */
   .rc-embed__topbar {
     flex-wrap: wrap;
   }
-  .rc-embed__servidor-select {
+  .rc-embed__servidor-slot {
     position: static;
     transform: none;
     order: -1;
     flex: 1 1 100%;
-    text-align: center;
+    flex-wrap: wrap;
+    justify-content: center;
   }
-  /* Mismo criterio que el select: vuelve al flujo, debajo de él en su propia fila. */
-  .rc-embed__servidor-circuito {
-    position: static;
-    transform: none;
-    margin-left: 0;
-    order: -1;
-    flex: 1 1 100%;
-    text-align: center;
+  .rc-embed__servidor-select,
+  .rc-embed__servidor-nombre {
+    max-width: 100%;
   }
 }
 

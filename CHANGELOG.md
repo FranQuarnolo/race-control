@@ -3,6 +3,54 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.31] — 2026-11-03
+
+### El panel se quedaba mirando un servidor mudo, y nadie se enteraba de que había otro conectado
+
+El bug que importa: borrar el servidor que estaba en uso y volver a crearlo dejaba al panel y al
+embed diciendo "SIN SEÑAL" para siempre, por más F5 que se le diera. La causa no estaba en el
+renderizado sino en la elección: `servidoresDeLiga()` devuelve los servidores en orden de alta, sin
+ordenar, así que el servidor recreado se va al final de la lista — y tanto el redirect de
+`/l/:slug` como el arranque del embed tomaban `servidores[0]`, que era el viejo, el que ya no tenía
+configurado el UDP del hosting. Elegían mal, y elegían mal de forma determinística: F5 volvía a
+caer exactamente en el mismo servidor mudo. Ahora el default lo decide `servidorPorDefecto()`, que
+prefiere el que está recibiendo telemetría, después cualquiera encendido, y recién al final el
+primero de la lista.
+
+De ahí sale la distinción que faltaba en todo el sistema: **que el proceso esté arriba no quiere
+decir que esté conectado**. Un servidor al que nunca le configuraron el "UDP Plugin Address" en el
+hosting está `running` y no recibe un solo paquete. El panel del operador lo mostraba como
+"Conectado" en verde, que es justo lo contrario de lo que el admin iba a ver; ahora dice "Esperando
+conexión" y el `title` explica qué falta hacer en el hosting. El mismo dato (`conectado`, separado
+de `activo`) viaja ahora en la lista de servidores que consumen el panel y el embed.
+
+El panel y el embed, además, ya no esperan un F5 para enterarse de que el operador dio de alta o
+borró un servidor: revisan la lista cada diez segundos y, si el que estaban mirando ya no existe,
+se mudan solos al que corresponda.
+
+Lo visual, que salió de mirar la app con un servidor sin señal al lado de uno conectado:
+
+- El anillo de foco ámbar de los inputs del modal del operador se veía cortado al medio. Un
+  contenedor con `overflow-y: auto` recorta también en horizontal (regla del spec para quien
+  declara un solo eje), y el contorno se dibujaba 2 px hacia afuera. Va hacia adentro, igual que ya
+  lo había resuelto el panel de carrera meses atrás — mismo bug, misma solución, ahora en los dos
+  lados.
+- El modal de Reglas tenía dos barras de scroll, una al lado de la otra: el modal declaraba
+  `overflow-y: scroll` (siempre visible, aunque no hubiera nada que scrollear) y adentro el
+  `.tab-panel` tenía la suya. Pasa a `auto`, y queda una sola.
+- Las barras de scroll de toda la app ahora son finas y ámbar en vez de la franja gris del sistema.
+  En el embed la regla está acotada a `.rc-embed`: pisarle la barra al documento de la página que
+  lo incrusta sería exactamente el efecto colateral que ese prefijo existe para evitar.
+- El selector de servidores es más ancho (240 px en el panel, 210 en el embed): los nombres reales
+  son del tipo "Interlagos M2 - Fecha 4" y se recortaba justo el final, que es lo que distingue una
+  carrera de la otra. En el embed, los tres controles del servidor pasaron a un contenedor propio:
+  el circuito se posicionaba con un `calc(-50% + 90px)` atado al ancho del select, así que
+  ensancharlo lo dejaba tapado.
+- Con un solo servidor el selector no aparece —elegir entre una opción no es elegir—, pero ahora sí
+  aparece su nombre: era la única parte de la barra que no decía a qué carrera estabas mirando.
+- "Guardar nombre" quedaba pegado al input y contra el borde izquierdo, como si fuera parte del
+  campo. Va separado y a la derecha.
+
 ## [1.30] — 2026-11-03
 
 ### El nombre de un servidor era para siempre, y el panel invitaba a largar carreras sin señal

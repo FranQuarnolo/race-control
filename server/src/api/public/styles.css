@@ -53,6 +53,34 @@
   box-sizing: border-box;
 }
 
+/* Barra de scroll propia, en todas las cajas que scrolleen (la torre de tiempos, los modales, las
+   tablas anchas). La del sistema en Windows es gris claro y ancha: contra el fondo oscuro del panel
+   se ve como una franja pegada al costado, y en la torre de tiempos compite con los datos. Mismas
+   dos reglas en `portal/public/portal.css` y `embed/embed.css` — tres hojas sin build compartido,
+   no hay dónde ponerla una sola vez. `scrollbar-*` es lo que entiende Firefox; `::-webkit-scrollbar`,
+   Chrome y Edge. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201, 168, 76, 0.6) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.6);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html,
 body {
   height: 100%;
@@ -170,8 +198,13 @@ body.link-down #card-race {
   top: 10px;
   transform: translateX(-50%);
 }
+/* 240 y no 170: el nombre lo escribe el operador y suele ser del tipo "Interlagos M2 - Fecha 4".
+   A 170 px el `<select>` recortaba justo el final, que es donde está lo que distingue una carrera
+   de la otra. El `max-width` es para que un nombre largo de verdad no empuje la barra flotante
+   encima de Conexión/Sanciones. */
 #servidor-select {
-  min-width: 170px;
+  min-width: 240px;
+  max-width: 34vw;
 }
 
 /* Al lado del selector: qué circuito tiene cargado el servidor elegido, para que el nombre
@@ -187,6 +220,28 @@ body.link-down #card-race {
   white-space: nowrap;
 }
 .servidor-circuito[hidden] {
+  display: none;
+}
+
+/* Con un solo servidor el `<select>` se esconde —elegir entre una opción no es elegir—, pero el
+   nombre igual tiene que estar: es la confirmación de a qué carrera está mirando el admin, y sin
+   él la barra no dice nada sobre qué servidor está abierto. Se ve como el título del selector que
+   reemplaza, no como una etiqueta más de `.servidor-circuito`. */
+.servidor-nombre {
+  display: flex;
+  align-items: center;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  max-width: 34vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.servidor-nombre[hidden] {
   display: none;
 }
 
@@ -1292,8 +1347,11 @@ tbody tr.desconectado .c-driver {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* `overflow: hidden` deja el recorte horizontal; el vertical es `auto`, no `scroll`. Con `scroll`
+     la barra se dibujaba siempre, aunque el modal no tuviera nada que scrollear, y en Reglas —donde
+     el que scrollea de verdad es el `.tab-panel`— se veían DOS barras, una al lado de la otra. */
   overflow: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   /* Centrado vertical por margen automático, no por `align-items` del backdrop: ver el comentario
      de `.modal-backdrop`. */
   margin: auto 0;

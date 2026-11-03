@@ -30,6 +30,24 @@
 
 * { box-sizing: border-box; }
 
+/* Barra de scroll propia, en todas las cajas que scrolleen. La del sistema en Windows es gris
+   claro y ancha: adentro de un modal oscuro se ve como una franja pegada al costado y es lo
+   primero que te llama la atención. Mismas dos reglas en `api/public/styles.css` y
+   `api/public/embed/embed.css` — tres hojas sin build compartido, no hay dónde ponerla una sola
+   vez. `scrollbar-*` es lo que entiende Firefox; `::-webkit-scrollbar`, Chrome y Edge. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 180, 41, 0.55) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(240, 180, 41, 0.55);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+::-webkit-scrollbar-corner { background: transparent; }
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -472,8 +490,12 @@ input[type="date"] {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* `overflow: hidden` deja el recorte horizontal; el vertical es `auto`, no `scroll`. Con `scroll`
+     la barra se dibujaba siempre, incluso cuando el modal no tenía nada que scrollear, y en los
+     modales con pestañas —donde el que scrollea de verdad es el `.tab-panel`— se veían DOS barras,
+     una al lado de la otra. */
   overflow: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   /* Centrado vertical por margen automático, no por `align-items` del backdrop: así el margen se
      achica solo a medida que el contenido crece, en vez de recortarlo contra el borde de arriba. */
   margin: auto 0;
@@ -523,6 +545,18 @@ input[type="date"] {
 .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
 
 .tab-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+/* `outline-offset` negativo adentro del modal, al revés que la regla general de arriba. Un elemento
+   con `overflow-y: auto` y `overflow-x: visible` computa el eje X a `auto` también (regla del spec),
+   así que el `.tab-panel` recorta en horizontal: el contorno de un input a todo el ancho, dibujado
+   2 px hacia AFUERA, quedaba cortado contra el borde derecho —se veía media línea ámbar. Hacia
+   adentro no se recorta nunca, sea cual sea el ancho del modal. Mismo arreglo que ya tiene el panel
+   de carrera en `api/public/styles.css`. */
+.modal input:focus-visible,
+.modal select:focus-visible,
+.modal textarea:focus-visible {
+  outline-offset: -2px;
+}
 .tab-panel[hidden] { display: none; }
 
 .modal h3 {
@@ -559,6 +593,16 @@ input[type="date"] {
 
 .modal .row-stack { display: block; margin-bottom: 12px; }
 .modal .row-stack > label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+
+/* El botón que confirma lo que se escribió en el input de arriba. `button.compacto` le saca el
+   `margin-top` y el ancho completo que tienen los botones de formulario de este archivo, y sin eso
+   quedaba pegado al input y contra el borde izquierdo, como si fuera parte del campo. Va separado y
+   a la derecha, que es de donde se sale del campo al terminar de escribir. */
+.modal .row-stack > button.accion-del-campo {
+  display: block;
+  margin-top: 10px;
+  margin-left: auto;
+}
 
 .modal textarea {
   display: block;

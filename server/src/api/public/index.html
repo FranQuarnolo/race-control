@@ -31,6 +31,9 @@
     <!-- Oculto por CSS/JS mientras la liga tenga un solo servidor — ver `pintarSelectorDeServidores`
          en app.js. Con uno solo, ofrecer "elegir" es una pregunta sin segunda opción. -->
     <select class="status-button" id="servidor-select" hidden></select>
+    <!-- Reemplaza al combo cuando la liga tiene un solo servidor: no hay nada que elegir, pero
+         saber en cuál estás parado sigue importando. -->
+    <span class="servidor-nombre" id="servidor-nombre" hidden></span>
     <!-- El nombre del servidor lo elige el admin al crearlo (puede ser cualquier cosa, "Mi server
          1"); esto muestra el circuito que tiene cargado AHORA, para que elegir del combo no sea a
          ciegas. Vacío hasta el primer SESSION_INFO, igual que `#session-type`. -->
