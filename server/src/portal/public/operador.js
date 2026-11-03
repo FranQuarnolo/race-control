@@ -433,6 +433,26 @@ function panelServidor(servidor) {
   const datos = el("section");
   datos.appendChild(el("h3", "", "Datos"));
 
+  // El nombre se elegía una sola vez, al crear el servidor: un error de tipeo quedaba para siempre
+  // y la única salida era borrarlo y rehacerlo, cosa que le cambia el id —y con él el link de
+  // conexión que el admin ya tenía guardado— por un problema puramente cosmético.
+  const filaNombre = el("div", "row-stack");
+  filaNombre.appendChild(el("label", "", "Nombre del servidor"));
+  const inputNombre = document.createElement("input");
+  inputNombre.type = "text";
+  inputNombre.autocomplete = "off";
+  inputNombre.placeholder = "México F3";
+  inputNombre.value = servidor.nombre;
+  filaNombre.appendChild(inputNombre);
+  const errorNombre = el("p", "error");
+  errorNombre.hidden = true;
+  const btnNombre = boton("Guardar nombre", "secundario", () =>
+    renombrarServidor(servidor, inputNombre, errorNombre, btnNombre)
+  );
+  filaNombre.appendChild(btnNombre);
+  filaNombre.appendChild(errorNombre);
+  datos.appendChild(filaNombre);
+
   const filaEstado = el("div", "row");
   filaEstado.appendChild(el("label", "", "Estado"));
   const spanEstado = el("span");
@@ -705,6 +725,44 @@ async function crearServidor() {
   } catch (err) {
     $("error-servidor-nuevo").textContent = err.message;
     $("error-servidor-nuevo").hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/**
+ * Cambia el nombre de un servidor ya creado. No pide confirmación ni reinicia nada: el nombre es
+ * un rótulo del panel, el worker no lo conoce (ver la ruta PATCH en `portal/server.ts`), así que
+ * equivocarse acá no rompe nada y se arregla escribiendo de nuevo.
+ */
+async function renombrarServidor(servidor, input, errorEl, btn) {
+  const nombre = input.value.trim();
+  errorEl.hidden = true;
+  if (!nombre) {
+    errorEl.textContent = "El servidor necesita un nombre.";
+    errorEl.hidden = false;
+    return;
+  }
+  if (nombre === servidor.nombre) return;
+
+  const liga = servidoresAdmin.liga;
+  btn.disabled = true;
+  try {
+    await api("/api/operador/ligas/" + liga.id + "/servidores/" + servidor.id, { nombre }, "PATCH");
+
+    await recargar();
+    const actualizado = admins.find((a) => a.id === servidoresAdmin.admin.id);
+    const ligaActualizada = actualizado && actualizado.leagues.find((l) => l.id === liga.id);
+    if (actualizado && ligaActualizada) {
+      servidoresAdmin = { admin: actualizado, liga: ligaActualizada };
+      pintarTabsServidores(ligaActualizada);
+      // Reabre la misma pestaña: el panel se vuelve a armar desde cero y así el input y el título
+      // de la pestaña quedan con el nombre nuevo sin tener que tocarlos a mano por separado.
+      seleccionarTabServidor(servidor.id);
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.hidden = false;
   } finally {
     btn.disabled = false;
   }

@@ -835,13 +835,22 @@
     });
   }
 
+  /**
+   * Las dos mitades de la conexión, igual que `hayServidorConectado` en app.js: el servidor de
+   * carrera se identificó y entra telemetría. Acá el dato llega como `commandTargetKnown` y no
+   * como `acServer.autodetected` porque el DTO del embed no expone la IP del servidor de nadie.
+   */
+  function hayServidorConectado(state) {
+    var network = state.network || {};
+    return Boolean(network.commandTargetKnown) && Boolean(network.receivingTelemetry);
+  }
+
   function renderConexionEstado(state) {
     var network = state.network || {};
 
-    // Mismo criterio que renderNetworkButton en app.js: verde solo si las dos mitades están bien
-    // (auto identificado y entra telemetría). Parpadea siempre, en verde o en rojo según corresponda
-    // — es el resumen de todo el cajón de Conexión en un vistazo, sin tener que abrirlo.
-    var conexionOk = Boolean(network.commandTargetKnown) && Boolean(network.receivingTelemetry);
+    // El puntito parpadea siempre, en verde o en rojo según corresponda — es el resumen de todo el
+    // cajón de Conexión en un vistazo, sin tener que abrirlo.
+    var conexionOk = hayServidorConectado(state);
     conexionDot.className = "rc-embed__dot rc-embed__dot--" + (conexionOk ? "ok" : "bad");
 
     valorIp.textContent = network.publicIpConfigured ? "Configurada" : "Sin configurar";
@@ -1739,11 +1748,12 @@
       hint.textContent = "";
       return;
     }
-    // Con el servidor seleccionado parado, invitar a "arrancar la formación" es una instrucción
-    // para una carrera que todavía no existe — se calla en vez de confundir (mismo criterio que
-    // renderStart en app.js).
+    // Con el servidor seleccionado parado, o sin señal del servidor de carrera, invitar a "arrancar
+    // la formación" es una instrucción para una carrera que todavía no existe — se calla en vez de
+    // confundir (mismo criterio que renderStart en app.js).
+    var hayCarreraPosible = servidorSeleccionadoActivo() && hayServidorConectado(state);
     var hints = {
-      idle: servidorSeleccionadoActivo() ? "Arrancá la formación cuando la parrilla esté completa." : "",
+      idle: hayCarreraPosible ? "Arrancá la formación cuando la parrilla esté completa." : "",
       formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
     };
     hint.textContent = hints[lightState] || "";
@@ -1910,14 +1920,20 @@
 
   /**
    * Bloqueado mientras haya incidentes sin revisar — mismo chequeo que hace el servidor, para que
-   * el botón ya muestre por qué no se puede antes de que el click vuelva con un 409.
+   * el botón ya muestre por qué no se puede antes de que el click vuelva con un 409 — y también
+   * sin conexión: terminar el evento de un servidor del que no entra una sola señal es, en el
+   * mejor de los casos, borrar la bandeja de la carrera anterior sin querer. Mismo criterio que
+   * `renderEndEvent` en app.js, motivo de desconexión primero.
    */
   function renderTerminar(state) {
     terminarSlot.textContent = "";
-    if (state.pendingIncidents > 0) {
+    var motivo = "";
+    if (!hayServidorConectado(state)) motivo = "Sin señal del servidor: no hay evento en curso que terminar.";
+    else if (state.pendingIncidents > 0) motivo = "Quedan " + state.pendingIncidents + " incidente(s) sin revisar";
+    if (motivo) {
       var disabled = boton("Terminar evento", null, "secondary");
       disabled.disabled = true;
-      disabled.title = "Quedan " + state.pendingIncidents + " incidente(s) sin revisar";
+      disabled.title = motivo;
       terminarSlot.appendChild(disabled);
       return;
     }

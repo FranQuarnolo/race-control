@@ -849,6 +849,59 @@ test("un evento en curso no se puede borrar, y uno terminado sí", async () => {
   assert.equal(inexistente.status, 404);
 });
 
+// --- Renombre de un servidor -------------------------------------------------------------------
+
+test("el operador renombra un servidor sin tocar el worker ni su id", async () => {
+  const { liga } = await altaDePrueba("Copa Renombrable", "renombrable@example.com");
+  const servidor = portal.addServidor(liga.id, "Nombre con herror", { start: false });
+  const headers = { "x-rc-request": "1" };
+
+  // El nombre no viaja en `StartMessage`, así que renombrar no tiene por qué reiniciar nada: si lo
+  // hiciera, corregir un tipeo le cortaría la carrera en curso al admin.
+  const detenidos: string[] = [];
+  const stopOriginal = portal.supervisor.stop.bind(portal.supervisor);
+  portal.supervisor.stop = (id: string) => {
+    detenidos.push(id);
+    stopOriginal(id);
+  };
+  try {
+    const res = await pedir("PATCH", `/api/operador/ligas/${liga.id}/servidores/${servidor.id}`, {
+      cookie: cookieOp,
+      headers,
+      body: { nombre: "México F3" },
+    });
+    assert.equal(res.status, 200, res.body);
+  } finally {
+    portal.supervisor.stop = stopOriginal;
+  }
+
+  assert.deepEqual(detenidos, []);
+  const actualizado = portal.store.findServidor(servidor.id);
+  assert.equal(actualizado?.nombre, "México F3");
+  // Mismo id y mismos puertos: el link de conexión que el admin ya tenía guardado sigue sirviendo,
+  // que es justo lo que hacía caro arreglar un nombre borrando y recreando el servidor.
+  assert.equal(actualizado?.udpPort, servidor.udpPort);
+
+  // Un nombre vacío es 400 y no deja el servidor sin rótulo.
+  const vacio = await pedir("PATCH", `/api/operador/ligas/${liga.id}/servidores/${servidor.id}`, {
+    cookie: cookieOp,
+    headers,
+    body: { nombre: "   " },
+  });
+  assert.equal(vacio.status, 400);
+  assert.equal(portal.store.findServidor(servidor.id)?.nombre, "México F3");
+
+  // Y los mismos 404 que el borrado: servidor inexistente, liga inexistente, y un admin cualquiera.
+  assert.equal(
+    (await pedir("PATCH", `/api/operador/ligas/${liga.id}/servidores/no-existe`, { cookie: cookieOp, headers, body: { nombre: "X" } })).status,
+    404
+  );
+  assert.equal(
+    (await pedir("PATCH", `/api/operador/ligas/${liga.id}/servidores/${servidor.id}`, { cookie: cookieA, headers, body: { nombre: "X" } })).status,
+    404
+  );
+});
+
 // --- Borrado de un servidor --------------------------------------------------------------------
 
 test("el operador borra un servidor: para el worker antes de sacarlo del store", async () => {

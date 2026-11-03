@@ -140,6 +140,26 @@ test("borrar un servidor pasa por el modal de confirmación y pega DELETE a /lig
   );
 });
 
+test("renombrar un servidor pega PATCH a /ligas/:id/servidores/:servidorId y no reinicia el worker", () => {
+  const js = leer(PORTAL, "operador.js");
+  const server = leer(DIST, "portal", "server.js");
+
+  assert.ok(
+    /operadorApi\.patch\(\s*"\/ligas\/:id\/servidores\/:servidorId"/.test(server),
+    "el portal no expone la ruta de renombre de un servidor"
+  );
+  assert.ok(js.includes("function renombrarServidor("), "falta `renombrarServidor` en operador.js");
+  assert.ok(
+    /renombrarServidor\([^)]*\)\s*\{[\s\S]*?"\/api\/operador\/ligas\/"[\s\S]*?\/servidores\/"[\s\S]*?"PATCH"/.test(js),
+    "renombrarServidor no manda PATCH a /ligas/:id/servidores/:servidorId"
+  );
+  // El nombre no viaja en `StartMessage`: si alguien agrega un restart acá, es trabajo de más que
+  // además le corta la carrera en curso al admin por cambiar un rótulo.
+  const handler = server.slice(server.indexOf('operadorApi.patch("/ligas/:id/servidores/:servidorId"'));
+  const cuerpo = handler.slice(0, handler.indexOf("});"));
+  assert.ok(!/supervisor\.(restart|stop|start)\(/.test(cuerpo), "renombrar un servidor no tiene por qué tocar el worker");
+});
+
 /**
  * El modal de Servidores reemplazó al `prompt()`/`alert()` de "+ agregar servidor" y al `<dialog>`
  * nativo de detalle de evento: todos los modales de este panel son `.modal-backdrop`/`.modal`, el

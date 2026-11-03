@@ -707,9 +707,38 @@ export function createPortal(config: PortalConfig): Portal {
   });
 
   /**
+   * Renombra un servidor ya creado. Hasta acá el nombre se elegía una sola vez, al crearlo, y un
+   * error de tipeo quedaba para siempre — borrarlo y rehacerlo era la única salida, y eso le cambia
+   * el id (y por lo tanto el link de conexión) por un problema puramente cosmético.
+   *
+   * No reinicia el worker a propósito: el nombre del servidor es rótulo del panel y no viaja en
+   * `StartMessage` (ver `supervisor.start`), así que el proceso no tiene nada que releer. Ojo que
+   * NO es el caso del slug de la liga, que sí viaja y por eso allá sí hay `supervisor.restart`.
+   */
+  operadorApi.patch("/ligas/:id/servidores/:servidorId", (req, res) => {
+    const liga = store.findLiga(req.params.id);
+    if (!liga) {
+      res.status(404).json({ ok: false, error: "No existe esa liga." });
+      return;
+    }
+    const servidor = store.servidoresDeLiga(liga.id).find((s) => s.id === req.params.servidorId);
+    if (!servidor) {
+      res.status(404).json({ ok: false, error: "No existe ese servidor." });
+      return;
+    }
+    const nombre = String((req.body ?? {}).nombre ?? "").trim().slice(0, 80);
+    if (!nombre) {
+      res.status(400).json({ ok: false, error: "El servidor necesita un nombre." });
+      return;
+    }
+    store.updateServidor(servidor.id, { nombre });
+    res.json({ ok: true, servidor: { id: servidor.id, nombre } });
+  });
+
+  /**
    * Borra un servidor de una liga. A diferencia de borrar un evento del historial (debajo), esto
-   * SÍ puede deshacer trabajo real: por eso el frontend lo arma con el mismo patrón de doble click
-   * que ya usa para esos eventos, y acá se para el worker ANTES de sacarlo del store — si no,
+   * SÍ puede deshacer trabajo real: por eso el frontend lo pasa por el modal de confirmación, y
+   * acá se para el worker ANTES de sacarlo del store — si no,
    * `usedPorts()` (que calcula los puertos ocupados a partir de `store.servidores`) dejaría de
    * contar los puertos de un proceso que en los hechos sigue vivo, y un servidor nuevo podría
    * terminar pidiendo el mismo puerto UDP que el huérfano todavía tiene abierto.

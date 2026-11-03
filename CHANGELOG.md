@@ -3,6 +3,30 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.30] — 2026-11-03
+
+### El nombre de un servidor era para siempre, y el panel invitaba a largar carreras sin señal
+
+El nombre se elegía una sola vez, al crear el servidor, y después no había forma de cambiarlo: un
+error de tipeo obligaba a borrarlo y rehacerlo, cosa que le cambia el id y con él el link de
+conexión que el admin ya tenía guardado — un costo alto para un problema puramente cosmético. Ahora
+cada pestaña del modal de Servidores tiene su campo de nombre editable. No reinicia el worker a
+propósito: el nombre es rótulo del panel y no viaja en `StartMessage`, así que el proceso no tiene
+nada que releer, y hay un test que falla si alguien le agrega un `restart` por las dudas (sería
+cortarle la carrera en curso al admin por corregir una letra).
+
+Con el servidor de carrera sin señal, el panel y el embed seguían diciendo "Arrancá la formación
+cuando la parrilla esté completa" y dejaban "Terminar evento" habilitado. Lo primero es una
+instrucción para una carrera que no existe; lo segundo es peor, porque terminar el evento de un
+servidor del que no entra una sola señal es, en el mejor de los casos, vaciar la bandeja de la
+carrera anterior sin querer. Los dos ahora miran el estado de conexión, y el botón explica en su
+`title` por qué está bloqueado — la desconexión antes que los incidentes pendientes, porque es la
+que además explica por qué el resto del panel se ve vacío.
+
+De paso, el criterio de "¿hay servidor del otro lado?" quedó en una sola función por archivo
+(`hayServidorConectado`): ya eran tres lugares armando la misma condición por su cuenta, y con eso
+alcanzaba con tocar una para que el panel se contradijera consigo mismo.
+
 ## [1.29] — 2026-11-02
 
 ### Borrar un servidor pedía reinstalar la liga entera, y varios detalles de pulido quedaron sueltos de la 1.28

@@ -1386,15 +1386,23 @@ function disarmEndEvent() {
 
 /** Vacía la bandeja de incidentes y las sanciones. El servidor ya rechaza el pedido si quedan
  * incidentes sin revisar (ver `handleTerminarEvento`); acá solo se refleja ese bloqueo en el botón
- * para no dejar armar una confirmación que después el servidor va a rechazar igual. */
+ * para no dejar armar una confirmación que después el servidor va a rechazar igual.
+ *
+ * También se bloquea sin conexión: "terminar el evento" de un servidor del que no entra una sola
+ * señal es, en el mejor de los casos, borrar la bandeja de la carrera anterior sin querer. Ese es
+ * el motivo que va primero en el título, porque es el que explica por qué el resto del panel se ve
+ * vacío. */
 function renderEndEvent(state) {
   if (armedEndEvent) return; // no pisar el "¿Seguro?" a mitad de la ventana de confirmación
   const btn = $("btn-end-event");
   const pendientes = state.pendingIncidents || 0;
-  btn.disabled = pendientes > 0;
-  btn.title = pendientes > 0
-    ? "Quedan " + pendientes + " incidente(s) sin revisar"
-    : "Vacía la bandeja de incidentes y las sanciones aplicadas.";
+  const conectado = hayServidorConectado(state.network);
+  btn.disabled = !conectado || pendientes > 0;
+  btn.title = !conectado
+    ? "Sin señal del servidor: no hay evento en curso que terminar."
+    : pendientes > 0
+      ? "Quedan " + pendientes + " incidente(s) sin revisar"
+      : "Vacía la bandeja de incidentes y las sanciones aplicadas.";
 }
 
 function onEndEventClick() {
@@ -1927,10 +1935,9 @@ function renderNetwork(network) {
   // confirmada —mismo criterio que pinta de verde el botón de la barra— seguir mostrándolo es
   // ruido: ocupa lugar arriba de todo en un cajón que, a partir de acá, se abre sobre todo para
   // mirar el estado o tocar el modo.
-  const connected = Boolean(ac.autodetected) && network.receivingTelemetry;
-  $("network-howto").hidden = connected;
+  $("network-howto").hidden = hayServidorConectado(network);
 
-  renderNetworkButton(network, ac);
+  renderNetworkButton(network);
 }
 
 // --------------------------------------------------------------- probar conexión
@@ -1967,11 +1974,23 @@ function renderChecksInto(box, checks) {
   }
 }
 
-/** El botón de la barra resume todo el cajón en un color. Verde solo si las DOS mitades están
- * bien: hay servidor identificado y entra telemetría. Media conexión es tan inútil como ninguna. */
-function renderNetworkButton(network, ac) {
+/**
+ * Las DOS mitades de la conexión: el servidor de carrera se identificó y además entra telemetría.
+ * Media conexión es tan inútil como ninguna.
+ *
+ * Vive en una sola función porque ya son varios los lugares que preguntan lo mismo —el color del
+ * botón de la barra, el renglón de ayuda de la largada, Terminar evento—: con cada uno armando su
+ * propia condición, alcanzaba con tocar una para que el panel se contradijera consigo mismo.
+ */
+function hayServidorConectado(network) {
+  const ac = (network && network.acServer) || {};
+  return Boolean(ac.autodetected) && Boolean(network && network.receivingTelemetry);
+}
+
+/** El botón de la barra resume todo el cajón en un color. */
+function renderNetworkButton(network) {
   const btn = $("btn-network");
-  const ok = Boolean(ac.autodetected) && network.receivingTelemetry;
+  const ok = hayServidorConectado(network);
   btn.classList.toggle("ok", ok);
   btn.classList.toggle("bad", !ok);
   $("btn-network-label").textContent = ok ? "Conectado" : network.receivingTelemetry ? "Sin servidor" : "Sin señal";
@@ -2111,7 +2130,7 @@ const START_ACTIONS = {
 /** El tipo de sesión "carrera" del protocolo de AC. Ver `RACE_SESSION_TYPE` en adminApi.ts. */
 const RACE_SESSION_TYPE = 3;
 
-function renderStart(lightState, session) {
+function renderStart(lightState, session, network) {
   const semaforo = $("semaforo");
   semaforo.className = "semaforo " + lightState;
   const labels = { idle: "Esperando", formation: "Formación", green: "VERDE" };
@@ -2146,10 +2165,13 @@ function renderStart(lightState, session) {
     $("start-hint").textContent = "";
     return;
   }
-  // Con el servidor seleccionado parado, invitar a "arrancar la formación" es una instrucción para
-  // una carrera que todavía no existe — se calla en vez de confundir.
+  // Con el servidor seleccionado parado, o sin señal del servidor de carrera, invitar a "arrancar
+  // la formación" es una instrucción para una carrera que todavía no existe — se calla en vez de
+  // confundir. Sin señal es el caso que más confundía: el panel se ve entero y operable, y el
+  // renglón parecía estar diciendo que ya se podía largar.
+  const hayCarreraPosible = servidorSeleccionadoActivo() && hayServidorConectado(network);
   const hints = {
-    idle: servidorSeleccionadoActivo() ? "Arrancá la formación cuando la parrilla esté completa." : "",
+    idle: hayCarreraPosible ? "Arrancá la formación cuando la parrilla esté completa." : "",
     formation: "Control de velocidad activo. Dale verde cuando la fila esté ordenada.",
   };
   $("start-hint").textContent = hints[lightState] || "";
@@ -2228,7 +2250,7 @@ async function refresh() {
     wizardOpen = false;
   }
 
-  renderStart(state.lightState, state.session);
+  renderStart(state.lightState, state.session, state.network);
   renderLights(state.lightState);
   renderSessionIndicator(state.session);
   renderServidorCircuito(state.session);
