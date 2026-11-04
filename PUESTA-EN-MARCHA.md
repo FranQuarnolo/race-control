@@ -271,11 +271,21 @@ conexión, hay una sección **"Embed externo"** con tres pasos:
    falta un `<script>` por servidor ni tocar el código una segunda vez.
 
 Explicale que ese token **no es una contraseña de las que repartís vos**: vive en el código fuente
-de su página, visible para cualquiera que la abra, y por eso el embed solo deja leer el estado de
-SU liga, resolver incidentes, aplicar/anular sanciones y controlar la largada — nunca reconfigurar
-reglas, ver el SteamID de un piloto ni nada del resto del panel. El mapa, los tiempos y los
-neumáticos tampoco están ahí: siguen en el producto completo, al que sigue entrando con su usuario
-y contraseña de siempre.
+de su página, visible para cualquiera que la abra. Lo que lo protege no es el secreto del token
+sino el origen autorizado del paso 1 — pegado en cualquier otra página, no contesta.
+
+Y explicale también **hasta dónde llega**, porque desde la 1.18 llega lejos: resolver incidentes,
+aplicar y anular sanciones, expulsar un auto, controlar la largada y, además, **leer y cambiar el
+reglamento entero de la liga** (Reglas se portó completo al embed, y Conexión con Estado y Modo de
+funcionamiento). No hay modo de solo lectura. Si la sección donde lo pega es pública, cualquiera
+que entre a esa página tiene esos botones: lo sano es que la deje detrás del login que su panel ya
+tiene. Lo que el token no da es el resto del portal —otras ligas, el alta de servidores, el propio
+"Embed en otra página" con el que se regenera a sí mismo, la pantalla del operador—, al que sigue
+entrando con su usuario y contraseña de siempre.
+
+Si el admin va a integrarlo con ayuda de una IA, pasale el link a
+[`INTEGRAR-EMBED.md`](INTEGRAR-EMBED.md) y no hace falta que le expliques nada más: es un wizard
+paso a paso con las preguntas, la variante de React/Next.js y la tabla de errores.
 
 ---
 

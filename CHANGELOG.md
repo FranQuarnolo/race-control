@@ -3,6 +3,37 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.36] — 2026-11-04
+
+### El README se quedó en la 1.14, y la integración del embed no estaba escrita en ningún lado
+
+El `README.md` describía un producto que ya no es: una liga, un servidor, sin portal, sin selector,
+sin semáforo de conexión y con el embed como una nota al pie. Todo lo que entró entre la 1.15 y la
+1.35 —el portal multi-liga con login, varios servidores por liga, los tres estados de conexión, el
+embed como camino de integración de primera clase— no aparecía. Se reescribió con eso adentro y se
+le agregó al final una tabla de "dónde está cada cosa", porque la documentación de este proyecto
+son los `.md` de la raíz y no había ninguna puerta de entrada que lo dijera.
+
+**Y el agujero más grande era el otro:** cuando el admin de una liga va a pegar el embed en su
+página, lo que le dábamos era el snippet de "Copiar código" y nada más. Las cosas que hacen fallar
+esa integración no están en el snippet: que `document.currentScript` vale `null` si una SPA carga
+el script como módulo (es decir, que `next/script` no sirve), que un ancestro con `transform` le
+recorta los modales, que el `allowedOrigin` es comparación exacta y uno por vez, y que el token no
+tiene modo de solo lectura. Nada de eso se descubre leyendo dos líneas de HTML; se descubre
+perdiendo una tarde.
+
+Se agregó **`INTEGRAR-EMBED.md`**, escrito para que el admin se lo pase a una IA y la IA lo
+integre: arranca obligándola a leer el contexto y a confirmar los tres prerrequisitos que se hacen
+del lado de Race Control (origen, token, slug), después le hace tres preguntas al admin —dónde,
+para quién, con qué está hecha la página—, y recién ahí da el snippet, la variante de React, una
+checklist de verificación en orden y una tabla que mapea cada mensaje de error textual a su causa.
+La IA es el lector previsto, no un agregado: es quien de verdad va a tocar ese código.
+
+De paso, en `PUESTA-EN-MARCHA.md` §5 la sección de incrustar decía que el token del embed "nunca"
+podía reconfigurar reglas. Dejó de ser cierto en la **1.18**, cuando Reglas se portó entero al
+embed, y nadie volvió a tocar ese párrafo. Ahora dice lo que el token puede hacer de verdad y qué
+implica eso si la sección donde se pega es pública.
+
 ## [1.35] — 2026-11-04
 
 ### Tres detalles del embed, vistos recién cuando se pegó en una página de verdad
