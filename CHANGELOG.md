@@ -3,6 +3,46 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.33] — 2026-11-04
+
+### El login andaba perfecto y parecía roto: entrabas con una cuenta y aterrizabas en la liga de otra
+
+El síntoma era desconcertante. Cerrabas sesión, entrabas con otro usuario, y te recibía un **"No
+tenés acceso a esta liga."**. Daba toda la impresión de que el login no estaba funcionando. Pero
+sí funcionaba: la sesión quedaba creada y era la correcta — por eso, yendo al portal y entrando
+por "Ir a mi panel", andaba todo y te mostraba al usuario que acababa de entrar.
+
+Lo que fallaba no era la autenticación sino **el destino**. Cuando alguien cae sin sesión en la
+URL de su liga, el portal lo manda a `/login?volver=/l/esa-liga/...` para que después del login
+aterrice donde quería ir y no en una lista intermedia. Ese parámetro queda pegado en la URL de la
+pantalla de login — y **la pantalla de login sobrevive a quién la abrió**. El que entra después no
+tiene por qué ser el mismo. `login.js` le daba prioridad al `volver` por encima de lo que
+contestaba el servidor, así que mandaba al usuario nuevo a la liga del anterior, y ahí el 403 era
+la respuesta correcta a un pedido equivocado.
+
+No hacía falta nada raro para pisarlo: el panel que quedó abierto en otra pestaña recibe un 401 en
+su próximo poll y se recarga sola (`app.js`), y esa recarga es justamente la que escribe el
+`volver` en el login. Con el operador era todavía peor, porque un operador no tiene acceso a
+**ninguna** liga: su destino (`/operador`) está escrito a mano en el servidor y aun así nunca se
+usaba si había un `volver` dando vueltas.
+
+La decisión de a dónde mandar a alguien se mudó entera al servidor (`destinoDeLogin`), que ahora
+recibe el `volver` en el cuerpo del login y lo acepta **solo si el que entró tiene acceso a lo que
+pide**: liga con membresía, o el panel del operador si es operador. Si no, cae en su propio
+destino. El navegador no puede tomar esta decisión —no sabe a qué ligas tiene acceso nadie, ni
+tiene por qué saberlo— y además era el único de los dos que podía ignorar la respuesta del otro.
+La validación de redirector abierto que ya existía (nada de `//evil.com` ni hosts adentro) se mudó
+junto con la función, con test propio: es lo que evita que el login se use para armar un phishing
+con un dominio legítimo.
+
+### Un 403 sin ningún lugar a dónde ir
+
+De paso, y porque es la mitad de lo que hacía molesto al bug: llegar a una liga ajena con sesión
+válida —un bookmark viejo, un link que te pasaron— dejaba una pantalla blanca con una línea de
+texto arriba a la izquierda y ninguna salida salvo escribir el dominio a mano. Ahora es una página
+del portal, con la marca y un link a "Ir a mis ligas". Vale para los dos casos con sesión: la liga
+ajena y la liga desactivada.
+
 ## [1.32] — 2026-11-04
 
 ### "Sin señal" decía dos cosas distintas, y el operador no tenía cómo distinguirlas

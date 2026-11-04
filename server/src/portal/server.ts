@@ -112,6 +112,34 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,39}$/;
 /** Lo que genera `newId()` en `store.ts`: base64url de 9 bytes. */
 const SERVIDOR_ID_RE = /^[A-Za-z0-9_-]+$/;
 
+/**
+ * Un error de navegación con una salida. Los dos que la usan le pasan a alguien CON sesión válida:
+ * cayó en una liga que no es suya (un bookmark viejo, un link que le pasaron) o en una liga
+ * desactivada. Antes eran `res.send()` de texto pelado: pantalla blanca, una línea arriba a la
+ * izquierda y ningún lugar a dónde ir salvo escribir el dominio a mano. Dos renglones de HTML
+ * convierten un callejón sin salida en un desvío.
+ *
+ * El mensaje es siempre un literal de este archivo, nunca algo que haya escrito una persona: por
+ * eso puede ir interpolado. Si alguna vez acá entra un nombre de liga o de piloto, hay que
+ * escaparlo — es la regla de `textContent` del resto del proyecto, que en un string de HTML armado
+ * a mano no existe.
+ */
+function paginaDeError(res: Response, status: number, mensaje: string): void {
+  res
+    .status(status)
+    .type("html")
+    .send(
+      `<!doctype html><html lang="es"><meta charset="utf-8">` +
+        `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+        `<title>Race Control</title>` +
+        `<link rel="icon" href="/icon.svg">` +
+        `<link rel="stylesheet" href="/portal.css">` +
+        `<body><div class="marca"><img src="/icon.svg" alt=""> Race Control</div>` +
+        `<div class="caja"><h1>Un momento</h1><p>${mensaje}</p>` +
+        `<p class="pie"><a href="/mis-ligas">Ir a mis ligas</a></p></div></body></html>`
+    );
+}
+
 /** Lo que hay que entregarle a un admin nuevo. La contraseña se ve una vez y nunca más. */
 export interface Credenciales {
   liga: Liga;
@@ -372,6 +400,41 @@ export function createPortal(config: PortalConfig): Portal {
     });
   });
 
+  /**
+   * A dónde mandar a alguien que acaba de entrar, cuando la pantalla de login traía un `?volver=`.
+   *
+   * El `volver` lo pone el portal cuando alguien cae sin sesión en la URL de su liga, para que
+   * aterrice donde quería ir y no en una lista intermedia. El problema es que ese parámetro
+   * sobrevive a quién entra: queda pegado en la URL del login, y si después entra OTRO usuario, lo
+   * manda a la liga del anterior. Daba "No tenés acceso a esta liga." con una sesión recién creada
+   * y perfectamente válida —parecía que el login no andaba—, y con el operador era peor todavía,
+   * porque un operador no tiene acceso a NINGUNA liga y su destino real (`/operador`) nunca se
+   * usaba. Se dispara solo: el panel que quedó abierto en otra pestaña recibe un 401 en su próximo
+   * poll y recarga, y esa recarga es la que escribe el `volver` en el login.
+   *
+   * Por eso la decisión se toma acá y no en `login.js`: el navegador no sabe —ni tiene por qué
+   * saber— a qué ligas tiene acceso el usuario que acaba de autenticarse. El servidor sí, y además
+   * es el único lugar donde la respuesta no se puede ignorar.
+   *
+   * La otra mitad de la función es la de siempre: solo se aceptan rutas propias. Un `volver` con
+   * host adentro convierte el login en un redirector abierto, que es la forma clásica de armar un
+   * phishing con un dominio legítimo. Se rechaza todo lo que no empiece con una sola barra.
+   */
+  function destinoDeLogin(user: User, volver: unknown, propio: string): string {
+    if (typeof volver !== "string" || !/^\/[^/\\]/.test(volver)) return propio;
+
+    const slug = volver.match(/^\/l\/([^/?#]+)/)?.[1];
+    if (slug) {
+      const liga = store.findLigaBySlug(decodeURIComponent(slug));
+      if (!liga || !store.hasAccess(user.id, liga.id)) return propio;
+    }
+    // El panel del operador es la otra pantalla con dueño. Un admin que llega con `volver=/operador`
+    // la abriría para que la primera llamada a la API le conteste 403: mismo callejón sin salida que
+    // el de la liga ajena, con otro cartel.
+    if (/^\/operador(?:[/?#]|$)/.test(volver) && user.role !== "operador") return propio;
+    return volver;
+  }
+
   portalApi.post("/login", async (req, res) => {
     const ip = req.ip || "desconocida";
     if (throttle.ipBlocked(ip)) {
@@ -411,19 +474,17 @@ export function createPortal(config: PortalConfig): Portal {
     const memberships = store.membershipsOf(user.id);
     const única = memberships.length === 1 ? store.findLiga(memberships[0].ligaId) : undefined;
     const primerServidor = única ? store.servidoresDeLiga(única.id)[0] : undefined;
-    res.json({
-      ok: true,
-      // A dónde mandarlo: el operador a su panel, y el admin de una sola liga directo adentro.
-      // Una lista de un solo elemento es una pantalla que solo existe para hacer un click más.
-      destino:
-        user.role === "operador"
-          ? "/operador"
-          : única && primerServidor
-          ? `/l/${única.slug}/s/${primerServidor.id}/`
-          : única
-          ? `/l/${única.slug}/`
-          : "/mis-ligas",
-    });
+    // A dónde mandarlo: el operador a su panel, y el admin de una sola liga directo adentro.
+    // Una lista de un solo elemento es una pantalla que solo existe para hacer un click más.
+    const propio =
+      user.role === "operador"
+        ? "/operador"
+        : única && primerServidor
+        ? `/l/${única.slug}/s/${primerServidor.id}/`
+        : única
+        ? `/l/${única.slug}/`
+        : "/mis-ligas";
+    res.json({ ok: true, destino: destinoDeLogin(user, (req.body ?? {}).volver, propio) });
   });
 
   portalApi.post("/logout", (req: SessionRequest, res) => {
@@ -1021,14 +1082,14 @@ export function createPortal(config: PortalConfig): Portal {
       return;
     }
     if (!store.hasAccess(req.userId, liga.id)) {
-      res.status(403).send("No tenés acceso a esta liga.");
+      paginaDeError(res, 403, "No tenés acceso a esta liga.");
       return;
     }
     // La suscripción es del dueño, no de cada comisario: si el dueño está desactivado, la liga
     // entera queda cerrada aunque un comisario suyo siga teniendo su cuenta en pie.
     const dueño = liga.ownerId ? store.findUser(liga.ownerId) : undefined;
     if (dueño && !dueño.active) {
-      res.status(403).send("Esta liga está desactivada. Hablá con quien te dio el acceso.");
+      paginaDeError(res, 403, "Esta liga está desactivada. Hablá con quien te dio el acceso.");
       return;
     }
     if (servidor.status !== "running") {

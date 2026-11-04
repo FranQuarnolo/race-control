@@ -183,6 +183,83 @@ test("sin sesión, una navegación va al login y vuelve a donde estaba", async (
   assert.equal(res.headers.location, `/login?volver=${encodeURIComponent(`/l/liga-a/s/${servidorAId}/sanciones`)}`);
 });
 
+/**
+ * El `volver` del test de arriba queda pegado en la URL de la pantalla de login, y esa pantalla
+ * sobrevive a quién la usa: el que entra después no tiene por qué ser el que la abrió. Pasaba solo,
+ * sin hacer nada raro — el panel que quedaba abierto en otra pestaña recibía un 401 en su próximo
+ * poll, recargaba, y esa recarga escribía el `volver`. Entrabas con otra cuenta y te recibía un
+ * "No tenés acceso a esta liga." con la sesión recién creada y perfectamente válida. Parecía, de
+ * afuera, que el login estaba roto.
+ *
+ * Por eso el destino lo decide el servidor y no `login.js`: el navegador no sabe —ni puede— a qué
+ * ligas tiene acceso quien acaba de autenticarse.
+ */
+test("el `volver` de otro usuario no se respeta: cada uno aterriza en lo suyo", async () => {
+  const aLigaA = `/l/liga-a/s/${servidorAId}/sanciones`;
+
+  // Ana sí tiene acceso a liga-a: su `volver` se respeta tal cual, que es para lo que existe.
+  const ana = await pedir("POST", "/api/portal/login", {
+    body: { email: "ana@example.com", password: CLAVE_A, volver: aLigaA },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(ana.json().destino, aLigaA);
+
+  // Beto no. Cae en su propia liga, no en un 403.
+  const servidorB = primerServidor((await portal.store.findLigaBySlug("liga-b"))!.id);
+  const beto = await pedir("POST", "/api/portal/login", {
+    body: { email: "beto@example.com", password: CLAVE_B, volver: aLigaA },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(beto.json().destino, `/l/liga-b/s/${servidorB.id}/`);
+
+  // El operador no tiene acceso a NINGUNA liga, así que para él cualquier `volver` a `/l/...` es
+  // inalcanzable: es el caso donde el bug se veía más claro, porque su destino (`/operador`) está
+  // escrito a mano en el servidor y aun así nunca se usaba.
+  const op = await pedir("POST", "/api/portal/login", {
+    body: { email: "jefe@example.com", password: CLAVE_OP, volver: aLigaA },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(op.json().destino, "/operador");
+
+  // Y al revés: un admin con un `volver` al panel del operador tampoco lo abre para comerse un 403.
+  const alRevés = await pedir("POST", "/api/portal/login", {
+    body: { email: "ana@example.com", password: CLAVE_A, volver: "/operador" },
+    headers: { "x-rc-request": "1" },
+  });
+  assert.equal(alRevés.json().destino, `/l/liga-a/s/${servidorAId}/`);
+});
+
+/**
+ * La validación que ya existía cuando esto vivía en `login.js` y que no se podía perder al mudarla:
+ * un `volver` con host adentro convierte el login en un redirector abierto, que es la forma clásica
+ * de armar un phishing con un dominio legítimo. `//evil.com` es el que se escapa de un chequeo
+ * ingenuo de "empieza con barra": el navegador lo lee como URL protocol-relative.
+ */
+test("un `volver` que apunta afuera se descarta", async () => {
+  for (const volver of ["//evil.com/", "https://evil.com/", "/\\evil.com", "javascript:alert(1)"]) {
+    const res = await pedir("POST", "/api/portal/login", {
+      body: { email: "ana@example.com", password: CLAVE_A, volver },
+      headers: { "x-rc-request": "1" },
+    });
+    assert.equal(res.json().destino, `/l/liga-a/s/${servidorAId}/`, `se respetó un volver externo: ${volver}`);
+  }
+});
+
+/**
+ * Llegar a una liga ajena con sesión válida (un bookmark viejo, un link que te pasaron) tiene que
+ * dejarte una salida. Antes era un `res.send()` de texto pelado: pantalla blanca, una línea arriba
+ * a la izquierda, y el único camino de vuelta era escribir el dominio a mano.
+ */
+test("el 403 de una liga ajena es una página con salida, no un texto pelado", async () => {
+  // Con el servidor de liga-b, no el de liga-a: un servidor que no es de esa liga se rechaza antes
+  // (404, "no existe ese servidor") y nunca se llega al chequeo de acceso que se quiere probar.
+  const servidorB = primerServidor((await portal.store.findLigaBySlug("liga-b"))!.id);
+  const res = await pedir("GET", `/l/liga-b/s/${servidorB.id}/`, { cookie: cookieA });
+  assert.equal(res.status, 403);
+  assert.match(res.headers["content-type"] || "", /text\/html/);
+  assert.match(res.body, /href="\/mis-ligas"/);
+});
+
 test("el admin de una liga no entra a la liga de al lado", async () => {
   // Es la propiedad central del multi-liga: una sesión válida no alcanza, tiene que ser válida
   // PARA ESA liga.
