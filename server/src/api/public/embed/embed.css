@@ -35,16 +35,13 @@
   box-sizing: border-box;
   font-family: var(--font-body);
   color: var(--text);
-  /* La cuadrícula de fondo de fslmanager (ver la misma regla en ../styles.css y en
-     portal/public/portal.css). Acá va sobre `.rc-embed` y no sobre el `body` como en las otras
-     dos hojas: el widget se incrusta en la página de otro, el body no es nuestro. Sin
-     `background-attachment: fixed` a propósito — ahí el fondo se ancla al viewport del sitio que
-     nos hospeda y la cuadrícula se desalinea con el recuadro del widget al scrollear. */
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    var(--bg);
-  background-size: 72px 72px, 72px 72px, auto;
+  /* Fondo plano, SIN la cuadrícula que sí tienen `../styles.css` y `portal/public/portal.css`.
+     Estuvo un rato (1.32) y se sacó enseguida: la página que nos hospeda ya dibuja la suya, y dos
+     grillas de 72 px que arrancan en orígenes distintos —el viewport de ellos, el borde del widget
+     nuestro— no empatan nunca. El resultado es un recuadro visiblemente corrido respecto del fondo
+     de alrededor, que es peor que no tener grilla: parece un error de alineación, no una textura.
+     Las otras dos hojas son la página entera y ahí no hay con qué desfasarse. */
+  background: var(--bg);
   border-radius: var(--radius);
   padding: 16px;
   max-width: 100%;
@@ -184,6 +181,11 @@
   height: 8px;
   border-radius: 50%;
   background: var(--muted);
+  /* El mismo aire que el `gap: 7px` de `.status-button` en ../styles.css, que es el botón de
+     Conexión del panel completo. Acá va como margen y no como `gap` porque `.rc-embed__btn` no es
+     flex, y volverlo flex para esto cambiaría el alto de los otros cuatro botones de la barra. Sin
+     el margen el punto queda pegado a la C: se lee "●CONEXIÓN", como si fuera parte de la palabra. */
+  margin-right: 7px;
   animation: rc-embed-dot-blink 1.6s ease-in-out infinite;
 }
 .rc-embed__dot--ok {
@@ -416,8 +418,19 @@
   line-height: 1;
   padding: 4px 8px;
 }
+/* "Terminar evento": el mismo rojo que `.status-button.bad` en ../styles.css, que es como se ve en
+   el panel completo. Antes declaraba solo el color del texto y heredaba el `background: var(--accent)`
+   de `.rc-embed__btn`: quedaba rojo sobre ámbar, que es el par de una advertencia de sistema, no de
+   un botón — y encima competía por atención con los botones de largada, que son los que de verdad
+   tienen que saltar durante una carrera. La acción destructiva se anuncia con el borde, no con el
+   relleno; el relleno rojo entero está reservado al segundo paso (`--arming`). */
 .rc-embed__btn--peligro {
+  background: var(--panel-raised);
+  border-color: rgba(224, 85, 85, 0.45);
   color: var(--red);
+}
+.rc-embed__btn--peligro:hover:not(:disabled) {
+  border-color: var(--red);
 }
 
 /* Botones ícono de la columna Acciones: desplegar el detalle y el menú de "Expulsar del

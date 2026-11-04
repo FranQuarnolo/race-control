@@ -3,6 +3,33 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.35] — 2026-11-04
+
+### Tres detalles del embed, vistos recién cuando se pegó en una página de verdad
+
+Los tres son del mismo tipo: cosas que en el panel completo están bien y que al recortar la
+pantalla a un `<div>` dentro de la página de otro dejaron de estarlo.
+
+**La cuadrícula de fondo se va.** La que había entrado en la 1.32 duró lo que tardó en verse
+incrustada: la página que hospeda al widget ya dibuja la suya, y dos grillas de 72 px que arrancan
+en orígenes distintos —el viewport de ellos, el borde del widget nuestro— no empatan nunca. El
+recuadro queda visiblemente corrido respecto del fondo de alrededor, que es peor que no tener
+grilla: se lee como un error de alineación, no como una textura. El panel y el portal la
+conservan, porque ahí la pantalla es toda nuestra y no hay con qué desfasarse.
+
+**"Terminar evento" era rojo sobre ámbar.** La clase `--peligro` del embed declaraba solo el color
+del texto y heredaba el `background: var(--accent)` del botón base. Rojo sobre ámbar es el par de
+una advertencia de sistema, no de un botón, y encima competía por atención con los botones de
+largada, que son los que de verdad tienen que saltar mientras corre una carrera. Pasa al mismo
+tratamiento que `.status-button.bad` del panel: fondo oscuro, borde rojo tenue, texto rojo. La
+acción destructiva se anuncia con el borde; el relleno rojo entero sigue reservado al segundo paso
+del "¿Seguro?".
+
+**El puntito de estado estaba pegado a la palabra.** Se leía "●CONEXIÓN", como si el círculo fuera
+parte del texto. En el panel el aire lo pone el `gap: 7px` de `.status-button`; acá va como margen
+del propio punto, porque el botón del embed no es flex y volverlo flex por esto le cambiaría el
+alto a los otros cuatro botones de la barra.
+
 ## [1.34] — 2026-11-04
 
 ### El reloj de la sesión tenía un segundo segundero
