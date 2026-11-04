@@ -3,6 +3,32 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.34] — 2026-11-04
+
+### El reloj de la sesión tenía un segundo segundero
+
+En una práctica de 49 minutos el indicador mostraba `47:44.22`. Los dos últimos dígitos son
+centésimas, y puestos al lado de los segundos no se leen como centésimas: se leen como un segundo
+segundero, corriendo a destiempo del primero. Parecía un contador roto.
+
+El formato venía prestado del de un tiempo de vuelta (`mm:ss.cc`), donde la centésima **es** el
+dato. En un "cuánto falta" de 49 minutos no es un dato de nada — y encima mentía: el reloj se
+redibuja con lo que trae cada poll (un segundo en el panel, 1,5 en el embed), así que esas
+centésimas no contaban el tiempo, saltaban de un valor arbitrario a otro cada vez que llegaba una
+respuesta.
+
+Ahora el reloj de sesión es `MM:SS`, `HH:MM:SS` pasada la hora y `N día(s) + HH:MM:SS` cuando el
+servidor se dejó una práctica corriendo. Vale para la cuenta regresiva y para el tiempo
+transcurrido, en el panel y en el embed.
+
+El test que acompaña al arreglo no verifica la forma del código sino que **ejecuta** las dos
+copias de la función, extraídas de los archivos que se sirven. Es una excepción deliberada al
+"invariantes, no lógica" de `panel.test.ts`, por dos razones: este reloj ya se rompió dos veces y
+las dos en producción (antes de esto, una práctica larga mostraba `1277:21.41`), y la función está
+duplicada a mano entre `app.js` y `embed.js` —no hay build compartido en este repo—, así que lo que
+de verdad hay que sostener es que las dos digan lo mismo. Arreglar una sola y olvidarse de la otra
+es el error natural, y no lo denuncia nadie.
+
 ## [1.33] — 2026-11-04
 
 ### El login andaba perfecto y parecía roto: entrabas con una cuenta y aterrizabas en la liga de otra

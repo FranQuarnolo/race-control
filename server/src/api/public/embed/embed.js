@@ -1649,24 +1649,25 @@
   /** Mismos tipos que `SESSION_SHORT_LABELS` en `app.js`. */
   var SESSION_SHORT_LABELS = { 0: "RES", 1: "P", 2: "Q", 3: "R", 4: "H", 5: "TA", 6: "D", 7: "REP" };
 
+  /** Mismo reloj que `formatClock` en app.js, y por el mismo motivo **sin centésimas**: en una
+   *  práctica de 49 minutos se leía "47:44.22" y esos dos dígitos de más, corriendo al lado de los
+   *  segundos, parecían un segundo segundero descompuesto. Además mentían — el reloj se redibuja
+   *  con lo que trae cada poll (`POLL_MS`, acá 1,5 s), así que saltaban de un valor arbitrario a
+   *  otro. Para "cuánto falta", la unidad útil es el segundo. */
   function formatClock(ms) {
-    var totalCentisimos = Math.max(0, Math.round(ms / 10));
-    var totalSegundos = Math.floor(totalCentisimos / 100);
+    var totalSegundos = Math.max(0, Math.floor(ms / 1000));
     var totalHoras = Math.floor(totalSegundos / 3600);
+    var segundos = String(totalSegundos % 60).padStart(2, "0");
 
     if (totalHoras >= 1) {
       var dias = Math.floor(totalHoras / 24);
       var horas = String(totalHoras % 24).padStart(2, "0");
       var minutos = String(Math.floor((totalSegundos % 3600) / 60)).padStart(2, "0");
-      var segundos = String(totalSegundos % 60).padStart(2, "0");
       var reloj = horas + ":" + minutos + ":" + segundos;
       return dias >= 1 ? dias + (dias === 1 ? " día + " : " días + ") + reloj : reloj;
     }
 
-    var centisimos = totalCentisimos % 100;
-    var segundos2 = totalSegundos % 60;
-    var minutos2 = Math.floor(totalSegundos / 60);
-    return minutos2 + ":" + String(segundos2).padStart(2, "0") + "." + String(centisimos).padStart(2, "0");
+    return Math.floor(totalSegundos / 60) + ":" + segundos;
   }
 
   /** Mismo recorte que `prettyTrackName` en app.js y `prettyTrack`/`prettyLayout` en raceReport.ts —

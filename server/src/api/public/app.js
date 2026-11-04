@@ -2107,29 +2107,33 @@ function applyLightsClass() {
  * la letra a Carrera. */
 const SESSION_SHORT_LABELS = { 0: "RES", 1: "P", 2: "Q", 3: "R", 4: "H", 5: "TA", 6: "D", 7: "REP" };
 
-/** `mm:ss.cc`, igual que un cronómetro de carrera, salvo que `ms` sea tan grande que ya no tenga
- * sentido mostrarlo así: una práctica que el servidor dejó corriendo horas (bug visto en
- * producción: "1277:21.41") pasa a mostrarse como lo hace un livetiming, "HH:MM:SS" o, pasado el
- * día, "N día(s) + HH:MM:SS". Sirve tanto para la cuenta regresiva como para el tiempo
- * transcurrido: la diferencia la pone `renderSessionIndicator`, no el formato. */
+/** El reloj de la sesión: `MM:SS`, o `HH:MM:SS` cuando pasa de la hora, o "N día(s) + HH:MM:SS"
+ * cuando el servidor se dejó una práctica corriendo (bug visto en producción: "1277:21.41"). Sirve
+ * tanto para la cuenta regresiva como para el tiempo transcurrido: la diferencia la pone
+ * `renderSessionIndicator`, no el formato.
+ *
+ * **Sin centésimas, a propósito.** Antes mostraba `mm:ss.cc` —prestado del formato de un tiempo de
+ * vuelta, donde la centésima es el dato— y en una práctica de 49 minutos se leía "47:44.22": dos
+ * dígitos de más corriendo al lado de los segundos, que parecían un segundo segundero descompuesto.
+ * Y encima mentían: el reloj se redibuja con lo que trae cada poll (`POLL_MS`, un segundo), así que
+ * esas centésimas no contaban nada, saltaban de un valor arbitrario a otro. Para "cuánto falta" la
+ * unidad útil es el segundo. Si algún día el panel muestra tiempos de VUELTA —hoy no lo hace, este
+ * es su único reloj— esos sí llevan centésima y necesitan su propia función: es otro dato, con otra
+ * precisión y otro ritmo de actualización. */
 function formatClock(ms) {
-  const totalCentisimos = Math.max(0, Math.round(ms / 10));
-  const totalSegundos = Math.floor(totalCentisimos / 100);
+  const totalSegundos = Math.max(0, Math.floor(ms / 1000));
   const totalHoras = Math.floor(totalSegundos / 3600);
+  const segundos = String(totalSegundos % 60).padStart(2, "0");
 
   if (totalHoras >= 1) {
     const dias = Math.floor(totalHoras / 24);
     const horas = String(totalHoras % 24).padStart(2, "0");
     const minutos = String(Math.floor((totalSegundos % 3600) / 60)).padStart(2, "0");
-    const segundos = String(totalSegundos % 60).padStart(2, "0");
     const reloj = horas + ":" + minutos + ":" + segundos;
     return dias >= 1 ? dias + (dias === 1 ? " día + " : " días + ") + reloj : reloj;
   }
 
-  const centisimos = totalCentisimos % 100;
-  const segundos = totalSegundos % 60;
-  const minutos = Math.floor(totalSegundos / 60);
-  return minutos + ":" + String(segundos).padStart(2, "0") + "." + String(centisimos).padStart(2, "0");
+  return Math.floor(totalSegundos / 60) + ":" + segundos;
 }
 
 function renderSessionIndicator(session) {

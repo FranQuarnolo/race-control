@@ -414,3 +414,72 @@ test("la sección de perfiles de carrera está cableada y no quedó nada del pre
   assert.ok(/wireProfiles\(\);/.test(js), "`wireProfiles()` está definida pero nunca se llama: los botones no escuchan nada");
   assert.ok(/window\.confirm/.test(js), "borrar un perfil tiene que pedir confirmación");
 });
+
+/**
+ * El reloj de la sesión, el único formateador de tiempo que tiene el panel, probado de verdad y no
+ * por su forma: se extrae del archivo servido y se ejecuta.
+ *
+ * Vale la excepción al "invariantes, no lógica" de este archivo por dos motivos. Uno, ya se rompió
+ * dos veces y las dos en producción: primero una práctica larga que mostraba "1277:21.41", y
+ * después un `mm:ss.cc` que en una sesión de 49 minutos se leía "47:44.22" —las centésimas, al
+ * lado de los segundos, parecían un segundo segundero roto, y encima no contaban nada porque el
+ * reloj se redibuja con lo que trae cada poll—. Dos, la función está duplicada a mano en `app.js` y
+ * en `embed.js` (no hay build compartido en este repo), así que lo que de verdad hay que sostener
+ * es que las dos copias digan lo mismo: arreglar una sola y olvidarse de la otra es el error
+ * natural, y no lo denuncia nadie.
+ */
+function extraerFormatClock(js: string, archivo: string): (ms: number) => string {
+  const inicio = js.indexOf("function formatClock(ms) {");
+  assert.notEqual(inicio, -1, `no encontré formatClock en ${archivo}`);
+
+  // Por balanceo de llaves y no por una expresión regular con la indentación adentro: la función
+  // está a nivel de módulo en `app.js` y anidada dos espacios en `embed.js`, así que cualquier
+  // patrón que incluya el sangrado del cierre funciona en uno y corta mal en el otro. Alcanza con
+  // contar porque esta función no tiene ninguna llave adentro de un string ni en un comentario; si
+  // alguna vez la tiene, esto se rompe ruidosamente (error de sintaxis acá) y no en silencio.
+  let nivel = 0;
+  let fin = inicio;
+  for (let i = js.indexOf("{", inicio); i < js.length; i++) {
+    if (js[i] === "{") nivel++;
+    else if (js[i] === "}" && --nivel === 0) {
+      fin = i + 1;
+      break;
+    }
+  }
+  return new Function(`${js.slice(inicio, fin)}; return formatClock;`)() as (ms: number) => string;
+}
+
+test("el reloj de sesión no muestra centésimas, y el panel y el embed lo escriben igual", () => {
+  const delPanel = extraerFormatClock(leer(PANEL, "app.js"), "app.js");
+  const delEmbed = extraerFormatClock(leer(PANEL, "embed", "embed.js"), "embed.js");
+
+  const casos: Array<[number, string]> = [
+    [0, "0:00"],
+    [1000, "0:01"],
+    [59_999, "0:59"],
+    [60_000, "1:00"],
+    // El caso que lo originó: 47 minutos y 44 segundos de práctica. Antes: "47:44.22".
+    [47 * 60_000 + 44_220, "47:44"],
+    [59 * 60_000 + 59_000, "59:59"],
+    // Pasada la hora cambia de formato, con los minutos ya rellenados a dos dígitos.
+    [3_600_000, "01:00:00"],
+    [3_600_000 + 5 * 60_000 + 7_000, "01:05:07"],
+    // La práctica que el servidor se dejó corriendo: antes salía "1277:21.41".
+    [1277 * 60_000 + 21_410, "21:17:21"],
+    [25 * 3_600_000, "1 día + 01:00:00"],
+    [49 * 3_600_000, "2 días + 01:00:00"],
+    // Negativo: el servidor puede mandar un restante pasado de rosca al cerrar la sesión.
+    [-5000, "0:00"],
+  ];
+
+  for (const [ms, esperado] of casos) {
+    assert.equal(delPanel(ms), esperado, `app.js con ${ms} ms`);
+    assert.equal(delEmbed(ms), esperado, `embed.js con ${ms} ms`);
+  }
+
+  // Y que no quede ni un rastro de centésimas en ninguna de las dos.
+  for (const ms of [0, 1234, 47 * 60_000 + 44_220, 1277 * 60_000 + 21_410]) {
+    assert.doesNotMatch(delPanel(ms), /\.\d/, `app.js volvió a mostrar centésimas con ${ms} ms`);
+    assert.doesNotMatch(delEmbed(ms), /\.\d/, `embed.js volvió a mostrar centésimas con ${ms} ms`);
+  }
+});
