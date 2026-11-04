@@ -797,9 +797,17 @@ async function revisarServidores() {
  * configuraron el UDP en el hosting está running y mudo. Mismo criterio que `servidorPorDefecto`
  * en portal/server.ts y en embed.js.
  */
+// Mismo orden de preferencia que usa el portal para el redirect de `/l/<slug>` (ver
+// `servidorPorDefecto` en `portal/server.ts`): recibiendo ahora, después el que al menos habló con
+// su servidor de Assetto Corsa alguna vez —cubre la ventana posterior a un reinicio del worker, en
+// la que todavía no aprendió la dirección a la que mandarle el latido—, después cualquiera
+// encendido, y recién al final el primero de la lista.
 function servidorPorDefecto(servidores) {
   return (
-    servidores.find((s) => s.conectado) || servidores.find((s) => s.status === "running") || servidores[0]
+    servidores.find((s) => s.conectado) ||
+    servidores.find((s) => s.identificado) ||
+    servidores.find((s) => s.status === "running") ||
+    servidores[0]
   );
 }
 

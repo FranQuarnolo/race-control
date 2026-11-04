@@ -464,7 +464,7 @@ export function createPortal(config: PortalConfig): Portal {
    * "Servidores" (un modal con una pestaña por servidor, ver `operador.js`), con el detalle y el
    * historial de CADA UNO, no solo el primero.
    */
-  function filaDeAdmin(user: User, conectados: Map<string, boolean>) {
+  function filaDeAdmin(user: User, conectados: Map<string, EstadoDeConexión>) {
     const leagues = store.ligasOwnedBy(user.id).map((liga) => {
       const servidoresDeLaLiga = store.servidoresDeLiga(liga.id);
       const primero = servidoresDeLaLiga[0];
@@ -478,14 +478,16 @@ export function createPortal(config: PortalConfig): Portal {
         lastError: primero?.lastError,
         // Encendido no es conectado: el proceso puede estar impecable y no haber recibido un solo
         // paquete porque nadie configuró todavía el UDP en el hosting. Ver `conexionesDeLiga`.
-        conectado: primero ? Boolean(conectados.get(primero.id)) : false,
+        conectado: primero ? Boolean(conectados.get(primero.id)?.conectado) : false,
         sendAddress: primero ? supervisor.sendAddressOf(primero) : "",
         udpPort: primero?.udpPort ?? 0,
         servidores: servidoresDeLaLiga.map((s) => ({
           id: s.id,
           nombre: s.nombre,
           status: s.status,
-          conectado: Boolean(conectados.get(s.id)),
+          conectado: Boolean(conectados.get(s.id)?.conectado),
+          /** "Habló con su servidor de AC alguna vez": separa "se cayó" de "nunca se configuró". */
+          identificado: Boolean(conectados.get(s.id)?.identificado),
           lastError: s.lastError,
           sendAddress: supervisor.sendAddressOf(s),
           udpPort: s.udpPort,
@@ -914,7 +916,8 @@ export function createPortal(config: PortalConfig): Portal {
         nombre: s.nombre,
         status: s.status,
         /** Encendido NO es lo mismo que recibiendo: ver `conexionesDeLiga`. */
-        conectado: Boolean(conectados.get(s.id)),
+        conectado: Boolean(conectados.get(s.id)?.conectado),
+        identificado: Boolean(conectados.get(s.id)?.identificado),
       }));
       res.json({ ok: true, servidores });
       return;
@@ -933,7 +936,8 @@ export function createPortal(config: PortalConfig): Portal {
         id: s.id,
         nombre: s.nombre,
         activo: s.status === "running",
-        conectado: Boolean(conectados.get(s.id)),
+        conectado: Boolean(conectados.get(s.id)?.conectado),
+        identificado: Boolean(conectados.get(s.id)?.identificado),
       }));
       res.json({ ok: true, servidores });
       return;
@@ -1174,15 +1178,45 @@ export function createPortal(config: PortalConfig): Portal {
    * servidor del array aunque su carrera estuviera corriendo en el de al lado, sin forma de
    * notarlo salvo abrir el combo y probar de a uno.
    *
+   * Son dos datos, no uno, y la diferencia importa:
+   *
+   * - `conectado` es "me está llegando telemetría AHORA". El worker le pide un `SESSION_INFO` al
+   *   servidor de Assetto Corsa cada 5 s y el servidor siempre contesta, haya o no alguien en
+   *   pista (ver `KEEPALIVE_INTERVAL_MS` en `net/connectivity.ts`), así que una pista vacía sigue
+   *   dando `true`. Un `false` acá es el servidor apagado, caído o mal apuntado.
+   * - `identificado` es "este worker habló con su servidor de AC alguna vez". Sale de
+   *   `acServer.autodetected`, que es `true` desde el primer datagrama que llega: la dirección del
+   *   servidor de AC se aprende del remitente, no se configura. Persiste en el `config.json` del
+   *   worker, así que sobrevive a un reinicio.
+   *
+   * Hace falta el segundo porque hay un huevo y gallina: hasta recibir ese primer paquete, el
+   * worker le manda el latido a loopback —no sabe a dónde más—, así que un worker recién arrancado
+   * contra una pista vacía puede quedarse en `conectado: false` un buen rato aunque esté todo bien
+   * configurado. `identificado` distingue ese caso de "nunca le pegaron el Send Address al
+   * hosting", que es el que de verdad necesita que alguien vaya a tocar algo.
+   *
    * Las consultas van en paralelo: son todas a loopback, pero `askWorker` espera hasta 2 s cada
    * una y en serie una liga con cinco servidores pagaría diez.
    */
-  async function conexionesDeLiga(servidores: Servidor[]): Promise<Map<string, boolean>> {
+  interface EstadoDeConexión {
+    conectado: boolean;
+    identificado: boolean;
+  }
+
+  async function conexionesDeLiga(servidores: Servidor[]): Promise<Map<string, EstadoDeConexión>> {
     const pares = await Promise.all(
-      servidores.map(async (s): Promise<[string, boolean]> => {
-        if (s.status !== "running") return [s.id, false];
-        const state = await askWorker<{ network?: { receivingTelemetry?: boolean } }>(s.adminPort, "/api/state");
-        return [s.id, Boolean(state?.network?.receivingTelemetry)];
+      servidores.map(async (s): Promise<[string, EstadoDeConexión]> => {
+        if (s.status !== "running") return [s.id, { conectado: false, identificado: false }];
+        const state = await askWorker<{
+          network?: { receivingTelemetry?: boolean; acServer?: { autodetected?: boolean } };
+        }>(s.adminPort, "/api/state");
+        return [
+          s.id,
+          {
+            conectado: Boolean(state?.network?.receivingTelemetry),
+            identificado: Boolean(state?.network?.acServer?.autodetected),
+          },
+        ];
       })
     );
     return new Map(pares);
@@ -1190,14 +1224,17 @@ export function createPortal(config: PortalConfig): Portal {
 
   /**
    * A qué servidor entrar cuando el pedido no nombra uno: el primero que esté recibiendo
-   * telemetría; si ninguno recibe, el primero encendido; y si tampoco, el primero a secas — así la
-   * pantalla explica que no hay señal en vez de dar un 404 que no ayuda a nadie.
+   * telemetría; si ninguno recibe, el primero que al menos haya hablado con su servidor de AC
+   * alguna vez (ver `conexionesDeLiga`: cubre la ventana en la que un worker recién reiniciado
+   * todavía no adoptó la dirección); después el primero encendido; y si tampoco, el primero a
+   * secas — así la pantalla explica que no hay señal en vez de dar un 404 que no ayuda a nadie.
    */
   async function servidorPorDefecto(servidores: Servidor[]): Promise<Servidor | undefined> {
     if (servidores.length === 0) return undefined;
-    const conectados = await conexionesDeLiga(servidores);
+    const estados = await conexionesDeLiga(servidores);
     return (
-      servidores.find((s) => conectados.get(s.id)) ??
+      servidores.find((s) => estados.get(s.id)?.conectado) ??
+      servidores.find((s) => estados.get(s.id)?.identificado) ??
       servidores.find((s) => s.status === "running") ??
       servidores[0]
     );

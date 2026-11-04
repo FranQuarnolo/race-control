@@ -71,6 +71,14 @@ test("las clases que arma operador.js para el kebab y el historial tienen regla 
     "pastilla",
     "en-progreso",
     "terminado",
+    // Las pastillas de la columna "Servidores" y su contenedor. `sin-senal` y `esperando-udp`
+    // entraron cuando se borró la columna "Motor": son los dos estados en los que el proceso está
+    // arriba pero no le entra telemetría, y el único que distingue "el servidor de AC está
+    // apagado" de "falta pegar el Send Address" es el color. Sin regla, los dos salen grises y la
+    // columna deja de decir lo único que tenía para decir — y nada falla.
+    "servidores-lista",
+    "sin-senal",
+    "esperando-udp",
   ];
   const sinRegla = esperadas.filter((c) => !conRegla.has(c));
   assert.deepEqual(
@@ -179,4 +187,23 @@ test("los modales de operador.html son .modal-backdrop, no <dialog> ni alert/con
   }
   assert.ok(/verDetalle\(/.test(js), "falta `verDetalle`: el botón Ver de la fila no abre nada");
   assert.ok(/function confirmar\(/.test(js), "falta el modal de confirmación genérico que reemplaza a confirm()");
+});
+
+/**
+ * Las cuatro pantallas del portal piden Oswald y Chivo a Google Fonts, igual que el panel y el
+ * embed. Sin el `<link>`, `font-family: var(--font-display)` cae al sans-serif del sistema y la
+ * pantalla se dibuja entera, prolija y con la tipografía equivocada: nadie se entera salvo
+ * mirándola al lado del panel. El CSP del portal (`portal/server.ts`) ya deja pasar los dos hosts;
+ * si alguien lo achica, esto no lo atrapa —el navegador bloquea en silencio— pero al menos deja
+ * escrito acá de quién depende.
+ */
+test("las pantallas del portal piden las mismas fuentes que el panel", () => {
+  for (const pantalla of ["login.html", "mis-ligas.html", "conectar.html", "operador.html"]) {
+    const html = leer(PORTAL, pantalla);
+    assert.ok(
+      /fonts\.googleapis\.com\/css2\?family=Oswald/.test(html),
+      `${pantalla} no pide Oswald: los títulos y botones van a salir en la tipografía del sistema`
+    );
+    assert.ok(/family=Chivo/.test(html), `${pantalla} no pide Chivo para el texto`);
+  }
 });

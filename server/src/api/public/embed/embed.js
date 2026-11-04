@@ -1987,8 +1987,12 @@
    * mudo. Tampoco alcanza con `activo`, que solo dice que el proceso está encendido — un servidor
    * al que nunca le configuraron el UDP en el hosting está activo y no recibe nada.
    */
+  // Mismo orden de preferencia que el portal y el panel: recibiendo ahora, después el que al menos
+  // habló con su servidor de Assetto Corsa alguna vez (cubre la ventana posterior a un reinicio del
+  // worker), después cualquiera encendido, y recién al final el primero de la lista.
   function servidorPorDefecto(servidores) {
     for (var i = 0; i < servidores.length; i++) if (servidores[i].conectado) return servidores[i];
+    for (var k = 0; k < servidores.length; k++) if (servidores[k].identificado) return servidores[k];
     for (var j = 0; j < servidores.length; j++) if (servidores[j].activo) return servidores[j];
     return servidores[0];
   }

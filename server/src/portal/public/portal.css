@@ -10,22 +10,34 @@
   La landing pública tiene su propia hoja (`landing.css`) por el motivo inverso: necesita secciones
   a todo el ancho y acá el body centra una columna angosta.
 
-  Los colores sí son los mismos en las tres, para que moverse entre ellas no se sienta otra
-  aplicación.
+  **El sistema visual es el mismo que el del panel** (`api/public/styles.css`) y el del embed, al
+  valor exacto: las mismas variables de color, la misma tipografía (Oswald condensada en mayúscula
+  para títulos y botones, Chivo para el texto), la misma marca de esquina ámbar en las cajas y la
+  misma cuadrícula de fondo. Antes esta hoja tenía su propia paleta —gris azulado, ámbar más
+  saturado, tipografía del sistema— y moverse del operador al panel se sentía como cambiar de
+  producto. Lo que sigue siendo distinto es el LAYOUT, no el estilo: el panel entra entero en una
+  pantalla y acá hay columnas que scrollean.
 */
 
 :root {
   color-scheme: dark;
-  --bg: #0f1115;
-  --panel: #171a21;
-  --panel-border: #272b35;
-  --text: #e6e8ec;
-  --muted: #8b93a3;
-  --accent: #f0b429;
-  --green: #35c76e;
+  /* Copiadas tal cual de `api/public/styles.css` — que a su vez las leyó con el inspector contra
+     fslmanager.vercel.app. Si alguna cambia allá, cambia acá: son el mismo sistema. */
+  --bg: #0f1116;
+  --panel: #191c22;
+  --panel-raised: #232730;
+  --panel-hover: color-mix(in srgb, var(--panel-raised), white 10%);
+  --panel-sunken: #14161b;
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --text: #e8d5a3;
+  --muted: #8a8d96;
+  --accent: #c9a84c;
+  --green: #4ade80;
   --yellow: #ef8e3c;
   --red: #e05555;
-  --radius: 10px;
+  --radius: 12px;
+  --font-display: "Oswald", sans-serif;
+  --font-body: "Chivo", sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -37,22 +49,34 @@
    vez. `scrollbar-*` es lo que entiende Firefox; `::-webkit-scrollbar`, Chrome y Edge. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(240, 180, 41, 0.55) transparent;
+  scrollbar-color: rgba(201, 168, 76, 0.6) transparent;
 }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(240, 180, 41, 0.55);
+  background: rgba(201, 168, 76, 0.6);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 ::-webkit-scrollbar-corner { background: transparent; }
 
+/* La cuadrícula de fondo de fslmanager: dos gradientes de una línea cada uno, cruzados en celdas
+   de 72 px. El blanco va al 3% —apenas por encima del fondo— porque la idea es que se perciba como
+   textura y no como una tabla: subirlo aunque sea un punto y ya compite con el contenido. Las
+   mismas tres declaraciones están en `api/public/styles.css` y en `embed.css`; son tres hojas sin
+   build compartido, no hay dónde ponerlas una sola vez.
+   `fixed` para que la grilla no se desplace con el scroll: es el fondo de la pantalla, no del
+   documento, y moviéndose se nota como patrón. */
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--bg);
+  font-family: var(--font-body);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    var(--bg);
+  background-size: 72px 72px, 72px 72px, auto;
+  background-attachment: fixed;
   color: var(--text);
   font-size: 15px;
   line-height: 1.55;
@@ -66,9 +90,11 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
   font-size: 20px;
-  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   margin-bottom: 28px;
 }
 
@@ -81,14 +107,50 @@ body {
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   padding: 28px;
+  position: relative;
+}
+
+/* La marca de esquina de fslmanager: un ángulo fino en ámbar apagado, decorativo y nada más.
+   Misma regla que `.card::before` en `api/public/styles.css`, con el mismo valor de color — el
+   `--accent` literal en vez de la variable porque allá también está así, y son el mismo trazo. */
+.caja::before,
+.sub-caja::before,
+.modal::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 9px;
+  height: 9px;
+  border-top: 1px solid rgba(201, 168, 76, 0.55);
+  border-left: 1px solid rgba(201, 168, 76, 0.55);
+  pointer-events: none;
 }
 
 .caja.ancha { max-width: 720px; }
 /* El panel del operador es una tabla de seis columnas: con 720 px las acciones se amontonan. */
 .caja.extra-ancha { max-width: 1180px; }
 
-h1 { font-size: 21px; margin: 0 0 6px; }
-h2 { font-size: 16px; margin: 24px 0 8px; }
+/* Títulos en Oswald, mayúscula y con tracking, igual que `.card > h2` del panel: es la voz de la
+   marca y era lo que más delataba que el portal era "otra" aplicación. El h2 va en ámbar por el
+   mismo motivo que allá — el título de tarjeta de fslmanager es dorado, no gris apagado. */
+h1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 6px;
+}
+h2 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  margin: 24px 0 8px;
+}
 p { margin: 0 0 14px; }
 .muted { color: var(--muted); font-size: 13px; }
 
@@ -104,7 +166,7 @@ input[type="email"], input[type="password"], input[type="text"] {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--panel-border);
-  background: #0e1016;
+  background: var(--panel-sunken);
   color: var(--text);
   font-size: 15px;
   font-family: inherit;
@@ -115,17 +177,21 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   outline-offset: 2px;
 }
 
+/* Oswald en mayúscula con tracking, igual que los botones del panel y del embed. El texto oscuro
+   sobre ámbar es el mismo par que usa "Descargar" en fslmanager. */
 button {
   margin-top: 20px;
   width: 100%;
   padding: 11px 16px;
-  border-radius: 8px;
+  border-radius: calc(var(--radius) / 2);
   border: 0;
   background: var(--accent);
   color: #1d1400;
-  font-weight: 650;
-  font-size: 15px;
-  font-family: inherit;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   cursor: pointer;
 }
 
@@ -199,7 +265,7 @@ button.peligro:hover { border-color: var(--red); background: rgba(224, 85, 85, 0
   margin-bottom: 10px;
   text-decoration: none;
   color: inherit;
-  background: #0e1016;
+  background: var(--panel-sunken);
 }
 
 .liga:hover { border-color: var(--accent); }
@@ -215,14 +281,23 @@ button.peligro:hover { border-color: var(--red); background: rgba(224, 85, 85, 0
   white-space: nowrap;
 }
 
+/* Los tres estados de un servidor encendido, con el color haciendo el trabajo que antes hacía la
+   columna "Motor" (ver `pastillaDeEstado` en `operador.js`). Verde es "le entra telemetría"; rojo
+   es "ya habló alguna vez y ahora está callado" —el servidor de Assetto Corsa está caído, no hay
+   nada que configurar—; ámbar es "nunca habló", que es el único de los tres en el que alguien
+   tiene que ir a pegar el Send Address en el hosting.
+   El rojo se tiñe apenas de fondo y el ámbar no: en una lista de cinco servidores, el que está
+   caído tiene que saltar antes que el que todavía no arrancó. */
 .estado.running { color: var(--green); border-color: var(--green); }
 .estado.failed { color: var(--red); border-color: var(--red); }
 .estado.starting { color: var(--yellow); border-color: var(--yellow); }
+.estado.sin-senal { color: #ffb4b4; border-color: var(--red); background: rgba(224, 85, 85, 0.12); }
+.estado.esperando-udp { color: var(--accent); border-color: rgba(201, 168, 76, 0.5); }
 
 .send-address {
   font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
   font-size: 15px;
-  background: #0e1016;
+  background: var(--panel-sunken);
   border: 1px dashed var(--accent);
   border-radius: 8px;
   padding: 12px 14px;
@@ -263,7 +338,7 @@ body.operador { padding-top: 4vh; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent);
-  border: 1px solid rgba(240, 180, 41, 0.4);
+  border: 1px solid rgba(201, 168, 76, 0.45);
   border-radius: 999px;
   padding: 2px 9px;
 }
@@ -287,7 +362,7 @@ body.operador { padding-top: 4vh; }
 }
 
 .dato {
-  background: #0e1016;
+  background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   padding: 12px 14px;
@@ -301,7 +376,7 @@ body.operador { padding-top: 4vh; }
 .dato.aviso .valor { color: var(--yellow); }
 
 .sub-caja {
-  background: #0e1016;
+  background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   padding: 20px;
@@ -322,7 +397,7 @@ input[type="date"] {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--panel-border);
-  background: #0e1016;
+  background: var(--panel-sunken);
   color: var(--text);
   font-size: 15px;
   font-family: inherit;
@@ -390,12 +465,12 @@ input[type="date"] {
   white-space: nowrap;
 }
 
-.cuota-al-dia { color: var(--green); border-color: rgba(53, 199, 110, 0.45); }
+.cuota-al-dia { color: var(--green); border-color: rgba(74, 222, 128, 0.45); }
 .cuota-por-vencer { color: var(--yellow); border-color: rgba(239, 142, 60, 0.5); }
 .cuota-vencida { color: #ffb4b4; border-color: var(--red); background: rgba(224, 85, 85, 0.1); }
 
 .pastilla.en-progreso { color: var(--yellow); border-color: rgba(239, 142, 60, 0.5); }
-.pastilla.terminado { color: var(--green); border-color: rgba(53, 199, 110, 0.45); }
+.pastilla.terminado { color: var(--green); border-color: rgba(74, 222, 128, 0.45); }
 
 /* ------------------------------------------------------------- menú de fila (⋮), igual que el panel */
 
@@ -440,7 +515,7 @@ input[type="date"] {
   white-space: nowrap;
   cursor: pointer;
 }
-.menu-item:hover { background: #22262f; }
+.menu-item:hover { background: var(--panel-hover); }
 .menu-item.peligro { color: #ffb4b4; }
 .menu-item.peligro:hover { background: rgba(224, 85, 85, 0.14); }
 
@@ -459,9 +534,9 @@ input[type="date"] {
    `.tabs`), para que "estiliza todo el operador para que quede igual que el resto de la app" sea
    literal y no una reinvención con otro nombre de clase. Reemplaza tanto el `<dialog>` nativo de
    detalle de evento como los `confirm()`/`prompt()` que antes usaba este panel. Las variables de
-   color son las mismas (`--panel`, `--panel-border`, `--accent`, etc.), definidas arriba en este
-   mismo archivo — no hace falta traer `--panel-sunken`/`--panel-raised`/`--font-display`, que son
-   de la otra hoja: acá se usa el `#0e1016` que ya usa el resto de este archivo para "fondo hundido".
+   color son las mismas y con el mismo nombre que allá (`--panel`, `--panel-sunken`, `--accent`,
+   `--font-display`…), definidas arriba en este mismo archivo: copiar una regla de una hoja a la
+   otra funciona tal cual, sin traducir nombres.
 */
 
 .modal-backdrop {
@@ -537,6 +612,7 @@ input[type="date"] {
   width: auto;
   font-size: 11px;
   font-weight: 700;
+  font-family: var(--font-display);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -608,7 +684,7 @@ input[type="date"] {
   display: block;
   width: 100%;
   min-height: 150px;
-  background: #0e1016;
+  background: var(--panel-sunken);
   border: 1px solid var(--panel-border);
   color: var(--text);
   border-radius: 6px;
@@ -619,8 +695,10 @@ input[type="date"] {
   resize: vertical;
 }
 
-/* Lista de pastillas de estado de la columna "Servidores" de la tabla: una por servidor, con su
-   nombre y el color de `.estado` que ya usa la columna "Motor". */
+/* La columna "Servidores" de la tabla: una pastilla por servidor, con su nombre y el color de
+   `.estado` según cómo esté ese servidor puntual. Antes el color vivía en una columna "Motor"
+   aparte, que mostraba el estado de UNO solo —el primero— y por eso decía "Esperando conexión"
+   aunque los otros cuatro estuvieran andando. Acá no hay nada que resumir: se ven los cinco. */
 .servidores-lista {
   display: flex;
   flex-wrap: wrap;

@@ -3,6 +3,61 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.32] — 2026-11-04
+
+### "Sin señal" decía dos cosas distintas, y el operador no tenía cómo distinguirlas
+
+La 1.31 separó "el proceso está arriba" de "le entra telemetría". Faltaba un escalón más: de los
+servidores sin telemetría, hay dos clases completamente distintas y hasta ahora se veían iguales.
+Uno es el que **ya habló** con Race Control alguna vez —el Send Address está bien pegado en el
+hosting— y ahora está callado: el servidor de Assetto Corsa está apagado, no hay nada que
+configurar, se prende y listo. El otro **nunca habló**: el proceso corre, el puerto escucha, y del
+otro lado nadie le manda nada porque falta pegar el Send Address en el UDP Plugin Address del
+panel del hosting. Los dos decían "Sin señal", y el segundo —el único que requiere que alguien
+haga algo— quedaba escondido detrás del primero.
+
+El dato ya existía: `acServer.autodetected` es true desde el primer datagrama que llega, porque es
+así como el worker aprende a qué IP contestarle (`adoptRemoteHostIfNeeded`). Ahora viaja hasta la
+UI como `identificado`, al lado de `conectado`, y el operador muestra tres estados en vez de dos:
+**Conectado** (verde), **Sin señal** (rojo, ya habló, hoy está caído) y **Esperando UDP** (ámbar,
+nunca habló, falta configurar). El rojo se tiñe apenas de fondo y el ámbar no, a propósito: en una
+lista de cinco servidores el que se cayó tiene que saltar antes que el que todavía no arrancó.
+
+El mismo escalón entró en `servidorPorDefecto()`, en los tres lados (portal, panel y embed): si no
+hay ninguno recibiendo telemetría, se prefiere uno que al menos esté identificado antes que uno
+cualquiera encendido. Esto tapa una ventana real y angosta: apenas se reinicia un worker,
+`remoteHost` vuelve a loopback y el heartbeat no tiene a dónde ir hasta que el servidor de AC
+mande algo por su cuenta, así que un servidor perfectamente configurado se lee como mudo durante
+unos segundos. Antes ese servidor perdía la elección contra cualquier otro; ahora la gana.
+
+### La columna "Motor" mostraba el estado de un servidor y lo presentaba como el de la liga
+
+Decía "Esperando conexión" aunque cuatro de los cinco servidores del usuario estuvieran andando,
+porque miraba solamente al primero de la lista. No es que estuviera mal calculada: es que el dato
+no existe. Una liga con varios servidores no tiene **un** estado de motor que resumir. La columna
+se borró y el color se mudó a donde siempre tuvo que estar: cada servidor de la columna
+"Servidores" es ahora una pastilla con su propio color y su propia explicación en el `title`. Se
+ven los cinco, cada uno dice lo suyo, y no hay nada que promediar.
+
+### El operador parecía otro producto
+
+Tipografía del sistema, su propio gris azulado, un ámbar más saturado, sin la cuadrícula de fondo
+ni la marca de esquina: ir del panel de carrera al panel del operador se sentía como cambiar de
+aplicación. Ahora `portal.css` usa las mismas variables que `api/public/styles.css`, con los
+mismos nombres —copiar una regla de una hoja a la otra funciona tal cual, sin traducir— y las
+cuatro pantallas del portal cargan Oswald y Chivo desde Google Fonts, igual que el panel.
+
+De paso, el fondo cuadriculado que el panel y el embed tampoco tenían: dos gradientes de una línea
+cruzados en celdas de 72 px, blanco al 3%. Al 3% se lee como textura; un punto más arriba y
+compite con la torre de tiempos, que es lo único que el admin mira mientras corre una carrera. En
+el embed va sobre `.rc-embed` y sin `background-attachment: fixed`, porque ahí el body es de la
+página que nos hospeda y anclar la grilla al viewport ajeno la desalinea del recuadro al
+scrollear.
+
+Lo que sigue siendo distinto entre las hojas es el **layout**, no el estilo: el panel entra entero
+en una pantalla porque durante una carrera no se puede scrollear, y el portal son pantallas
+cortas con columnas que sí scrollean.
+
 ## [1.31] — 2026-11-03
 
 ### El panel se quedaba mirando un servidor mudo, y nadie se enteraba de que había otro conectado

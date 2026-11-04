@@ -35,7 +35,16 @@
   box-sizing: border-box;
   font-family: var(--font-body);
   color: var(--text);
-  background: var(--bg);
+  /* La cuadrícula de fondo de fslmanager (ver la misma regla en ../styles.css y en
+     portal/public/portal.css). Acá va sobre `.rc-embed` y no sobre el `body` como en las otras
+     dos hojas: el widget se incrusta en la página de otro, el body no es nuestro. Sin
+     `background-attachment: fixed` a propósito — ahí el fondo se ancla al viewport del sitio que
+     nos hospeda y la cuadrícula se desalinea con el recuadro del widget al scrollear. */
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    var(--bg);
+  background-size: 72px 72px, 72px 72px, auto;
   border-radius: var(--radius);
   padding: 16px;
   max-width: 100%;

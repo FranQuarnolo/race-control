@@ -17,12 +17,38 @@ const ETIQUETAS_ESTADO = {
  * Decían "Conectado" dos cosas muy distintas: una liga andando y una recién creada a la que nadie
  * le configuró todavía el UDP Plugin Address en el hosting. La segunda se ve igual de verde y no
  * recibe un solo paquete, así que el operador daba por lista una puesta en marcha a medio hacer.
+ *
+ * Son TRES estados y no dos porque "no está llegando nada" tiene dos causas con soluciones
+ * opuestas, y mezclarlas manda a buscar el problema al lugar equivocado:
+ *
+ * - **Esperando UDP** (`identificado: false`): este worker no habló nunca con un servidor de AC.
+ *   Falta pegar el Send Address en el hosting. Hay algo que hacer, y lo hace el admin de la liga.
+ * - **Sin señal** (`identificado: true`, `conectado: false`): alguna vez habló, ahora está callado.
+ *   El Send Address está bien; lo que pasa es que el servidor de AC está apagado o se cayó. No hay
+ *   nada que configurar. También cae acá la ventana posterior a reiniciar el worker, mientras no
+ *   recibe el primer paquete que le enseña a dónde mandar el latido.
  */
 function pastillaDeEstado(estado) {
-  if (estado.status === "running" && !estado.conectado) {
-    return { clase: "starting", texto: "Esperando conexión", titulo: "El proceso está arriba, pero todavía no llegó un solo paquete UDP desde el servidor de Assetto Corsa. Falta configurar el UDP Plugin Address en el hosting." };
+  if (estado.status !== "running") {
+    return { clase: estado.status, texto: ETIQUETAS_ESTADO[estado.status] || estado.status, titulo: "" };
   }
-  return { clase: estado.status, texto: ETIQUETAS_ESTADO[estado.status] || estado.status, titulo: "" };
+  if (estado.conectado) {
+    return { clase: "running", texto: "Conectado", titulo: "Le está entrando telemetría del servidor de Assetto Corsa." };
+  }
+  if (estado.identificado) {
+    return {
+      clase: "sin-senal",
+      texto: "Sin señal",
+      titulo:
+        "El Send Address está bien configurado —este servidor ya habló con Race Control alguna vez—, pero ahora no llega nada. Lo más probable es que el servidor de Assetto Corsa esté apagado.",
+    };
+  }
+  return {
+    clase: "esperando-udp",
+    texto: "Esperando UDP",
+    titulo:
+      "El proceso está arriba, pero no llegó nunca un paquete desde el servidor de Assetto Corsa. Falta pegar el Send Address en el UDP Plugin Address del hosting.",
+  };
 }
 
 const ETIQUETAS_CUOTA = {
@@ -124,6 +150,12 @@ function pintar() {
     tr.appendChild(tdLiga);
 
     // --- servidores: cuántos tiene y en qué estado, con acceso al detalle de cada uno en un modal
+    //
+    // Acá vivía al lado una columna "Motor", que mostraba una pastilla por liga con el estado de
+    // su PRIMER servidor. Era el único lugar del panel que afirmaba algo a nivel cuenta sobre un
+    // dato que es por servidor: un usuario con una carrera andando y otra apagada leía "Esperando
+    // conexión" para toda la cuenta, que es falso. El color se mudó a las pastillas de esta
+    // columna, donde cada una vale por su propio servidor y no por el de al lado.
     const tdServidores = el("td");
     const primeraLiga = admin.leagues[0];
     if (!primeraLiga || !primeraLiga.servidores.length) {
@@ -131,8 +163,11 @@ function pintar() {
     } else {
       const lista = el("div", "servidores-lista");
       for (const servidor of primeraLiga.servidores) {
-        const pastilla = el("span", "estado " + servidor.status, servidor.nombre);
-        if (servidor.lastError) pastilla.title = servidor.lastError;
+        const estado = pastillaDeEstado(servidor);
+        const pastilla = el("span", "estado " + estado.clase, servidor.nombre);
+        // El nombre ya ocupa la pastilla, así que el estado se cuenta en el `title`: son hasta
+        // cinco por fila y escribirlo al lado de cada nombre haría la columna ilegible.
+        pastilla.title = servidor.lastError || estado.texto + " — " + estado.titulo;
         lista.appendChild(pastilla);
       }
       tdServidores.appendChild(lista);
@@ -143,18 +178,6 @@ function pintar() {
     tr.appendChild(tdServidores);
 
     tr.appendChild(el("td", "muted", fechaHora(admin.lastLoginAt)));
-
-    // --- el motor
-    const tdMotor = el("td");
-    for (const liga of admin.leagues) {
-      const estado = pastillaDeEstado(liga);
-      const pastilla = el("span", "estado " + estado.clase, estado.texto);
-      if (liga.lastError) pastilla.title = liga.lastError;
-      else if (estado.titulo) pastilla.title = estado.titulo;
-      tdMotor.appendChild(pastilla);
-    }
-    if (!admin.leagues.length) tdMotor.appendChild(el("span", "muted", "—"));
-    tr.appendChild(tdMotor);
 
     // --- la cuota
     const tdCuota = el("td");

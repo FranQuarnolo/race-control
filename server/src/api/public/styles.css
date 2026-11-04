@@ -88,9 +88,19 @@ body {
   overflow: hidden; /* la regla de oro, ver arriba */
 }
 
+/* La cuadrícula de fondo de fslmanager: dos gradientes de una línea cada uno, cruzados en celdas
+   de 72 px. El blanco va al 3% —apenas por encima del fondo— porque la idea es que se perciba
+   como textura y no como una tabla: subirlo aunque sea un punto y ya compite con la torre de
+   tiempos, que es lo único que el admin mira durante una carrera. Las mismas declaraciones están
+   en `portal/public/portal.css` y en `embed/embed.css`; son tres hojas sin build compartido, no
+   hay dónde ponerlas una sola vez. */
 body {
   font-family: var(--font-body);
-  background: var(--bg);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    var(--bg);
+  background-size: 72px 72px, 72px 72px, auto;
   color: var(--text);
   font-size: 14px;
   display: flex;

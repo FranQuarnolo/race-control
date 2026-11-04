@@ -364,11 +364,17 @@ test("la lista de servidores para el panel exige cookie; para el embed, Bearer d
   const embed = await pedir("GET", "/l/liga-a/api/embed/servidores", { headers: { origin, authorization: `Bearer ${token}` } });
   assert.equal(embed.status, 200, embed.body);
   // `conectado` no es lo mismo que `activo`: `activo` dice que el proceso está arriba, `conectado`
-  // que además le está entrando telemetría del servidor de Assetto Corsa. Acá el worker ni siquiera
-  // arrancó, así que los dos van en false — pero son dos campos, no uno, y el selector elige el
-  // servidor por el segundo.
+  // que además le está entrando telemetría, e `identificado` que ya habló alguna vez con su
+  // servidor de Assetto Corsa. Acá el worker ni siquiera arrancó, así que los tres van en false —
+  // pero son tres campos, no uno, y el selector los mira en ese orden para elegir cuál mostrar.
   assert.deepEqual(embed.json().servidores, [
-    { id: servidorAId, nombre: servidorA().nombre, activo: false, conectado: false },
+    {
+      id: servidorAId,
+      nombre: servidorA().nombre,
+      activo: false,
+      conectado: false,
+      identificado: false,
+    },
   ]);
 });
 
