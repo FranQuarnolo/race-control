@@ -3,6 +3,47 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.37] — 2026-11-14
+
+### La app del piloto desapareció del juego sin haber cambiado: andaba con `.pyd` prestados
+
+**Síntoma.** Un piloto con la app 1.8 instalada y activada en Content Manager dejó de verla: ni
+"RC Mensajes" ni ninguna de las otras figuraban en la barra de apps del juego. No había tocado la
+app en dos semanas. El chat sí mostraba `RACECONTROL_BACKEND:…`, o sea que el servidor lo
+reconocía; lo que no corría era la app. En `log.txt`, una sola línea y sin traceback:
+`ERROR LOADING MODULE :sys.path.append('apps/python/RaceControlClient')`.
+
+**Causa.** El Python 3.3 que trae Assetto Corsa no incluye las extensiones nativas de la stdlib
+(la carpeta `DLLs` de un Python normal). `import ctypes` necesita `_ctypes.pyd` y
+`urllib.request` necesita `_socket.pyd`, y la app nunca los trajo. Funcionaba igual porque
+todas las apps de Python comparten **un** intérprete y se cargan en orden alfabético: alguna
+anterior a "RaceControlClient" (Helicorsa, CrewChief, Sol y compañía traen los suyos) ya los había
+dejado en `sys.path`. En el log de ese piloto, esas apps figuraban como `File … not found`:
+las había desinstalado, y con ellas se fue el `_ctypes.pyd` del que Race Control dependía sin que
+nadie lo supiera.
+
+Es la familia de bugs de siempre en este proyecto, en su versión más pura: en la PC de quien
+programa y prueba la app siempre hay otra app que lo tapa.
+
+**Decisión.**
+- La app trae sus propios `.pyd` en `stdlib64/`: `_ctypes`, `_socket`, `unicodedata` (la
+  resolución DNS pasa el host por el codec idna, que lo importa) y `winsound`. Salen del
+  instalador oficial de Python 3.3.5 de 64 bits, firmado por la PSF, y se agregan **primeros** en
+  `sys.path` antes de cualquier import nativo.
+- Los imports nativos quedan protegidos. Si aun así falta uno, se pierde esa función
+  (telemetría o red), no la app: las ventanas aparecen, y el renglón de estado de "RC Mensajes"
+  dice "Falta un componente de la app: reinstala el .zip". Con la 1.8, un módulo faltante borraba
+  las cuatro ventanas del menú sin ninguna pista.
+- Los callbacks de `addOnAppDismissedListener` aceptan `*args`: la API de AC no documenta con
+  qué argumentos los llama, y uno que no los acepta falla justo cuando tenía que volver a mostrar
+  la ventana.
+- `package-client.js` se niega a armar el `.zip` si falta alguno de los `.pyd`, y
+  `clientApp.test.ts` verifica que estén y que `sys.path` se arme antes de importarlos.
+
+La app sube a **1.9**: **hay que reinstalar el `.zip`**. El README de la app suma una sección "Si
+no aparece en el menú del juego" con el diagnóstico que costó llegar a esto, y corrige algo que
+decía mal: el mensaje `RACECONTROL_BACKEND:` no es invisible, el piloto lo ve en el chat.
+
 ## [1.36] — 2026-11-04
 
 ### El README se quedó en la 1.14, y la integración del embed no estaba escrita en ningún lado

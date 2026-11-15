@@ -25,6 +25,18 @@ for (const [archivo, que] of esperados) {
   }
 }
 
+// Los .pyd, en cambio, cortan el empaquetado. Sin ellos la app depende de que otra app instalada
+// en la PC del piloto traiga los suyos, y en una PC que no los tiene Race Control ni aparece en el
+// menú del juego (fue el bug de la 1.8). Un .zip así no tiene que salir. Ver STDLIB64_DIR en el .py.
+const stdlib64 = path.join(root, "apps", "python", "RaceControlClient", "stdlib64");
+const faltanPyd = ["_ctypes.pyd", "_socket.pyd", "unicodedata.pyd", "winsound.pyd"].filter(
+  (pyd) => !fs.existsSync(path.join(stdlib64, pyd))
+);
+if (faltanPyd.length > 0) {
+  console.error(`ERROR: faltan en ${stdlib64}: ${faltanPyd.join(", ")}. Salen del instalador oficial de Python 3.3.5 de 64 bits (carpeta DLLs).`);
+  process.exit(1);
+}
+
 /**
  * Fuera los `__pycache__` antes de comprimir.
  *

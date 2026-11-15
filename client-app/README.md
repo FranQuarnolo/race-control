@@ -113,7 +113,9 @@ comisario exactamente igual que antes.
 ## Qué hace
 
 - Descubre sola la dirección del backend (mensaje de chat interno que manda el servidor al
-  conectarse, invisible para el uso normal del piloto).
+  conectarse). El piloto lo ve en el chat como una línea que empieza con `RACECONTROL_BACKEND:`:
+  es normal, la app no tiene forma de ocultar un mensaje de chat. Que aparezca prueba que el
+  servidor lo reconoció, no que la app esté andando.
 - Muestra el estado del semáforo y reproduce el audio cuando se pone en verde.
 - Muestra los avisos de dirección de carrera. Llegan por **dos** canales: la pizarra del servidor
   (`/api/client/poll`) y el chat del juego. Los dos y no uno porque el chat le llega al piloto
@@ -133,14 +135,51 @@ comisario exactamente igual que antes.
 - Las ventanas son apps normales de Content Manager: el piloto las puede mover y redimensionar
   como cualquier otra, aunque desde la 1.1 el marco solo aparezca al pasarles el mouse por encima.
 
+## Si no aparece en el menú del juego
+
+Si la app está activada en Content Manager y aun así ninguna de las ventanas figura en la barra de
+apps, buscá `RaceControlClient` en `Documentos\Assetto Corsa\logs\log.txt`:
+
+- **`ERROR LOADING MODULE`**: el juego la encontró pero no pudo importarla. Hasta la 1.8 la causa
+  era la falta de `_ctypes.pyd`/`_socket.pyd`, que la app tomaba prestados de otras apps
+  instaladas (ver abajo). Desde la 1.9 los trae en `stdlib64/`: si pasa con la 1.9, revisá que esa
+  carpeta haya quedado con sus cuatro `.pyd` después de instalar (un antivirus puede
+  ponerlos en cuarentena).
+- **No figura**: el juego ni la intentó cargar. Revisá `Documentos\Assetto Corsa\cfg\python.ini`:
+  tiene que tener `[RACECONTROLCLIENT]` con `ACTIVE=1`. Se cambia desde CM (Configuración →
+  Assetto Corsa → Apps), no a mano: CM reescribe ese archivo cada vez que arranca una sesión.
+
+### Los `.pyd` de `stdlib64/` (desde la 1.9)
+
+El Python 3.3 embebido de Assetto Corsa no trae las extensiones nativas de la stdlib. La app usa
+cuatro: `_ctypes.pyd` (Shared Memory), `_socket.pyd` (red), `unicodedata.pyd` (la resolución DNS
+la necesita) y `winsound.pyd` (audios). Hasta la 1.8 no los traía y funcionaba igual, pero solo
+porque todas las apps de Python comparten un intérprete y alguna otra cargada antes —Helicorsa,
+CrewChief— dejaba los suyos en `sys.path`. Un piloto que desinstaló esas apps se quedó sin Race
+Control, sin que la app hubiera cambiado.
+
+Salen del instalador oficial **Python 3.3.5 de 64 bits** de python.org (firmado por la Python
+Software Foundation, licencia PSF): tienen que ser de esa versión exacta y de 64 bits, igual que
+el `python33.dll` del juego. Para extraerlos sin instalar Python:
+
+```
+msiexec /a python-3.3.5.amd64.msi /qn TARGETDIR=C:\temp\py335
+```
+
+y copiar los cuatro desde `C:\temp\py335\DLLs\`. El empaquetador se niega a armar el `.zip` si
+falta alguno.
+
+Si aun así uno no carga, la app no desaparece: las ventanas salen igual, se pierde solo esa
+función, y el renglón de estado de **RC Mensajes** dice "Falta un componente de la app".
+
 ## Qué protege el test `server/src/test/clientApp.test.ts`
 
 Este archivo no lo compila nadie: corre dentro del Python **3.3** embebido de Assetto Corsa y la
 primera vez que se ejecuta es en la PC de un piloto. Un error de sintaxis no da error — la app
 simplemente no aparece en el menú del juego.
 
-Por eso hay un test del lado del servidor que lee este `.py` y verifica tres cosas: que no use
-sintaxis posterior a 3.3 (f-strings, `:=`, `async`), que no importe nada fuera de la stdlib que
+Por eso hay un test del lado del servidor que lee este `.py` y verifica cuatro cosas: que traiga sus `.pyd` y los cargue antes de importarlos,
+que no use sintaxis posterior a 3.3 (f-strings, `:=`, `async`), que no importe nada fuera de la stdlib que
 ese intérprete tiene, y que **toda** ventana creada con `ac.newApp` pase por `ocultarChrome`. Lo
 último es para que una ventana agregada el año que viene no vuelva a salir como un recuadro negro
 tapando el parabrisas.

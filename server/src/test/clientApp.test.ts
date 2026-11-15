@@ -245,3 +245,40 @@ test("el ui.json de la app del piloto declara la versión y las tres ventanas", 
     );
   }
 });
+
+/**
+ * Los módulos nativos viajan con la app, y se cargan antes que nadie los pida.
+ *
+ * Hasta la 1.8 la app importaba `ctypes` y `urllib.request` confiando en que el Python de AC los
+ * tuviera completos, y no los tiene: le faltan los `.pyd` de la carpeta DLLs. Andaba de prestado,
+ * con la copia que dejaba en `sys.path` alguna otra app cargada antes (todas comparten un solo
+ * intérprete). Cuando un piloto desinstaló esas apps, Race Control desapareció del menú del
+ * juego con un "ERROR LOADING MODULE" sin traceback y sin que su código hubiera cambiado.
+ *
+ * Es el bug que no falla por excelencia: en la PC de quien la programa siempre hay otra app que
+ * lo tapa. Estos chequeos son la única forma de que no vuelva.
+ */
+test("la app del piloto trae sus propios .pyd y los pone en sys.path antes de importarlos", () => {
+  for (const pyd of ["_ctypes.pyd", "_socket.pyd", "unicodedata.pyd", "winsound.pyd"]) {
+    const ruta = path.join(CLIENT, "stdlib64", pyd);
+    assert.ok(
+      fs.existsSync(ruta),
+      `falta stdlib64/${pyd}: sin él la app depende de que otra app instalada lo traiga, y en una ` +
+        `PC limpia no aparece en el menú del juego`
+    );
+  }
+
+  const insercion = ejecutable.indexOf("sys.path.insert(0, STDLIB64_DIR)");
+  assert.ok(insercion !== -1, "nadie agrega stdlib64 a sys.path: los .pyd están pero no se usan");
+  for (const modulo of ["import ctypes", "import urllib.request"]) {
+    const pos = ejecutable.indexOf(modulo);
+    assert.ok(pos !== -1, `no se encontró \`${modulo}\``);
+    assert.ok(pos > insercion, `\`${modulo}\` está antes de agregar stdlib64 a sys.path: lo busca donde no está`);
+  }
+
+  // Y si aun así falta uno, que no se lleve puesta la app entera.
+  assert.ok(/except Exception as e:\s*\n\s*ctypes = None/.test(ejecutable),
+    "`import ctypes` dejó de estar protegido: si falta el .pyd desaparecen las cuatro ventanas");
+  assert.ok(/if ctypes is not None:\s*\n\s*class SPageFilePhysics/.test(ejecutable),
+    "las structs de la Shared Memory se declaran sin ctypes asegurado: el import revienta igual");
+});

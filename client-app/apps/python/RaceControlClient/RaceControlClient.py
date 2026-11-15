@@ -127,17 +127,62 @@ hay ningun problema que avisar.
 
 Nota: corre dentro del interprete Python embebido de Assetto Corsa, que es Python 3.3 -- NO
 soporta f-strings (son de Python 3.6+). Por eso todo el formateo de texto usa .format()/% .
-Solo se usa stdlib (urllib, winsound, threading, mmap, ctypes), sin dependencias externas.
+Solo se usa stdlib (urllib, winsound, threading, mmap, ctypes), sin dependencias externas -- pero
+las partes nativas de esa stdlib las trae la app en `stdlib64/`, ver el bloque de los imports.
 """
 
-import ctypes
 import json
 import math
-import mmap
 import os
+import sys
 import threading
 import time
-import urllib.request
+
+# ---------------------------------------------------------------------------------------------
+# LOS MODULOS NATIVOS VIAJAN CON LA APP (desde la 1.9)
+#
+# El Python 3.3 que trae Assetto Corsa es el interprete y la parte de la stdlib escrita en Python,
+# pero NO las extensiones nativas que en un Python normal viven en la carpeta DLLs: `_ctypes.pyd`
+# (lo necesita `ctypes`, que lee la Shared Memory), `_socket.pyd` (lo necesita `urllib.request`,
+# que habla con el backend), `unicodedata.pyd` (la resolucion DNS pasa el nombre del host por el
+# codec idna, que lo importa) y `winsound.pyd` (los audios). Cada app que los usa tiene que traer
+# su propia copia y agregarla a `sys.path`.
+#
+# Hasta la 1.8 esta app no la traia y nadie lo noto, porque andaba de prestado: todas las apps de
+# Python comparten UN interprete y se cargan en orden alfabetico, y alguna anterior a
+# "RaceControlClient" (Helicorsa, CrewChief y compania traen las suyas) ya habia dejado su
+# carpeta en `sys.path`. El dia que el piloto desinstalo esas apps, `import ctypes` empezo a
+# fallar, el juego dejo en log.txt un "ERROR LOADING MODULE" sin traceback, y las cuatro ventanas
+# desaparecieron del menu sin que la app hubiera cambiado un byte.
+#
+# Los .pyd salen del instalador oficial de Python 3.3.5 de 64 bits (python.org, firmado por la
+# PSF): tienen que ser de esa version exacta y de 64 bits, igual que el python33.dll del juego.
+# Van primeros en `sys.path` para no depender de que la copia de otra app sea compatible.
+# ---------------------------------------------------------------------------------------------
+STDLIB64_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stdlib64")
+if STDLIB64_DIR not in sys.path:
+    sys.path.insert(0, STDLIB64_DIR)
+
+# Y aun asi, los imports nativos van protegidos. Si alguno falla (un .pyd que no llego en el .zip,
+# un antivirus que lo puso en cuarentena), lo que se pierde es esa funcion -- la telemetria o la
+# conexion al backend --, no la app entera: las ventanas aparecen igual y el renglon de estado de
+# "RC Mensajes" dice que falta. La alternativa era el comportamiento de la 1.8, donde un modulo
+# ausente borraba las cuatro ventanas del menu sin ninguna pista de por que.
+MODULOS_FALTANTES = []
+
+try:
+    import ctypes
+    import mmap
+except Exception as e:
+    ctypes = None
+    mmap = None
+    MODULOS_FALTANTES.append("ctypes ({0})".format(e))
+
+try:
+    import urllib.request
+except Exception as e:
+    urllib = None
+    MODULOS_FALTANTES.append("urllib ({0})".format(e))
 
 import ac
 import acsys
@@ -270,13 +315,15 @@ def ocultarChrome(window):
     ac.setIconPosition(window, 0, -10000)
 
 
-def onMensajesDismissed():
+def onMensajesDismissed(*args):
     """Ver "MENSAJES Y LARGADA NO SE PUEDEN SACAR" en el encabezado: AC llama esto cuando el
     piloto oculta "RC Mensajes", y la vuelve a mostrar en el acto."""
     ac.setVisible(window_messages, 1)
 
 
-def onLargadaDismissed():
+def onLargadaDismissed(*args):
+    # `*args` en los dos: la API de AC no documenta con que argumentos llama este callback, y un
+    # callback que no los acepta tira TypeError justo cuando tenia que volver a mostrar la ventana.
     ac.setVisible(window_lights, 1)
 
 
@@ -403,6 +450,12 @@ def acMain(ac_version):
         (window_lights, 40, 220),
         (window_alert, 40, 340),
     ])
+
+    # Si falto algun modulo nativo, el renglon de estado lo dice y no vence: es la unica pista que
+    # tiene el piloto, y sin ella el sintoma es "la app no hace nada". Ver MODULOS_FALTANTES.
+    if MODULOS_FALTANTES:
+        ac.log("[RaceControlClient] faltan modulos: {0}".format("; ".join(MODULOS_FALTANTES)))
+        setStatus("Falta un componente de la app: reinstala el .zip de Race Control")
 
     # El listener del chat va en una sola ventana: el juego lo entrega una vez por listener
     # registrado, asi que ponerlo en las tres mostraria cada anuncio por triplicado.
@@ -673,6 +726,10 @@ def authHeaders():
 
 def openAuthed(url, data=None, timeout=2):
     """urlopen con la credencial puesta. urllib de Python 3.3 ya manda los headers tal cual."""
+    if urllib is None:
+        # Ver MODULOS_FALTANTES: sin urllib no hay red. Los dos hilos que llaman aca ya atrapan la
+        # excepcion y reintentan, asi que alcanza con que el motivo quede escrito.
+        raise RuntimeError("falta urllib.request: reinstala la app")
     headers = authHeaders()
     if data is None:
         return urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout)
@@ -1168,73 +1225,77 @@ def renderLights(deltaT):
 # =============================================================================================
 
 
-class SPageFilePhysics(ctypes.Structure):
-    _pack_ = 4
-    _fields_ = [
-        ("packetId", ctypes.c_int32),
-        ("gas", ctypes.c_float),
-        ("brake", ctypes.c_float),
-        ("fuel", ctypes.c_float),
-        ("gear", ctypes.c_int32),
-        ("rpms", ctypes.c_int32),
-        ("steerAngle", ctypes.c_float),
-        ("speedKmh", ctypes.c_float),
-        ("velocity", ctypes.c_float * 3),
-        ("accG", ctypes.c_float * 3),
-        ("wheelSlip", ctypes.c_float * 4),
-        ("wheelLoad", ctypes.c_float * 4),
-        ("wheelsPressure", ctypes.c_float * 4),
-        ("wheelAngularSpeed", ctypes.c_float * 4),
-        ("tyreWear", ctypes.c_float * 4),
-        ("tyreDirtyLevel", ctypes.c_float * 4),
-        ("tyreCoreTemperature", ctypes.c_float * 4),
-        ("camberRAD", ctypes.c_float * 4),
-        ("suspensionTravel", ctypes.c_float * 4),
-        ("drs", ctypes.c_float),
-        ("tc", ctypes.c_float),
-        ("heading", ctypes.c_float),
-        ("pitch", ctypes.c_float),
-        ("roll", ctypes.c_float),
-        ("cgHeight", ctypes.c_float),
-        ("carDamage", ctypes.c_float * 5),
-        ("numberOfTyresOut", ctypes.c_int32),
-        ("pitLimiterOn", ctypes.c_int32),
-        ("abs", ctypes.c_float),
-    ]
+# Sin ctypes no hay structs que declarar (ver MODULOS_FALTANTES arriba): la clase entera es
+# `ctypes.Structure`, asi que declararla igual tiraria la app abajo en el import. En ese caso
+# `sharedMemoryLoop` ni arranca y la telemetria fina queda en guiones en el panel.
+if ctypes is not None:
+    class SPageFilePhysics(ctypes.Structure):
+        _pack_ = 4
+        _fields_ = [
+            ("packetId", ctypes.c_int32),
+            ("gas", ctypes.c_float),
+            ("brake", ctypes.c_float),
+            ("fuel", ctypes.c_float),
+            ("gear", ctypes.c_int32),
+            ("rpms", ctypes.c_int32),
+            ("steerAngle", ctypes.c_float),
+            ("speedKmh", ctypes.c_float),
+            ("velocity", ctypes.c_float * 3),
+            ("accG", ctypes.c_float * 3),
+            ("wheelSlip", ctypes.c_float * 4),
+            ("wheelLoad", ctypes.c_float * 4),
+            ("wheelsPressure", ctypes.c_float * 4),
+            ("wheelAngularSpeed", ctypes.c_float * 4),
+            ("tyreWear", ctypes.c_float * 4),
+            ("tyreDirtyLevel", ctypes.c_float * 4),
+            ("tyreCoreTemperature", ctypes.c_float * 4),
+            ("camberRAD", ctypes.c_float * 4),
+            ("suspensionTravel", ctypes.c_float * 4),
+            ("drs", ctypes.c_float),
+            ("tc", ctypes.c_float),
+            ("heading", ctypes.c_float),
+            ("pitch", ctypes.c_float),
+            ("roll", ctypes.c_float),
+            ("cgHeight", ctypes.c_float),
+            ("carDamage", ctypes.c_float * 5),
+            ("numberOfTyresOut", ctypes.c_int32),
+            ("pitLimiterOn", ctypes.c_int32),
+            ("abs", ctypes.c_float),
+        ]
 
 
-class SPageFileGraphic(ctypes.Structure):
-    _pack_ = 4
-    _fields_ = [
-        ("packetId", ctypes.c_int32),
-        ("status", ctypes.c_int32),
-        ("session", ctypes.c_int32),
-        ("currentTime", ctypes.c_wchar * 15),
-        ("lastTime", ctypes.c_wchar * 15),
-        ("bestTime", ctypes.c_wchar * 15),
-        ("split", ctypes.c_wchar * 15),
-        ("completedLaps", ctypes.c_int32),
-        ("position", ctypes.c_int32),
-        ("iCurrentTime", ctypes.c_int32),
-        ("iLastTime", ctypes.c_int32),
-        ("iBestTime", ctypes.c_int32),
-        ("sessionTimeLeft", ctypes.c_float),
-        ("distanceTraveled", ctypes.c_float),
-        ("isInPit", ctypes.c_int32),
-        ("currentSectorIndex", ctypes.c_int32),
-        ("lastSectorTime", ctypes.c_int32),
-        ("numberOfLaps", ctypes.c_int32),
-        ("tyreCompound", ctypes.c_wchar * 33),
-        ("replayTimeMultiplier", ctypes.c_float),
-        ("normalizedCarPosition", ctypes.c_float),
-        ("carCoordinates", ctypes.c_float * 3),
-        ("penaltyTime", ctypes.c_float),
-        ("flag", ctypes.c_int32),
-        ("idealLineOn", ctypes.c_int32),
-        ("isInPitLane", ctypes.c_int32),
-        ("surfaceGrip", ctypes.c_float),
-        ("mandatoryPitDone", ctypes.c_int32),
-    ]
+    class SPageFileGraphic(ctypes.Structure):
+        _pack_ = 4
+        _fields_ = [
+            ("packetId", ctypes.c_int32),
+            ("status", ctypes.c_int32),
+            ("session", ctypes.c_int32),
+            ("currentTime", ctypes.c_wchar * 15),
+            ("lastTime", ctypes.c_wchar * 15),
+            ("bestTime", ctypes.c_wchar * 15),
+            ("split", ctypes.c_wchar * 15),
+            ("completedLaps", ctypes.c_int32),
+            ("position", ctypes.c_int32),
+            ("iCurrentTime", ctypes.c_int32),
+            ("iLastTime", ctypes.c_int32),
+            ("iBestTime", ctypes.c_int32),
+            ("sessionTimeLeft", ctypes.c_float),
+            ("distanceTraveled", ctypes.c_float),
+            ("isInPit", ctypes.c_int32),
+            ("currentSectorIndex", ctypes.c_int32),
+            ("lastSectorTime", ctypes.c_int32),
+            ("numberOfLaps", ctypes.c_int32),
+            ("tyreCompound", ctypes.c_wchar * 33),
+            ("replayTimeMultiplier", ctypes.c_float),
+            ("normalizedCarPosition", ctypes.c_float),
+            ("carCoordinates", ctypes.c_float * 3),
+            ("penaltyTime", ctypes.c_float),
+            ("flag", ctypes.c_int32),
+            ("idealLineOn", ctypes.c_int32),
+            ("isInPitLane", ctypes.c_int32),
+            ("surfaceGrip", ctypes.c_float),
+            ("mandatoryPitDone", ctypes.c_int32),
+        ]
 
 
 MAX_PLAUSIBLE_SECTOR_MS = 600000
@@ -1399,6 +1460,10 @@ excursions = ExcursionTracker()
 def sharedMemoryLoop():
     """Lee las dos paginas de Shared Memory y arma el snapshot que viaja en el heartbeat."""
     global telemetry_snapshot, current_flag
+
+    if ctypes is None or mmap is None:
+        ac.log("[RaceControlClient] sin ctypes/mmap: no se lee la Shared Memory (ni banderas ni telemetria)")
+        return
 
     physics_shm = None
     graphics_shm = None
