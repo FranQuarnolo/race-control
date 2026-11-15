@@ -235,6 +235,15 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     udpClient.requestSessionInfo();
     journal.log("grid.swept", { slots: GRID_SLOTS });
   });
+  // El piloto terminó de cargar: recién ahí su app está escuchando el chat. Ver
+  // `BackendAnnouncer.onClientLoaded` -- sin esto, una carga de más de 20 s se comía la ronda
+  // entera de anuncios y la app quedaba en "Buscando servidor" para siempre.
+  udpClient.on("CLIENT_LOADED", (raw: Buffer) => {
+    if (raw.length < 2) return;
+    const carId = raw.readUInt8(1);
+    const car = stateTracker.get(carId);
+    if (car?.driverGuid) announcer.onClientLoaded({ carId, driverGuid: car.driverGuid });
+  });
   udpClient.on("CAR_INFO", (data: CarInfo) => {
     const known = stateTracker.get(data.carId);
     stateTracker.onCarInfo(data);

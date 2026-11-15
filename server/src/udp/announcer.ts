@@ -31,9 +31,28 @@ export class BackendAnnouncer {
     private issueToken?: (driverGuid: string) => string
   ) {}
 
-  onNewConnection(data: NewConnection): void {
+  onNewConnection(data: Pick<NewConnection, "carId" | "driverGuid">): void {
     this.cancel(data.driverGuid);
     this.announce(data.carId, data.driverGuid, 0);
+  }
+
+  /**
+   * El piloto terminó de cargar la sesión (`CLIENT_LOADED`): se reinicia la ronda de anuncios
+   * desde cero.
+   *
+   * `NEW_CONNECTION` llega cuando el piloto se conecta, que es ANTES de que su juego termine de
+   * cargar la pista, el auto y las apps. La ronda dura 5 × 4 s = 20 s, y una pista con mods
+   * pesados tarda más que eso: los cinco anuncios caían en la pantalla de carga, la app arrancaba
+   * con la ronda ya terminada y se quedaba en "Buscando servidor de Race Control..." para siempre
+   * —con el mensaje `RACECONTROL_BACKEND:` a la vista en el historial del chat, que es lo que lo
+   * hacía tan confuso—. `CLIENT_LOADED` es el momento en que las apps ya están escuchando.
+   *
+   * No reemplaza a `NEW_CONNECTION`: si este paquete no llega, la ronda original sigue valiendo.
+   * Y anunciar de más no rompe nada: la app ignora una dirección que ya conoce, y la ronda se corta
+   * sola con el primer latido.
+   */
+  onClientLoaded(data: Pick<NewConnection, "carId" | "driverGuid">): void {
+    this.onNewConnection(data);
   }
 
   /** Lo llama el endpoint de heartbeat: si ya nos reportó, no hace falta seguir insistiendo. */

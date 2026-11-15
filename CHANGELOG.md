@@ -3,6 +3,29 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.38] — 2026-11-14
+
+### La app quedaba en "Buscando servidor" si la pista tardaba en cargar
+
+**Síntoma.** Recién instalada la 1.9 de la app, que por fin aparecía en el juego, se quedaba en
+"Buscando servidor de Race Control..." toda la sesión. El mensaje `RACECONTROL_BACKEND:` estaba a
+la vista en el chat del piloto: el servidor anunciaba bien.
+
+**Causa.** El anuncio se dispara con `NEW_CONNECTION`, que llega cuando el piloto se conecta, con
+el juego todavía en la pantalla de carga. La ronda de reintentos dura 5 × 4 s = 20 s, y una pista
+con mods tarda más que eso en cargar: los cinco anuncios caían antes de que la app existiera. El
+chat del juego los guarda en el historial y por eso se ven, pero el listener de la app no estaba
+registrado todavía y no los recibe. Hasta la 1.8 no se veía porque la app ni siquiera cargaba
+(ver 1.37).
+
+**Decisión.** El servidor de AC avisa cuando el piloto termina de cargar (`CLIENT_LOADED`), y en
+ese momento las apps ya están escuchando: ahí la ronda de anuncios arranca de nuevo. No se
+alargó la ronda original, porque la tolerancia del watchdog de presencia (60 s) está calibrada
+contra ella. `NEW_CONNECTION` sigue anunciando como antes, para el caso en que `CLIENT_LOADED`
+no llegue. Test nuevo en `announcer.test.ts`.
+
+Es un cambio solo del servidor: la app del piloto sigue en 1.9 y no hay que reinstalar nada.
+
 ## [1.37] — 2026-11-14
 
 ### La app del piloto desapareció del juego sin haber cambiado: andaba con `.pyd` prestados
