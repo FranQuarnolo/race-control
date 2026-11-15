@@ -132,4 +132,46 @@ describe("autodetección del servidor de AC", () => {
     assert.equal(client.getRemoteTarget().host, "203.0.113.7");
     assert.equal(emitio, false);
   });
+
+  // --- El servidor se muda (desde la 1.38) -------------------------------------------------------
+  //
+  // Sin sockets: lo que se prueba es la regla, y una IP pública de mentira no se puede bindear.
+  function recibirDe(client: AcUdpClient, address: string, port: number): void {
+    const rinfo = { address, port, family: "IPv4", size: 1 } as dgram.RemoteInfo;
+    (client as unknown as { handleMessage(m: Buffer, r: dgram.RemoteInfo): void }).handleMessage(Buffer.from([0x00]), rinfo);
+  }
+
+  it("si el servidor de AC cambia de IP, le contesta al nuevo y vuelve a detectar el puerto", () => {
+    const client = trackCliente(
+      config({ remoteHost: "160.119.76.171", remotePort: 10051, remotePortSource: "detected" })
+    );
+    recibirDe(client, "172.233.26.106", 913);
+
+    // El caso real de FSL: la torre se llenaba con el servidor nuevo y el chat salía hacia el viejo.
+    assert.deepEqual(client.getRemoteTarget(), { host: "172.233.26.106", port: 913, autodetected: true });
+    assert.equal(client.hasUnstableRemotePort(), false);
+  });
+
+  it("al cambiar de IP respeta el puerto que el admin fijó a mano", () => {
+    const client = trackCliente(
+      config({ remoteHost: "160.119.76.171", remotePort: 12000, remotePortSource: "manual" })
+    );
+    recibirDe(client, "172.233.26.106", 913);
+    assert.equal(client.getRemoteTarget().host, "172.233.26.106");
+    assert.equal(client.getRemoteTarget().port, 12000);
+  });
+
+  it("dos servidores de AC en el mismo puerto: deja de saltar entre ellos y avisa", () => {
+    const client = trackCliente(config({ remoteHost: "198.51.100.1", remotePort: 9000, remotePortSource: "detected" }));
+    let aviso: Record<string, unknown> | null = null;
+    client.on("remoteHostUnstable", (info: Record<string, unknown>) => (aviso = info));
+
+    recibirDe(client, "198.51.100.2", 9100);
+    recibirDe(client, "198.51.100.1", 9000);
+
+    assert.ok(aviso, "no avisó que hay dos servidores mezclados");
+    assert.equal(client.getRemoteTarget().host, "198.51.100.2");
+    recibirDe(client, "198.51.100.3", 9200);
+    assert.equal(client.getRemoteTarget().host, "198.51.100.2", "siguió saltando después de rendirse");
+  });
 });

@@ -3,6 +3,30 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.39] — 2026-11-14
+
+### El servidor de FSL se mudó de IP y Race Control le seguía contestando al viejo
+
+**Síntoma.** Con la 1.38 desplegada, el piloto entró al servidor de Imola de FSL y no vio
+**nada** de Race Control en el chat: ni el anuncio para la app ni el "Race Control ENCENDIDO".
+La app seguía en "Buscando servidor". Del lado del backend, todo parecía en orden: el servidor
+`fsl` (UDP 30003) registraba al piloto conectado y la telemetría entraba.
+
+**Causa.** El host del servidor de AC se autodetecta del primer datagrama, pero solo una vez:
+al salir de `127.0.0.1`. El 3/11 quedó grabado `160.119.76.171:10051` en el `config.json`, y
+desde entonces todo lo saliente iba ahí. El servidor de FSL ahora corre en otra máquina
+(`172.233.26.106`, la que figuraba en el `py_log` del piloto) y manda desde el puerto 913.
+Race Control recibía de uno y le contestaba a otro. Lo único que dejó rastro fue el aviso de
+"puerto inestable" (10051 contra 913), que apuntaba al puerto cuando el problema era el host.
+
+**Decisión.** El host se sigue también cuando cambia. Si los datagramas llegan desde otra IP,
+esa pasa a ser el destino y el puerto se vuelve a detectar desde cero (salvo que el admin lo haya
+fijado a mano, que se respeta). El que manda los paquetes es, por definición, el servidor que está
+corriendo. Para no saltar de un lado a otro cuando hay **dos** servidores de AC apuntando al mismo
+puerto de Race Control (dos carreras mezcladas en una torre, que ya está roto de por sí), si el
+host cambia dos veces en menos de un minuto se deja de seguir y se avisa en el log. Tres tests
+nuevos en `udpAdoption.test.ts`.
+
 ## [1.38] — 2026-11-14
 
 ### La app quedaba en "Buscando servidor" si la pista tardaba en cargar

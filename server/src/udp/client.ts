@@ -42,6 +42,10 @@ export interface UdpStats {
   lastSourcePort: number;
 }
 
+/** Dos cambios de host dentro de esta ventana = dos servidores de AC en el mismo puerto. Ver
+ * `adoptRemoteHostIfNeeded`. */
+const HOST_FLAP_WINDOW_MS = 60_000;
+
 /** Habla el protocolo ACSP con el servidor dedicado de Assetto Corsa. Ver protocol.ts. */
 export class AcUdpClient extends EventEmitter {
   private socket: dgram.Socket;
@@ -54,6 +58,10 @@ export class AcUdpClient extends EventEmitter {
     lastSourcePort: 0,
   };
   private remotePortAdoptionGaveUp = false;
+  /** Cuándo se cambió de host por última vez, y si se dejó de seguir los cambios. Ver
+   * `adoptRemoteHostIfNeeded`. */
+  private lastHostChangeAt = 0;
+  private remoteHostAdoptionGaveUp = false;
 
   /**
    * `config` se guarda POR REFERENCIA a propósito: es el mismo objeto `config.acUdp` de la app, y
@@ -116,16 +124,48 @@ export class AcUdpClient extends EventEmitter {
    * telemetría perfecta y no podía contestar nada.
    *
    * El puerto se adopta aparte, con reglas propias: ver `adoptRemotePortIfNeeded`.
+   *
+   * **El host se sigue también cuando CAMBIA (desde la 1.38).** Hasta ahí se adoptaba una sola
+   * vez, al salir de 127.0.0.1, y quedaba fijo para siempre en el `config.json`. Una liga cuyo
+   * servidor de AC se mudó de hosting (FSL: de `160.119.76.171` a otra IP) siguió recibiendo
+   * telemetría perfecta del servidor nuevo mientras le mandaba todo —el anuncio a la app, el
+   * chat, las sanciones— al viejo. El piloto veía la app en "Buscando servidor" y ni un mensaje
+   * de Race Control en el chat. El que manda los datagramas es, por definición, el servidor que
+   * está corriendo: ese es a quien hay que contestarle.
+   *
+   * Al cambiar de host, el puerto aprendido del anterior deja de valer (salvo que el admin lo
+   * haya fijado a mano) y se vuelve a detectar desde cero con el servidor nuevo.
+   *
+   * Lo único que esto no tolera son DOS servidores de AC apuntando al mismo puerto UDP: el host
+   * saltaría de uno a otro con cada paquete. Eso ya es una configuración rota —dos carreras
+   * mezcladas en una torre—, así que si el host cambia dos veces en menos de un minuto se deja de
+   * seguir, se queda el último y se avisa.
    */
   private adoptRemoteHostIfNeeded(rinfo: dgram.RemoteInfo): void {
-    if (!isLoopback(this.config.remoteHost) || isLoopback(rinfo.address)) return;
+    if (isLoopback(rinfo.address) || rinfo.address === this.config.remoteHost) return;
+    if (this.remoteHostAdoptionGaveUp) return;
     const previous = this.config.remoteHost;
+    const moved = !isLoopback(previous);
+    if (moved) {
+      const now = Date.now();
+      if (this.lastHostChangeAt > 0 && now - this.lastHostChangeAt < HOST_FLAP_WINDOW_MS) {
+        this.remoteHostAdoptionGaveUp = true;
+        this.emit("remoteHostUnstable", { kept: previous, alsoSeen: rinfo.address });
+        return;
+      }
+      this.lastHostChangeAt = now;
+      if (this.config.remotePortSource !== "manual") {
+        this.config.remotePortSource = "default";
+        this.remotePortAdoptionGaveUp = false;
+      }
+    }
     this.config.remoteHost = rinfo.address;
     this.emit("remoteHostDetected", {
       previous,
       detected: rinfo.address,
       sourcePort: rinfo.port,
       configuredPort: this.config.remotePort,
+      moved,
     });
   }
 

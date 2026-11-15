@@ -139,8 +139,19 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     }
   };
   udpClient.on("remoteHostDetected", (info: Record<string, unknown>) => {
-    console.log(`[race-control] Servidor de AC detectado en ${info.detected} — comandos salientes redirigidos.`);
+    console.log(
+      info.moved
+        ? `[race-control] El servidor de AC ahora habla desde ${info.detected} (antes ${info.previous}) — comandos salientes redirigidos.`
+        : `[race-control] Servidor de AC detectado en ${info.detected} — comandos salientes redirigidos.`
+    );
     persistDetectedTarget("udp.remoteHostDetected", info);
+  });
+  udpClient.on("remoteHostUnstable", (info: Record<string, unknown>) => {
+    console.warn(
+      `[race-control] Llegan paquetes de ${info.kept} y de ${info.alsoSeen}: hay dos servidores de AC ` +
+        "apuntando al mismo puerto UDP de Race Control. Se queda el primero; cada servidor necesita su propio puerto."
+    );
+    journal.log("udp.remoteHostUnstable", info);
   });
   // El puerto de comandos también se descubre solo (ver adoptRemotePortIfNeeded). Es el número
   // que el admin tendría que ir a buscar al panel de su hosting, y el que arruina la carrera en
