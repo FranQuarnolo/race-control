@@ -57,7 +57,8 @@ export class AcUdpClient extends EventEmitter {
     commandSendErrors: 0,
     lastSourcePort: 0,
   };
-  private remotePortAdoptionGaveUp = false;
+  /** Cuándo se avisó por última vez que el puerto cambió. Ver `adoptRemotePortIfNeeded`. */
+  private lastPortNoticeAt = 0;
   /** Cuándo se cambió de host por última vez, y si se dejó de seguir los cambios. Ver
    * `adoptRemoteHostIfNeeded`. */
   private lastHostChangeAt = 0;
@@ -154,10 +155,7 @@ export class AcUdpClient extends EventEmitter {
         return;
       }
       this.lastHostChangeAt = now;
-      if (this.config.remotePortSource !== "manual") {
-        this.config.remotePortSource = "default";
-        this.remotePortAdoptionGaveUp = false;
-      }
+      if (this.config.remotePortSource !== "manual") this.config.remotePortSource = "default";
     }
     this.config.remoteHost = rinfo.address;
     this.emit("remoteHostDetected", {
@@ -179,33 +177,44 @@ export class AcUdpClient extends EventEmitter {
    * producto: la telemetría entra perfecta, el panel se pone verde entero, y ni una sola sanción
    * llega nunca al servidor.
    *
-   * Se apoya en un supuesto que hay que confirmar en pista (ver `docs/spike-protocolo.md`): que el
-   * acServer usa un solo socket para el plugin y entonces manda desde el mismo puerto en el que
-   * escucha. Si resultara falso, el puerto de origen sería efímero y cambiaría solo — ese caso se
-   * detecta acá mismo, se deja de adoptar y se avisa, en vez de quedar pisando el valor bueno con
-   * basura nueva en cada paquete.
+   * **Se le contesta siempre al último puerto de origen (desde la 1.40).** Hasta ahí, si el servidor
+   * hablaba desde un segundo puerto se dejaba de adoptar y se quedaba el primero, por miedo a que
+   * fuera un socket efímero. Lo que apareció en pista fue otra cosa: el servidor de Spa de FSL
+   * corre detrás de un router con NAT. Escucha en 9813 adentro de su red, ese puerto no está
+   * abierto hacia afuera, y el router le cambia el origen a lo que quiere (913, 11000...). Lo único
+   * que atraviesa ese router de vuelta es una respuesta al mismo par IP:puerto que acaba de
+   * hablar, desde nuestro mismo puerto — exactamente lo que hace cualquier juego online. Al
+   * quedarnos con el primer puerto, apenas el router renovaba el mapeo todo lo saliente (chat,
+   * anuncio a la app, sanciones) moría en su firewall, en silencio, con la telemetría entrando
+   * perfecta. Con un servidor sin NAT no cambia nada: ahí el origen ya es el puerto de escucha.
+   *
+   * Si el puerto saltara en cada paquete (un relay con dos sockets, por ejemplo) se lo sigue
+   * igual, pero se avisa y se persiste a lo sumo una vez por minuto para no reescribir el
+   * `config.json` con cada datagrama.
+   *
+   * El puerto fijado a mano manda siempre: es la salida para un hosting que sí abre su
+   * "Listen Address" y manda desde otro lado.
    */
   private adoptRemotePortIfNeeded(rinfo: dgram.RemoteInfo): void {
     if (this.config.remotePortSource === "manual") return;
-    // Volver el campo a "default" desde el panel (borrándolo) es pedir explícitamente que se
-    // reintente la detección, incluso si antes la habíamos abandonado por inestable.
-    if (this.config.remotePortSource === "default") this.remotePortAdoptionGaveUp = false;
-    if (this.remotePortAdoptionGaveUp) return;
     if (rinfo.port === this.config.remotePort) return;
     const previous = this.config.remotePort;
-    if (this.config.remotePortSource === "detected") {
-      this.remotePortAdoptionGaveUp = true;
-      this.emit("remotePortUnstable", { adopted: previous, alsoSeen: rinfo.port });
-      return;
-    }
+    const followed = this.config.remotePortSource === "detected";
     this.config.remotePort = rinfo.port;
     this.config.remotePortSource = "detected";
-    this.emit("remotePortDetected", { previous, detected: rinfo.port });
+    const now = Date.now();
+    if (followed && now - this.lastPortNoticeAt < HOST_FLAP_WINDOW_MS) return;
+    this.lastPortNoticeAt = now;
+    this.emit("remotePortDetected", { previous, detected: rinfo.port, followed });
   }
 
-  /** `true` cuando el servidor habló desde más de un puerto: ninguno sirve como destino fijo. */
+  /**
+   * Quedó por compatibilidad con el diagnóstico: desde la 1.40 el puerto no se abandona nunca
+   * (ver `adoptRemotePortIfNeeded`), así que siempre es `false`. Si alguna vez se vuelve a
+   * abandonar la detección, este es el lugar donde decirlo.
+   */
   hasUnstableRemotePort(): boolean {
-    return this.remotePortAdoptionGaveUp;
+    return false;
   }
 
   private handleMessage(msg: Buffer, rinfo: dgram.RemoteInfo): void {

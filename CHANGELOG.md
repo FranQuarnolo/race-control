@@ -3,6 +3,31 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.40] — 2026-11-14
+
+### El servidor de Spa de FSL está detrás de un NAT y nada de lo que le mandábamos entraba
+
+**Síntoma.** Con la 1.39 Race Control ya seguía al servidor de Spa en su IP nueva
+(`179.41.15.138`), la torre se llenaba con los pilotos, pero en el juego no aparecía nada: ni
+"Race Control ENCENDIDO" ni el anuncio para la app, que seguía en "Buscando servidor". Fijar a mano
+el puerto que declaró el admin (`Listen Address 0.0.0.0:9813`) tampoco sirvió. Mandando mensajes
+de prueba desde Fly a seis combinaciones de IP y puerto, no llegó ninguno, aunque la IP de origen
+era la habilitada en la IP Allow List (`137.66.7.90`, verificado con STUN).
+
+**Causa.** El servidor corre detrás de un router con NAT: escucha en 9813 dentro de su red, pero
+ese puerto no está abierto hacia afuera, y el router le cambia el puerto de origen a sus paquetes
+(se vieron 913 y 11000). Lo único que atraviesa ese router de vuelta es una respuesta al último
+IP:puerto que habló, desde nuestro mismo puerto. Race Control, al ver un segundo puerto, dejaba de
+adoptarlo ("puerto inestable") y se quedaba con el primero: en cuanto el router renovaba el mapeo,
+todo lo saliente moría en su firewall. Las pruebas a mano salían desde otro puerto de Fly, y por
+eso tampoco pasaban.
+
+**Decisión.** El puerto de destino sigue siempre al último puerto de origen, salvo que el admin lo
+haya fijado a mano. Con un servidor sin NAT no cambia nada, porque ahí el origen ya es el puerto de
+escucha. El aviso de "puerto inestable" desaparece: era justamente el que nos hacía rendirnos. Si
+el puerto saltara en cada paquete, se lo sigue igual pero se avisa y se guarda a lo sumo una vez
+por minuto.
+
 ## [1.39] — 2026-11-14
 
 ### El servidor de FSL se mudó de IP y Race Control le seguía contestando al viejo

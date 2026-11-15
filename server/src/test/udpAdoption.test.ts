@@ -97,26 +97,23 @@ describe("autodetección del servidor de AC", () => {
     assert.equal(emitio, false);
   });
 
-  // Si el servidor usara un socket efímero por paquete, adoptar el origen sería adoptar basura
-  // nueva cada vez. Se detecta solo, se deja de adoptar, y el diagnóstico manda a buscar el dato
-  // real al panel del hosting en vez de ofrecer un número que ya caducó.
-  it("si el servidor habla desde dos puertos distintos, abandona la detección y avisa", async () => {
+  // El caso de Spa de FSL (1.40): el servidor está detrás de un NAT, escucha en un puerto que el
+  // router no abre, y el router le cambia el origen. Lo único que vuelve a entrar es una respuesta
+  // al último IP:puerto que habló; quedarse con el primero dejaba todo lo saliente en su firewall.
+  it("si el servidor habla desde otro puerto, le contesta al último", async () => {
     const client = trackCliente(config());
     await client.start();
     const detectado = esperarEvento(client, "remotePortDetected");
-    const inestable = esperarEvento(client, "remotePortUnstable");
 
     const primero = await servidorFalso(18010);
     await hablar(primero, puertoDe(client));
     await detectado;
     const segundo = await servidorFalso(18011);
     await hablar(segundo, puertoDe(client));
+    await new Promise((r) => setTimeout(r, 150));
 
-    const info = await inestable;
-    assert.equal(info.alsoSeen, 18011);
-    assert.equal(client.hasUnstableRemotePort(), true);
-    // Se queda con el primero: ninguno es mejor que el otro, y el diagnóstico ya lo marca en rojo.
-    assert.equal(client.getRemoteTarget().port, 18010);
+    assert.equal(client.getRemoteTarget().port, 18011, "se quedó con el puerto viejo: detrás de un NAT, nada llega");
+    assert.equal(client.hasUnstableRemotePort(), false);
   });
 
   it("el host se adopta igual que el puerto, y solo mientras siga en loopback", async () => {

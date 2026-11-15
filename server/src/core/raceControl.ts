@@ -157,16 +157,16 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // que el admin tendría que ir a buscar al panel de su hosting, y el que arruina la carrera en
   // silencio si se equivoca.
   udpClient.on("remotePortDetected", (info: Record<string, unknown>) => {
-    console.log(`[race-control] El servidor de AC escucha órdenes en el puerto ${info.detected} — ya apuntamos ahí.`);
+    console.log(
+      info.followed
+        ? `[race-control] El servidor de AC ahora habla desde el puerto ${info.detected} (antes ${info.previous}) — le contestamos ahí.`
+        : `[race-control] El servidor de AC escucha órdenes en el puerto ${info.detected} — ya apuntamos ahí.`
+    );
     persistDetectedTarget("udp.remotePortDetected", info);
   });
-  udpClient.on("remotePortUnstable", (info: Record<string, unknown>) => {
-    console.warn(
-      `[race-control] El servidor nos habló desde ${info.adopted} y también desde ${info.alsoSeen}: ` +
-        'no se puede deducir a qué puerto mandarle las órdenes. El hosting tiene que declarar un "Listen Address" fijo.'
-    );
-    journal.log("udp.remotePortUnstable", info);
-  });
+  // Hasta la 1.39 había un aviso de "puerto inestable" acá: el servidor hablaba desde dos puertos
+  // y se dejaba de seguirlo. Desde la 1.40 se le contesta al último (ver adoptRemotePortIfNeeded),
+  // que es lo que hace falta cuando el servidor está detrás de un NAT.
 
   const rawCapture = new RawCapture(logDir, () => performance.now());
   udpClient.on("rawPacket", (buf: Buffer) => rawCapture.record(buf));
