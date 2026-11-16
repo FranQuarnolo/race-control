@@ -94,6 +94,11 @@ export interface Incident {
    * el contexto ya lo dan la geometría y la velocidad de impacto. */
   detail?: string;
   phase: string;
+  /** Sesión de AC en la que ocurrió (1 práctica, 2 clasificación, 3 carrera). El panel y el embed
+   * lo muestran como la misma insignia P/Q/R del reloj de sesión: la bandeja guarda incidentes de
+   * varias sesiones, y sin esto no había forma de saber si un toque fue en la qualy o en carrera.
+   * Opcional porque los incidentes restaurados de un journal anterior a la 1.41 no lo traen. */
+  sessionType?: number;
   status: "pending" | "dismissed" | "warned" | "penalized";
   resolvedAt?: number;
   resolution?: string;
@@ -165,7 +170,10 @@ export class IncidentEngine extends EventEmitter {
     private rules: InfractionCatalog,
     private getPhase: () => string,
     private getSessionType: () => number,
-    private clock: Clock = systemClock
+    private clock: Clock = systemClock,
+    /** Si la práctica descarta incidentes. Es una función y no un booleano porque el admin lo
+     * cambia desde el panel con la sesión corriendo (`config.presence.skipPracticeIncidents`). */
+    private skipPractice: () => boolean = () => true
   ) {
     super();
   }
@@ -180,9 +188,13 @@ export class IncidentEngine extends EventEmitter {
    * En práctica no hay nada que sancionar: los autos salen de boxes cuando quieren, se cruzan de
    * cualquier forma y un toque no significa nada. Antes se registraba igual que en carrera, y la
    * bandeja de un piloto arrancaba la clasificación con incidentes de una sesión que no corrió.
+   *
+   * Desde la 1.41 es una opción del admin (`skipPracticeIncidents`, activa por defecto): hay ligas
+   * que usan la práctica para ver cómo maneja cada uno y quieren el registro. Con la opción
+   * apagada, el incidente sigue el mismo camino que en carrera y queda marcado con su sesión.
    */
   private route(incident: Incident): InfractionAction {
-    if (this.getSessionType() === PRACTICE_SESSION_TYPE) return "ignore";
+    if (this.getSessionType() === PRACTICE_SESSION_TYPE && this.skipPractice()) return "ignore";
     const type = TYPE_OF_KIND[incident.kind];
     const action = type === null ? "review" : this.rules[type].action;
     if (action === "ignore") return action;
@@ -278,6 +290,7 @@ export class IncidentEngine extends EventEmitter {
       splinePosition: args.splinePosition,
       detail: args.detail,
       phase: this.getPhase(),
+      sessionType: this.getSessionType(),
       status: "pending",
     };
     const action = this.route(incident);
@@ -409,6 +422,7 @@ export class IncidentEngine extends EventEmitter {
       splinePosition: args.context.normalizedSplinePosition,
       worldPosition: args.event.worldPosition,
       phase: this.getPhase(),
+      sessionType: this.getSessionType(),
       status: "pending",
     };
     if (this.route(incident) === "ignore") return;

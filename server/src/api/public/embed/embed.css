@@ -280,6 +280,14 @@
 .rc-embed__session-type[data-session-type="6"] { color: var(--cyan); }
 .rc-embed__session-type[data-session-type="7"] { color: var(--muted); }
 
+/* La misma chapa, en chico, delante del título de cada incidente (ver incidenteCard). */
+.rc-embed__session-type.rc-embed__session-type--chip {
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  font-size: 0.7rem;
+}
+
 .rc-embed__session-clock {
   font-family: var(--font-display);
   font-weight: 600;
@@ -528,6 +536,22 @@
   color: var(--accent);
   font-size: 1rem;
   margin: 0 0 8px;
+}
+
+/* Título de sección con una acción pegada a la derecha ("Descargar sanciones aplicadas"). */
+.rc-embed__titulo-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+.rc-embed__titulo-fila .rc-embed__titulo {
+  margin: 0;
+}
+.rc-embed__titulo-fila .rc-embed__btn[hidden] {
+  display: none;
 }
 
 .rc-embed__tabla-wrap {

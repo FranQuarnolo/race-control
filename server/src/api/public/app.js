@@ -375,8 +375,14 @@ function setupForms() {
   registerForm(
     "presence",
     "btn-save-presence",
-    ["pr-enforce", "pr-grace"],
-    () => ({ presence: { enforce: $("pr-enforce").checked, graceSeconds: num("pr-grace") } })
+    ["pr-enforce", "pr-grace", "pr-skip-practice"],
+    () => ({
+      presence: {
+        enforce: $("pr-enforce").checked,
+        graceSeconds: num("pr-grace"),
+        skipPracticeIncidents: $("pr-skip-practice").checked,
+      },
+    })
   );
 
   // El origen del embed ya no viaja por `/api/config`: es de la LIGA, no de este servidor puntual
@@ -712,6 +718,7 @@ function fillConfigForm(config) {
   renderProfiles(config);
 
   $("pr-enforce").checked = config.presence.enforce;
+  $("pr-skip-practice").checked = config.presence.skipPracticeIncidents !== false;
   $("pr-grace").value = config.presence.graceSeconds;
 
   // "embed" no se marca acá: su dato (`embed-origin`) no viene de `/api/config` sino de
@@ -1715,6 +1722,18 @@ function incidentCard(incident, propio, carRow) {
   const head = document.createElement("div");
   head.className = "head";
 
+  // La misma chapa P/Q/R del reloj de sesión, en chico: la bandeja junta incidentes de la
+  // clasificación y de la carrera, y el color ya dice cuál es sin leer. Los incidentes anteriores
+  // a la 1.41 no traen la sesión y van sin chapa: inventarla sería afirmar algo que no se sabe.
+  if (typeof incident.sessionType === "number" && SESSION_SHORT_LABELS[incident.sessionType]) {
+    const sesion = document.createElement("span");
+    sesion.className = "session-type session-type--chip";
+    sesion.dataset.sessionType = String(incident.sessionType);
+    sesion.textContent = SESSION_SHORT_LABELS[incident.sessionType];
+    sesion.title = SESSION_CHIP_TITLES[incident.sessionType] || "";
+    head.appendChild(sesion);
+  }
+
   const who = document.createElement("span");
   who.className = "who";
   who.textContent = tituloIncidente(incident, propio);
@@ -1777,9 +1796,14 @@ function incidentCard(incident, propio, carRow) {
   return card;
 }
 
+function capitalizar(texto) {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 function tituloIncidente(incident, propio) {
   if (incident.kind !== "car-contact") {
-    return INCIDENT_KIND_LABELS[incident.kind] || "incidente";
+    // Mayúscula acá y no en el mapa: el mapa son etiquetas, y una que se use en medio de una frase no tiene que arrastrarla.
+    return capitalizar(INCIDENT_KIND_LABELS[incident.kind] || "incidente");
   }
   // Contra quién fue. El backend guarda a los dos en `parties` desde que existe el pareo de
   // paquetes, así que esto no adivina nada: es el otro auto del mismo toque.
@@ -2106,6 +2130,7 @@ function applyLightsClass() {
  * seguía esa misma convención, así que "R" le hacía juego. Reserva pasa a "RES" para no empatarle
  * la letra a Carrera. */
 const SESSION_SHORT_LABELS = { 0: "RES", 1: "P", 2: "Q", 3: "R", 4: "H", 5: "TA", 6: "D", 7: "REP" };
+const SESSION_CHIP_TITLES = { 1: "En práctica", 2: "En clasificación", 3: "En carrera" };
 
 /** El reloj de la sesión: `MM:SS`, o `HH:MM:SS` cuando pasa de la hora, o "N día(s) + HH:MM:SS"
  * cuando el servidor se dejó una práctica corriendo (bug visto en producción: "1277:21.41"). Sirve

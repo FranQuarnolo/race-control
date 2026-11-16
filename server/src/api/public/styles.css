@@ -577,6 +577,15 @@ main[hidden] {
   border-color: rgba(138, 141, 150, 0.4);
   color: var(--muted);
 } /* Repetición */
+/* La misma chapa, en chico, delante del título de cada incidente (ver incidentCard). */
+.session-type.session-type--chip {
+  display: inline-flex;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 11px;
+}
 .session-clock {
   font-size: 19px;
   font-weight: 700;

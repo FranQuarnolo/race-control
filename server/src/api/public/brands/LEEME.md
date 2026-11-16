@@ -18,6 +18,22 @@ Ninguno de los dos alcanza solo: `car-brand-logos` no trae Lamborghini ni Ford, 
 De `car-makes-icons` se descartaron las variantes `" alt"`: son el mismo logo en otra versión y
 solo generan archivos que nunca se piden.
 
+## Logos elegidos a mano (1.41)
+
+Diecinueve archivos se reemplazaron por SVG que eligió el operador de la liga, más fieles a cómo se
+ve el logo en el auto: aston-martin, audi, bentley, bmw, citroen, corvette (nuevo), ferrari, ford,
+lamborghini, lexus, mazda, mclaren, mercedes-benz, nissan, peugeot, porsche, renault, toyota y
+volkswagen. Antes de reemplazar alguno de estos con el paso de abajo, fijate si no se pisa una
+elección hecha a propósito.
+
+Además hay cuatro logos de **categoría**: `f1`, `f2`, `f3` y `lmp2`. No salen de la marca sino
+del nombre del modelo (`categorySlug` en `carBadges.ts`): si el mod dice `f1`, `f2`, `f3`,
+`formula_2` o `lmp2` como palabra suelta, gana sobre el logo de la marca.
+
+Dos para tener en cuenta: `mazda.svg` trae una imagen raster embebida (se ve igual, pero no escala
+como un vector) y `porsche.svg` pesa ~290 KB. Si alguna vez se nota en la carga de la tabla,
+son los primeros candidatos para cambiar.
+
 ## Marcas que no están
 
 Quedaron afuera varias que sí aparecen en Assetto Corsa, casi todas de nicho o de competición:

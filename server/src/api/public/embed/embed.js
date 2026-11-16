@@ -192,6 +192,13 @@
 
   var sancionesTitulo = el("h3", "rc-embed__titulo");
   sancionesTitulo.textContent = "Sanciones aplicadas";
+  // El título va en una fila con el botón de descarga pegado a la derecha. El botón solo aparece si
+  // hay alguna sanción (ver renderSanciones): bajar un archivo vacío no le sirve a nadie.
+  var sancionesCabecera = el("div", "rc-embed__titulo-fila");
+  var btnDescargarSanciones = boton("Descargar sanciones aplicadas", descargarSanciones, "secondary");
+  btnDescargarSanciones.hidden = true;
+  sancionesCabecera.appendChild(sancionesTitulo);
+  sancionesCabecera.appendChild(btnDescargarSanciones);
   var sancionesWrap = el("div", "rc-embed__tabla-wrap");
   var sancionesTabla = document.createElement("table");
   sancionesTabla.className = "rc-embed__tabla";
@@ -406,6 +413,7 @@
   var campoPrEnforce = campoCheckbox();
   var campoPrGrace = campoNumero();
   campoPrGrace.min = "10";
+  var campoPrSkipPractice = campoCheckbox();
   var btnGuardarPresence = boton("Guardar", undefined);
   var tituloApp = document.createElement("h3");
   tituloApp.textContent = "App de los pilotos";
@@ -417,6 +425,12 @@
   panelApp.appendChild(filaCampo("Exigir que todos la tengan", campoPrEnforce));
   panelApp.appendChild(filaCampo("Tiempo de espera antes de expulsar (s)", campoPrGrace));
   panelApp.appendChild(ayudaApp);
+  panelApp.appendChild(filaCampo("No contar incidentes en práctica", campoPrSkipPractice));
+  var ayudaPractica = document.createElement("p");
+  ayudaPractica.className = "rc-embed__hint";
+  ayudaPractica.textContent =
+    "Activado, la práctica no registra incidentes ni cuenta cortes, y por lo tanto tampoco sanciona por cortes. Desactivado, se registran marcados con una P.";
+  panelApp.appendChild(ayudaPractica);
   panelApp.appendChild(btnGuardarPresence);
 
   // -- Largada --
@@ -535,7 +549,7 @@
     [campoPZoneStart, campoPZoneEnd, campoPThreshold, campoPTolerance, campoPGrace, campoPStopGo, campoPPenaltyType, campoPEscalation, campoPTimePenalty],
     buildPitPayload
   );
-  registrarFormReglas("presence", btnGuardarPresence, [campoPrEnforce, campoPrGrace], buildPresencePayload);
+  registrarFormReglas("presence", btnGuardarPresence, [campoPrEnforce, campoPrGrace, campoPrSkipPractice], buildPresencePayload);
   wireProfiles();
 
   var reglasAviso = el("p", "rc-embed__modal-aviso");
@@ -613,7 +627,7 @@
   root.appendChild(topbar);
   root.appendChild(start);
   root.appendChild(tablaWrap);
-  root.appendChild(sancionesTitulo);
+  root.appendChild(sancionesCabecera);
   root.appendChild(sancionesWrap);
   root.appendChild(sancionesVacio);
   root.appendChild(modalConexionBackdrop);
@@ -960,7 +974,13 @@
   }
 
   function buildPresencePayload() {
-    return { presence: { enforce: campoPrEnforce.checked, graceSeconds: Number(campoPrGrace.value) } };
+    return {
+      presence: {
+        enforce: campoPrEnforce.checked,
+        graceSeconds: Number(campoPrGrace.value),
+        skipPracticeIncidents: campoPrSkipPractice.checked,
+      },
+    };
   }
 
   function buildInfractionsPayload() {
@@ -1224,6 +1244,7 @@
     renderPerfiles(config);
 
     campoPrEnforce.checked = config.presence.enforce;
+    campoPrSkipPractice.checked = config.presence.skipPracticeIncidents !== false;
     campoPrGrace.value = config.presence.graceSeconds;
 
     Object.keys(reglasForms).forEach(function (nombre) { marcarFormReglasGuardado(nombre); });
@@ -1268,7 +1289,12 @@
       var otro = incident.parties.filter(function (p) { return p.carId !== carId; })[0];
       return "Toque con " + (otro ? driverLabelByCarId(otro.carId) : "otro auto");
     }
-    return INCIDENT_KIND_LABELS[incident.kind] || "incidente";
+    // Mayúscula acá y no en el mapa: el mapa son etiquetas, y una que se use en medio de una frase no tiene que arrastrarla.
+    return capitalizar(INCIDENT_KIND_LABELS[incident.kind] || "incidente");
+  }
+
+  function capitalizar(texto) {
+    return texto.charAt(0).toUpperCase() + texto.slice(1);
   }
 
   function resolver(incidentId, status, extra) {
@@ -1313,6 +1339,14 @@
     card.className = "rc-embed__incidente" + (resuelto ? " rc-embed__incidente--resuelto" : "");
 
     var head = el("div", "rc-embed__incidente-head");
+    // La misma chapa P/Q/R del reloj de sesión, en chico. Ver incidentCard en app.js.
+    if (typeof incident.sessionType === "number" && SESSION_SHORT_LABELS[incident.sessionType]) {
+      var sesion = el("span", "rc-embed__session-type rc-embed__session-type--chip");
+      sesion.setAttribute("data-session-type", String(incident.sessionType));
+      sesion.textContent = SESSION_SHORT_LABELS[incident.sessionType];
+      sesion.title = SESSION_CHIP_TITLES[incident.sessionType] || "";
+      head.appendChild(sesion);
+    }
     var who = el("span", "rc-embed__incidente-who");
     who.textContent = tituloIncidente(incident, car.carId);
     head.appendChild(who);
@@ -1648,6 +1682,7 @@
 
   /** Mismos tipos que `SESSION_SHORT_LABELS` en `app.js`. */
   var SESSION_SHORT_LABELS = { 0: "RES", 1: "P", 2: "Q", 3: "R", 4: "H", 5: "TA", 6: "D", 7: "REP" };
+  var SESSION_CHIP_TITLES = { 1: "En práctica", 2: "En clasificación", 3: "En carrera" };
 
   /** Mismo reloj que `formatClock` en app.js, y por el mismo motivo **sin centésimas**: en una
    *  práctica de 49 minutos se leía "47:44.22" y esos dos dígitos de más, corriendo al lado de los
@@ -1897,14 +1932,68 @@
     revoked: "anulada",
   };
 
-  function renderSanciones(state) {
-    var todas = []
+  function todasLasSanciones(state) {
+    return []
       .concat(state.formationPenalties.map(function (p) { return Object.assign({ engine: "formation" }, p); }))
       .concat(state.pitPenalties.map(function (p) { return Object.assign({ engine: "pit" }, p); }))
       .concat(state.stewardPenalties.map(function (p) { return Object.assign({ engine: "steward" }, p); }))
       .sort(function (a, b) { return b.createdAt - a.createdAt; });
+  }
+
+  /**
+   * Baja las sanciones de la tabla como JSON.
+   *
+   * Se arma acá, con el mismo estado que está dibujado, y se entrega con un Blob: un link directo
+   * a un endpoint no sirve, porque el embed se autentica con un Bearer en el header y un
+   * `<a href>` no puede mandarlo. Sale con nombres de piloto y textos legibles, no con ids
+   * internos, porque el que lo pide es el admin para publicarlo o archivarlo. Las sanciones del
+   * estado del embed ya vienen sin el SteamID (ver redactForEmbed en adminApi.ts).
+   */
+  function descargarSanciones() {
+    if (!lastState) return;
+    var session = lastState.session;
+    var iso = function (ms) { return typeof ms === "number" ? new Date(ms).toISOString() : null; };
+    var datos = {
+      liga: slug,
+      pista: session ? session.track + (session.trackConfig ? " (" + session.trackConfig + ")" : "") : null,
+      sesion: session ? session.typeLabel : null,
+      generado: new Date().toISOString(),
+      sanciones: todasLasSanciones(lastState).map(function (p) {
+        return {
+          piloto: driverLabelByCarId(p.carId),
+          motor: ENGINE_LABELS[p.engine] || p.engine,
+          tipo: PENALTY_TYPE_LABELS[p.type] || p.type,
+          segundos: p.type === "TIME" ? p.timePenaltySeconds : null,
+          motivo: p.reason,
+          estado: PENALTY_STATUS_LABELS[p.status] || p.status,
+          creada: iso(p.createdAt),
+          cumplida: iso(p.servedAt),
+          revocada: iso(p.revokedAt),
+        };
+      }),
+    };
+    var ahora = new Date();
+    var dos = function (n) { return (n < 10 ? "0" : "") + n; };
+    var sello =
+      ahora.getFullYear() + "-" + dos(ahora.getMonth() + 1) + "-" + dos(ahora.getDate()) + "-" + dos(ahora.getHours()) + dos(ahora.getMinutes());
+    var pista = session && session.track ? session.track.replace(/[^a-zA-Z0-9_-]+/g, "_") : "sesion";
+    var blob = new Blob([JSON.stringify(datos, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "sanciones-" + pista + "-" + sello + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Se libera después: revocar en el mismo tick corta la descarga en algunos navegadores.
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function renderSanciones(state) {
+    var todas = todasLasSanciones(state);
 
     sancionesVacio.hidden = todas.length > 0;
+    btnDescargarSanciones.hidden = todas.length === 0;
     sancionesWrap.hidden = todas.length === 0;
     sancionesFilas.textContent = "";
 

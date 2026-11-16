@@ -1,7 +1,7 @@
 import { strict as assert } from "assert";
 import { test } from "node:test";
 import { computeGaps, computeStandings, SESSION_RACE } from "../state/standings";
-import { brandOf, brandSlug } from "../cars/carBadges";
+import { brandOf, brandSlug, categorySlug } from "../cars/carBadges";
 
 const SESSION_QUALIFY = 2;
 
@@ -223,9 +223,9 @@ test("el logo sale de la biblioteca empaquetada, y si la marca no está devuelve
 });
 
 test("las sub-marcas llevan el logo de la marca madre", () => {
-  // Un Corvette es un Chevrolet, y un RUF se construye sobre un Porsche: el logo genérico sería
-  // menos informativo que el de la marca sobre la que está hecho el auto.
-  assert.equal(brandSlug("Chevrolet Corvette"), "chevrolet");
+  // Un RUF se construye sobre un Porsche: el logo genérico sería menos informativo que el de la
+  // marca sobre la que está hecho el auto. El Corvette, desde la 1.41, tiene logo propio.
+  assert.equal(brandSlug("Chevrolet Corvette"), "corvette");
   assert.equal(brandSlug("RUF"), "porsche");
   assert.equal(brandSlug("Shelby"), "ford");
   // Race Sim Studio es un estudio de mods, no una marca de autos: no hay logo que mostrar.
@@ -285,4 +285,17 @@ test("toda la parrilla GT3 encuentra su logo en disco", () => {
     const marca = brandOf(modelo);
     assert.ok(brandSlug(marca), `${modelo} → "${marca}" se quedó sin logo`);
   }
+});
+
+// 1.41: la categoría se lee del nombre del mod, sea de RSS o de otro modder.
+test("los monoplazas y los LMP2 llevan el logo de su categoría", () => {
+  assert.equal(categorySlug("rss_formula_rss_2_v6"), null, "sin f2 en el nombre no se adivina");
+  assert.equal(categorySlug("vrc_f2_2023"), "f2");
+  assert.equal(categorySlug("rss_formula_3"), "f3");
+  assert.equal(categorySlug("mercedes_f1_w14"), "f1", "la categoría gana sobre la marca");
+  assert.equal(categorySlug("oreca_07_lmp2"), "lmp2");
+  // Trampas: un F12 de Ferrari y el McLaren F1 de calle no son Fórmula 1.
+  assert.equal(categorySlug("ks_ferrari_f12tdf"), null);
+  assert.equal(categorySlug("ks_mclaren_f1_gtr"), null);
+  assert.equal(categorySlug("ks_porsche_911_gt3_r_2016"), null);
 });

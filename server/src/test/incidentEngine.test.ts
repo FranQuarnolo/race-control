@@ -46,8 +46,15 @@ function setup() {
   }
   const clock = new FakeClock();
   const catalog = rules();
-  const sessionBox = { sessionType: 3 };
-  const engine = new IncidentEngine(tracker, catalog, () => "race", () => sessionBox.sessionType, clock);
+  const sessionBox = { sessionType: 3, skipPractice: true };
+  const engine = new IncidentEngine(
+    tracker,
+    catalog,
+    () => "race",
+    () => sessionBox.sessionType,
+    clock,
+    () => sessionBox.skipPractice
+  );
   return { engine, tracker, clock, catalog, sessionBox };
 }
 
@@ -167,6 +174,31 @@ test("en práctica no se registra ningún incidente, aunque el catálogo lo mand
   sessionBox.sessionType = 2; // Clasificación
   engine.onClientEvent(envHit(3, 150));
   assert.equal(engine.getAll().length, 1, "en clasificación el mismo choque sí entra a la bandeja");
+});
+
+// 1.41: el admin puede pedir que la práctica cuente ("No contar incidentes en práctica" apagado).
+test("con la opción apagada, la práctica registra y el incidente queda marcado como de práctica", () => {
+  const { engine, sessionBox } = setup();
+  sessionBox.sessionType = 1;
+  sessionBox.skipPractice = false;
+  engine.onClientEvent(envHit(3, 150));
+  const all = engine.getAll();
+  assert.equal(all.length, 1, "con la opción apagada, la práctica tiene que registrar");
+  assert.equal(all[0].sessionType, 1);
+});
+
+// La insignia Q/R del panel sale de acá: sin la sesión, un toque de la qualy y uno de la carrera
+// se ven iguales en la bandeja.
+test("cada incidente lleva la sesión en la que ocurrió", () => {
+  const { engine, sessionBox, clock } = setup();
+  sessionBox.sessionType = 2;
+  engine.onClientEvent(envHit(3, 150));
+  clock.advance(60_000);
+  sessionBox.sessionType = 3;
+  engine.onClientEvent(envHit(9, 150));
+  const porPiloto = new Map(engine.getAll().map((i) => [i.parties[0].carId, i.sessionType]));
+  assert.equal(porPiloto.get(3), 2, "el choque de la qualy tiene que quedar marcado Q");
+  assert.equal(porPiloto.get(9), 3, "el de la carrera, R");
 });
 
 test("en 'no controlar' el incidente ni siquiera se crea", () => {

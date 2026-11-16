@@ -16,7 +16,7 @@ import { SessionTracker } from "../session/sessionInfo";
 import { TrackLearner } from "../track/trackLearner";
 import { TrackLimitsTracker } from "../track/trackLimits";
 import { DriverTelemetry, DriverTelemetryStore } from "../telemetry/driverTelemetry";
-import { brandOf, brandSlug } from "../cars/carBadges";
+import { brandOf, brandSlug, categorySlug } from "../cars/carBadges";
 import { computeGaps, computeStandings } from "../state/standings";
 import { buildReport, reportFileName, toCsv } from "../report/raceReport";
 
@@ -68,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.40";
+export const APP_VERSION = "1.41";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -150,7 +150,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
            * biblioteca empaquetada. `brandLogo: null` = no hay logo para esa marca y el panel
            * dibuja el escudo con monograma, sin pedir una imagen que va a dar 404. */
           brand: brandOf(car.carModel),
-          brandLogo: brandSlug(brandOf(car.carModel)),
+          brandLogo: categorySlug(car.carModel) ?? brandSlug(brandOf(car.carModel)),
           telemetryStale: car.lastUpdate === 0 || now - car.lastUpdate > TELEMETRY_STALE_MS,
           /** Intervalo con el de adelante y con el líder, en ms. `null` donde no hay nada que medir
            * —el líder, o nadie con una vuelta cerrada todavía— y `lapsDown > 0` cuando está doblado,

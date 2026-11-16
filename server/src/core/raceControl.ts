@@ -396,7 +396,14 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // servidor sabe que hubo contacto, no quién tuvo la culpa, así que esto va a revisión humana.
   // Por lo mismo no pasa por `dispatchOrSuppress`: registrar un hecho observado no es aplicar
   // una sanción, y el modo sombra no tiene por qué cegar al comisario.
-  const incidentEngine = new IncidentEngine(stateTracker, config.infractions, () => phaseTracker.get(), () => sessionType);
+  const incidentEngine = new IncidentEngine(
+    stateTracker,
+    config.infractions,
+    () => phaseTracker.get(),
+    () => sessionType,
+    undefined,
+    () => config.presence.skipPracticeIncidents
+  );
   udpClient.on("CLIENT_EVENT", (data: ClientEvent) => incidentEngine.onClientEvent(data));
   // "Solo registrar": queda en el journal para el informe de la carrera, sin entrar a la bandeja
   // ni obligar al comisario a resolverlo uno por uno.
@@ -611,13 +618,21 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   });
 
   // ACSP_LAP_COMPLETED alimenta las vueltas de gracia de ambos motores de sanción.
+  /** La práctica no cuenta (ver `config.presence.skipPracticeIncidents`). */
+  function practiceIsSkipped(): boolean {
+    return sessionType === 1 && config.presence.skipPracticeIncidents;
+  }
+
   udpClient.on("LAP_COMPLETED", (data: LapCompleted) => {
     stateTracker.onLapCompleted(data);
     formationPenaltyEngine.onLapCompleted(data.carId);
     pitPenaltyEngine.onLapCompleted(data.carId);
     stewardPenaltyEngine.onLapCompleted(data.carId);
     // `cuts` es el dato autoritativo contra el que se contrasta lo que reporta la app del piloto.
-    trackLimits.onLapCompleted(data.carId, data.lapTimeMs, data.cuts);
+    // En práctica, con "No contar incidentes en práctica" activo, los cortes no se cuentan: hasta
+    // la 1.40 el incidente se descartaba pero el conteo seguía, y al llegar al límite caía una
+    // sanción automática por cortes en una sesión donde no había nada en juego.
+    if (!practiceIsSkipped()) trackLimits.onLapCompleted(data.carId, data.lapTimeMs, data.cuts);
   });
 
   /** Resuelve el carId vigente de una sanción por driverGuid — por si el piloto se reconectó y
@@ -875,7 +890,9 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     messageBoard,
     presenceWatchdog,
     telemetryStore,
-    onExcursions: (guid: string, excursions: unknown) => trackLimits.report(guid, excursions),
+    onExcursions: (guid: string, excursions: unknown) => {
+      if (!practiceIsSkipped()) trackLimits.report(guid, excursions);
+    },
     onHeartbeat: (guid: string) => announcer.onHeartbeatReceived(guid),
     onSurfaceGrip: (grip: number) => sessionTracker.onSurfaceGrip(grip),
     // La muestra para la calibración automática del pit lane: en qué punto de la vuelta está el

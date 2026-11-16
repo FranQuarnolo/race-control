@@ -218,13 +218,14 @@ function prettifyModel(carModel: string): string {
 /**
  * Marcas cuyo nombre presentable no coincide con el archivo de la biblioteca.
  *
- * El caso que importa es el de las sub-marcas: un Corvette lleva el logo de Chevrolet, y un RUF o
- * un Shelby —que no están en la biblioteca— llevan el de la marca sobre la que están construidos
- * antes que un escudo genérico.
+ * El caso que importa es el de las sub-marcas: un RUF o un Shelby —que no están en la biblioteca—
+ * llevan el de la marca sobre la que están construidos antes que un escudo genérico. El Corvette
+ * llevaba el de Chevrolet hasta la 1.41, cuando entró su logo propio (las banderas cruzadas), que
+ * es el que se ve en el auto y el que reconoce cualquiera que corra GT.
  */
 const SLUG_ALIASES: Record<string, string> = {
-  "chevrolet corvette": "chevrolet",
-  corvette: "chevrolet",
+  "chevrolet corvette": "corvette",
+  corvette: "corvette",
   "mercedes-amg": "mercedes-benz",
   mercedes: "mercedes-benz",
   shelby: "ford",
@@ -280,3 +281,31 @@ export function brandSlug(brand: string): string | null {
   return availableSlugs().has(slug) ? slug : null;
 }
 
+/**
+ * Logo de categoría (F1, F2, F3, LMP2) cuando el nombre del modelo la dice, o `null`.
+ *
+ * Pedido de la liga en la 1.41: en un monoplaza o un prototipo la categoría dice más que la marca,
+ * y muchos ni tienen marca real (`rss_formula_hybrid` es de un estudio). Los mods lo dicen en el
+ * nombre —`f1`, `f2`, `f3`, `lmp2`, a veces `formula_2`— sean de RSS o de otros modders, así que
+ * se busca como token suelto y no como pedazo de palabra: `ks_ferrari_f12tdf` es un F12, no un F1.
+ *
+ * Gana sobre la marca: un `mercedes_f1_w14` muestra el logo de F1. La excepción es el McLaren F1,
+ * el auto de calle de los noventa (`ks_mclaren_f1_gtr` viene con el juego), que de Fórmula 1 solo
+ * tiene el nombre.
+ */
+export function categorySlug(carModel: string): string | null {
+  if (!carModel) return null;
+  const tokens = tokenizar(carModel);
+  let slug: string | null = null;
+  for (let i = 0; i < tokens.length && !slug; i++) {
+    const token = tokens[i];
+    if (/^f[123]$/.test(token) || /^formula[123]$/.test(token)) slug = "f" + token.slice(-1);
+    else if (token === "formula" && /^[123]$/.test(tokens[i + 1] || "")) slug = "f" + tokens[i + 1];
+    else if (token === "lmp2") slug = "lmp2";
+  }
+  if (slug === "f1" && tokens.includes("mclaren")) {
+    const despues = tokens[tokens.indexOf("f1") + 1];
+    if (despues === undefined || despues === "gtr" || despues === "lm") return null;
+  }
+  return slug && availableSlugs().has(slug) ? slug : null;
+}

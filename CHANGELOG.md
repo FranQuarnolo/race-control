@@ -3,6 +3,63 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.41] — 2026-11-16
+
+Cinco pedidos del admin de FSL después de la primera semana usando Race Control en sus tres
+servidores.
+
+### La práctica no cuenta, y ahora lo decide el admin
+
+**Síntoma.** El admin pidió que la práctica no registre incidentes ni cortes, pero como opción:
+hay ligas que usan la práctica para ver cómo maneja cada uno.
+
+**Causa.** Los incidentes de práctica ya se descartaban, pero fijo en el código y sin forma de
+cambiarlo. Los cortes, en cambio, se seguían contando: `TrackLimitsTracker` no mira la sesión,
+y al llegar al límite caía una sanción automática por cortes en una sesión donde no había nada
+en juego.
+
+**Decisión.** Hay un switch nuevo, "No contar incidentes en práctica", en Reglas → App de los
+pilotos (panel y embed), activado por defecto para que nada cambie al actualizar. Activado, la
+práctica no registra incidentes ni cuenta cortes (ni los del servidor ni los que reporta la app),
+y entonces tampoco sanciona por cortes. Apagado, la práctica registra igual que la clasificación
+y la carrera. Se lee en vivo y se guarda en los perfiles de reglas.
+
+### Cada incidente dice en qué sesión fue
+
+**Síntoma.** La bandeja de un piloto junta los incidentes de la clasificación y de la carrera, y
+no había forma de saber cuál era cuál.
+
+**Decisión.** Cada incidente guarda la sesión en la que ocurrió (`sessionType`), y el panel y el
+embed muestran delante del título la misma chapa P/Q/R del reloj de sesión, en chico y con el
+mismo color. Los incidentes anteriores a esta versión no traen el dato y van sin chapa: inventarla
+sería afirmar algo que no se sabe.
+
+### Títulos de incidentes con mayúscula
+
+Los títulos salían todos en minúscula ("se fue de pista", "exceso en pit lane"). Ahora la primera
+letra va en mayúscula. Se hace al armar el título y no en el mapa de etiquetas, para que una
+etiqueta usada en medio de una frase no la arrastre.
+
+### Descargar las sanciones aplicadas desde el embed
+
+En el embed, al lado del título "Sanciones aplicadas" y pegado a la derecha, aparece
+"Descargar sanciones aplicadas" cuando hay alguna sanción. Baja un JSON con la liga, la pista, la
+sesión y cada sanción con piloto, tipo, motivo, estado y horarios, con textos legibles y sin
+SteamID. Se arma en el navegador con el mismo estado que está dibujado: un link directo no sirve,
+porque el embed se autentica con un Bearer que un `<a href>` no puede mandar.
+
+### Logos elegidos por la liga
+
+Diecinueve logos de marca se reemplazaron por SVG que eligió el operador, más fieles a cómo se ven
+en el auto (ver `brands/LEEME.md`). El Corvette deja de usar el logo de Chevrolet y pasa a tener el
+suyo, las banderas cruzadas.
+
+Se sumaron logos de categoría: F1, F2, F3 y LMP2. No salen de la marca sino del nombre del mod,
+que casi siempre la dice (`vrc_f2_2023`, `oreca_07_lmp2`), y ganan sobre el logo de la marca: en un
+monoplaza la categoría dice más, y muchos no tienen marca real. Se buscan como palabra suelta,
+para que un `ferrari_f12tdf` no pase por F1. El McLaren F1 de calle que viene con el juego queda
+afuera a propósito.
+
 ## [1.40] — 2026-11-14
 
 ### El servidor de Spa de FSL está detrás de un NAT y nada de lo que le mandábamos entraba

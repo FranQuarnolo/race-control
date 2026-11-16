@@ -47,8 +47,14 @@ export interface AppConfig {
   /** Cuánto se espera el heartbeat de la app del piloto antes de kickearlo por no tenerla.
    * Tiene que ser holgadamente mayor que la ventana de auto-discovery (announcer.ts: 5 × 4s),
    * si no un piloto que activa la app después de entrar al servidor es expulsado antes de poder
-   * recibir la dirección del backend. */
-  presence: { graceSeconds: number; enforce: boolean };
+   * recibir la dirección del backend.
+   *
+   * `skipPracticeIncidents` vive acá porque el admin lo pidió en la misma pestaña ("App de los
+   * pilotos"), no porque tenga que ver con la presencia. Con `true` la práctica no registra
+   * incidentes ni cuenta cortes —y entonces tampoco sanciona por cortes—; con `false` se registran
+   * igual que en clasificación y carrera, marcados con su sesión. Hasta la 1.40 la práctica
+   * descartaba los incidentes fijo en el código pero seguía contando cortes, que sí sancionaban. */
+  presence: { graceSeconds: number; enforce: boolean; skipPracticeIncidents: boolean };
   /** Catálogo de infracciones: qué se controla y qué se hace con cada cosa. Reemplaza a los
    * bloques `incidents` y `trackLimits` de versiones anteriores (ver migrateLegacyRules). */
   infractions: InfractionCatalog;
@@ -79,7 +85,7 @@ export interface ProfileRules {
   infractions: InfractionCatalog;
   formation: { penalty: PenaltyRules };
   pit: { zone: PitZone; stopGoSeconds: number; penalty: PenaltyRules };
-  presence: { graceSeconds: number; enforce: boolean };
+  presence: { graceSeconds: number; enforce: boolean; skipPracticeIncidents: boolean };
 }
 
 /**
@@ -142,7 +148,7 @@ function defaultConfig(): AppConfig {
     acUdp: { localPort: 12000, remoteHost: "127.0.0.1", remotePort: 11000, remotePortSource: "default" },
     formation: { penalty: defaultPenalty() },
     pit: { zone: { splineStart: 0.97, splineEnd: 0.995 }, stopGoSeconds: 30, penalty: defaultPenalty() },
-    presence: { graceSeconds: 60, enforce: true },
+    presence: { graceSeconds: 60, enforce: true, skipPracticeIncidents: true },
     // 30 km/h de impacto deja afuera los roces de parrilla y los pianos, que si no inundan la
     // bandeja en la primera vuelta. Los choques en solitario arrancan con un umbral más alto:
     // un toque leve contra el muro es un error del piloto, no un incidente para revisar.
@@ -307,6 +313,8 @@ function validateProfiles(config: AppConfig): void {
     validatePenalty(base.pit.penalty);
     base.presence.graceSeconds = clampPositive(base.presence.graceSeconds, 60);
     base.presence.enforce = typeof base.presence.enforce === "boolean" ? base.presence.enforce : true;
+    base.presence.skipPracticeIncidents =
+      typeof base.presence.skipPracticeIncidents === "boolean" ? base.presence.skipPracticeIncidents : true;
     base.pit.stopGoSeconds = clampPositive(base.pit.stopGoSeconds, 30);
     validateInfractions(base.infractions);
     limpios.push({
@@ -523,6 +531,8 @@ export function validateConfig(config: AppConfig): void {
     resetToDefaults(config.pit, "zone", { splineStart: 0.97, splineEnd: 0.995 });
   }
   config.presence.enforce = typeof config.presence.enforce === "boolean" ? config.presence.enforce : true;
+  config.presence.skipPracticeIncidents =
+    typeof config.presence.skipPracticeIncidents === "boolean" ? config.presence.skipPracticeIncidents : true;
   validateInfractions(config.infractions);
   validateProfiles(config);
   config.shadowMode = typeof config.shadowMode === "boolean" ? config.shadowMode : true;

@@ -72,6 +72,14 @@ test("una acción inventada vuelve al valor por defecto", () => {
   assert.equal(config.infractions.carContact.action, "review");
 });
 
+// 1.41: un config.json anterior no trae el campo, y tiene que seguir descartando la práctica, que
+// es lo que hacía el código fijo hasta ahí.
+test("'No contar incidentes en práctica' arranca activo y un valor inválido vuelve a activo", () => {
+  assert.equal(parseConfig({}).presence.skipPracticeIncidents, true);
+  assert.equal(parseConfig({ presence: { skipPracticeIncidents: false } }).presence.skipPracticeIncidents, false);
+  assert.equal(parseConfig({ presence: { skipPracticeIncidents: "no" } }).presence.skipPracticeIncidents, true);
+});
+
 test("valores fuera de rango se corrigen en vez de tumbar el arranque", () => {
   const config = parseConfig({
     infractions: {
