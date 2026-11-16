@@ -970,3 +970,31 @@ input[type="number"]::-webkit-inner-spin-button {
 .rc-embed__profile-actions .rc-embed__btn {
   flex: 1;
 }
+
+/* Columna App (1.44). Ver `celdaApp` en embed.js: el `animation-delay` lo pone el JS. */
+.rc-embed__celda-app {
+  text-align: center;
+}
+.rc-embed__app-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.rc-embed__app-dot--ok {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: rc-embed-dot-blink 1.6s ease-in-out infinite;
+}
+.rc-embed__app-dot--bad {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+.rc-embed__app-dot--off {
+  background: var(--muted);
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-embed__app-dot--ok { animation: none; }
+}

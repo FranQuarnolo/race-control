@@ -3,6 +3,27 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.44] — 2026-11-16
+
+### Quién tiene la app del piloto, no solo cuántos
+
+**Síntoma.** El cajón de Conexión decía "Pilotos con la app reportando: 2 de 5", pero no cuáles
+eran los tres que faltaban. Para reclamarle la app a alguien había que adivinar.
+
+**Decisión.** Columna nueva, **App**, la primera de la tabla de pilotos (antes del "#" en el panel,
+antes de "Auto" en el embed): punto verde titilando si la app está reportando, rojo fijo si no,
+gris si el piloto ya no está conectado. El rojo no titila porque es el que tiene que llamar la
+atención; veinte rojos parpadeando juntos serían ruido.
+
+El dato es `appReporting` en cada auto del estado, y sale de `PresenceWatchdog.isReporting`, lo
+mismo que cuenta el "2 de 5": la columna y el contador no se pueden contradecir. No se dedujo de
+`pingMs` porque el embed no recibe ese campo. Por la misma razón, el rojo tarda en aparecer los
+segundos de gracia de la regla de presencia (`presence.graceSeconds`).
+
+En el embed la tabla se rearma entera en cada poll, y una animación CSS arrancaría de cero cada
+segundo. El punto verde lleva un `animation-delay` negativo calculado contra el reloj, así que
+titila parejo aunque el elemento sea nuevo.
+
 ## [1.43] — 2026-11-16
 
 ### Incidentes en práctica, marcados como de carrera, después de un deploy

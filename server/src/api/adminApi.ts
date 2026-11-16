@@ -68,7 +68,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.43";
+export const APP_VERSION = "1.44";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -160,6 +160,10 @@ export function createAdminApi(deps: AdminApiDeps): Express {
           lapsDown: gaps.get(car.carId)?.lapsDown ?? 0,
           /** Round-trip de la app del piloto contra el backend. `null` = no tiene la app reportando. */
           pingMs: deps.presenceWatchdog.getPing(car.driverGuid),
+          /** ¿Tiene la app del piloto andando en el juego? Es el mismo dato que cuenta el "1 de 4"
+           * del cajón de Conexión (`getReportingCount`), por piloto: la columna y el contador no se
+           * pueden contradecir. No se deduce de `pingMs` porque el embed no recibe ese campo. */
+          appReporting: deps.presenceWatchdog.isReporting(car.driverGuid),
           /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
            * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
           telemetry,

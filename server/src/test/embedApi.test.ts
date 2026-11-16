@@ -106,6 +106,28 @@ test("el estado del embed no trae driverGuid ni los datos de red internos", asyn
   }
 });
 
+/**
+ * La columna App (1.44): el embed tiene que saber, por piloto, quién tiene la app andando, sin
+ * recibir el SteamID que es la clave con la que el backend lo sabe.
+ */
+test("cada auto dice si tiene la app del piloto reportando, también en el embed", async () => {
+  const { rc, dataDir, server, base } = await levantar("app-por-piloto", 12960, 13960);
+  try {
+    rc.stateTracker.onNewConnection({ driverName: "Con App", driverGuid: "guid-con", carId: 1, carModel: "x", carSkin: "y" } as never);
+    rc.stateTracker.onNewConnection({ driverName: "Sin App", driverGuid: "guid-sin", carId: 2, carModel: "x", carSkin: "y" } as never);
+    rc.presenceWatchdog.onHeartbeat("guid-con");
+
+    const res = await fetch(`${base}/api/embed/state`);
+    const estado = (await res.json()) as { cars: Array<{ carId: number; appReporting: boolean }> };
+    const porAuto = new Map(estado.cars.map((c) => [c.carId, c.appReporting]));
+    assert.equal(porAuto.get(1), true, "el que mandó heartbeat tiene la app");
+    assert.equal(porAuto.get(2), false, "el que nunca mandó heartbeat no la tiene");
+    assert.ok(!JSON.stringify(estado).includes("guid-con"), "el dato viaja sin el SteamID");
+  } finally {
+    await limpiar(rc, dataDir, server);
+  }
+});
+
 test("el catálogo de infracciones viaja igual por el canal de embed", async () => {
   const { rc, dataDir, server, base } = await levantar("catalogo", 12620, 13620);
   try {

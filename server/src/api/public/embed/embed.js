@@ -186,7 +186,7 @@
   var tabla = document.createElement("table");
   tabla.className = "rc-embed__tabla";
   tabla.innerHTML =
-    "<thead><tr><th>Auto</th><th>Piloto</th><th>Velocidad</th><th>Paradas en box</th><th>Combustible</th><th>Cortes</th><th>Incidentes</th><th>Acciones</th></tr></thead><tbody></tbody>";
+    "<thead><tr><th title=\"Verde: la app de Race Control está andando en el juego de ese piloto. Rojo: no la tiene instalada, no la activó o se le cayó.\">App</th><th>Auto</th><th>Piloto</th><th>Velocidad</th><th>Paradas en box</th><th>Combustible</th><th>Cortes</th><th>Incidentes</th><th>Acciones</th></tr></thead><tbody></tbody>";
   var filas = tabla.querySelector("tbody");
   tablaWrap.appendChild(tabla);
 
@@ -1813,6 +1813,33 @@
     hint.textContent = hints[lightState] || "";
   }
 
+  /**
+   * La columna App (1.44): verde titilando si la app del piloto está reportando, rojo fijo si no,
+   * gris si el piloto ya no está conectado. Mismo criterio que `renderAppDot` en app.js.
+   *
+   * Esta tabla se rearma entera en cada poll, así que el punto es un `<span>` nuevo cada segundo y
+   * una animación CSS común arrancaría de cero cada vez: el verde se vería a los saltos. El
+   * `animationDelay` negativo lo pone en la fase que le toca según el reloj, y así todos los puntos
+   * titilan parejos y sin cortes aunque se vuelvan a crear.
+   */
+  function celdaApp(car) {
+    var td = document.createElement("td");
+    td.className = "rc-embed__celda-app";
+    var estado = car.connected === false ? "off" : car.appReporting ? "ok" : "bad";
+    var punto = el("span", "rc-embed__app-dot rc-embed__app-dot--" + estado);
+    if (estado === "ok") punto.style.animationDelay = "-" + (Date.now() % 1600) + "ms";
+    var texto =
+      estado === "off"
+        ? "No está conectado"
+        : estado === "ok"
+          ? "App de Race Control activa"
+          : "Sin la app de Race Control: no la tiene instalada, no la activó o se le cayó";
+    punto.title = texto;
+    punto.setAttribute("aria-label", texto);
+    td.appendChild(punto);
+    return td;
+  }
+
   function renderTabla(state) {
     filas.textContent = "";
 
@@ -1826,6 +1853,8 @@
     state.cars.forEach(function (car) {
       var tr = document.createElement("tr");
       tr.className = "rc-embed__fila" + (car.connected === false ? " rc-embed__fila--desconectado" : "");
+
+      tr.appendChild(celdaApp(car));
 
       var autoCelda = document.createElement("td");
       autoCelda.className = "rc-embed__celda-auto";
@@ -1911,7 +1940,7 @@
       if (expandido) {
         var detailTr = el("tr", "rc-embed__fila-detalle");
         var detailTd = document.createElement("td");
-        detailTd.colSpan = 8;
+        detailTd.colSpan = 9;
         detailTd.appendChild(construirDetalle(car, deEsteAutoTotal));
         detailTr.appendChild(detailTd);
         filas.appendChild(detailTr);

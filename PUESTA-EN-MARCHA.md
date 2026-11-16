@@ -374,6 +374,12 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   piloto**: son datos de la Shared Memory del juego y el protocolo UDP del servidor no los
   transporta. Si ningún piloto la tiene, la columna de Ping no se muestra y al lado del título
   aparece una chapa gris que dice **"ningún piloto con la app"**; clickearla abre el diagnóstico.
+
+  Desde la **1.44** la primera columna, **App**, dice piloto por piloto quién tiene la app andando:
+  punto **verde** titilando si la tiene, **rojo** si no la instaló, no la activó en el juego o se le
+  cayó, y gris si ya no está conectado. Es el mismo dato que el "Pilotos con la app reportando:
+  2 de 5" del cajón de Conexión, así que el rojo tarda en aparecer los mismos segundos de gracia
+  que la regla de presencia.
 - **El mapa en vivo**: el circuito viene dibujado. Desde la **0.8** los trazados viajan con Race
   Control, así que el mapa sale completo apenas el servidor dice en qué pista está, sin esperar a
   que nadie dé vueltas. Al lado del reloj hay una chapa grande que dice **P**, **Q** o **R** según

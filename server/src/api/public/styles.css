@@ -943,7 +943,7 @@ td.actions {
 /* ---------------------------------------------------------------- menú de fila (⋮) y detalle (▾) */
 
 /* Solo la celda del cuerpo necesita ser flex para alinear los dos botones: el `<th>` comparte esta
-   misma clase únicamente para heredar el ancho de columna (ver `#timing-table th:nth-child(9)`), y
+   misma clase únicamente para heredar el ancho de columna (ver `#timing-table th:nth-child(10)`), y
    si también se vuelve `display: flex` deja de participar como celda de tabla en `table-layout:
    fixed` — el navegador le calcula un ancho propio por contenido (bastante menor al de la columna)
    en vez de respetar el `width` declarado, y "Acciones" termina angosto y pegado contra "Insi" (el
@@ -1100,30 +1100,33 @@ td.num.has-pending {
   text-overflow: ellipsis;
 }
 #timing-table th:nth-child(1) {
-  width: 5%;
+  width: 4%;
 }
 #timing-table th:nth-child(2) {
-  width: 7%;
+  width: 5%;
 }
 #timing-table th:nth-child(3) {
-  width: 24%;
+  width: 7%;
 }
 #timing-table th:nth-child(4) {
-  width: 11%;
+  width: 20%;
 }
 #timing-table th:nth-child(5) {
   width: 11%;
 }
 #timing-table th:nth-child(6) {
-  width: 9%;
+  width: 11%;
 }
 #timing-table th:nth-child(7) {
-  width: 8%;
+  width: 9%;
 }
 #timing-table th:nth-child(8) {
-  width: 10%;
+  width: 8%;
 }
 #timing-table th:nth-child(9) {
+  width: 10%;
+}
+#timing-table th:nth-child(10) {
   width: 15%;
 }
 
@@ -2016,5 +2019,37 @@ button.secondary.peligro:hover:not(:disabled) {
   #timing-table {
     table-layout: auto;
     min-width: 640px;
+  }
+}
+
+/* Columna App (1.44): un punto por piloto que dice si su app de Race Control está andando. Verde
+   titilando con el mismo pulso que la banda de "sin contacto"; rojo fijo, porque el que tiene que
+   llamar la atención es el que falta; gris para el desconectado, que ni la tiene ni le falta. */
+#timing-table .c-app {
+  text-align: center;
+}
+.app-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.app-dot.ok {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: link-pulse 1.4s ease-in-out infinite;
+}
+.app-dot.bad {
+  background: var(--red);
+  box-shadow: 0 0 6px var(--red);
+}
+.app-dot.off {
+  background: var(--muted);
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-dot.ok {
+    animation: none;
   }
 }

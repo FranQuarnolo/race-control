@@ -61,7 +61,7 @@ Preguntale al admin y esperá la respuesta. No elijas vos.
 
 Reglas que valen para las cuatro:
 
-- El contenedor tiene que ser **ancho**. La tabla tiene ocho columnas; abajo de ~900 px de ancho
+- El contenedor tiene que ser **ancho**. La tabla tiene nueve columnas; abajo de ~900 px de ancho
   útil entra en scroll horizontal propio (no rompe la página, pero se usa incómodo). Si la página
   tiene un `max-width` angosto, pedí permiso para sacar el embed de ese contenedor.
 - La altura es **variable y crece sola** con la cantidad de autos. No le pongas `height` fija ni

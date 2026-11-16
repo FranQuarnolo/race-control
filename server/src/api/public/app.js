@@ -986,6 +986,8 @@ function createCarRow(carId) {
   // fslmanager.vercel.app, y suma en cambio Cuts e Insi —que antes vivían en una bandeja aparte—
   // directo en la fila de cada piloto.
   const cells = {
+    // Primera a pedido del admin: es lo que mira para saber a quién reclamarle la app.
+    app: cell("c-app"),
     pos: cell("num"),
     car: cell("c-car"),
     name: cell("c-driver"),
@@ -1098,6 +1100,7 @@ function updateCarRow(row, car) {
   if (row.name.textContent !== label) row.name.textContent = label;
   row.name.title = label;
 
+  renderAppDot(row.app, car);
   setText(row.pos, car.position != null ? String(car.position) : null);
   renderCarBadge(row.car, car);
   // La velocidad sale del propio UDP del servidor (CAR_UPDATE), no de la app del piloto: por eso
@@ -1135,6 +1138,36 @@ function updateCarRow(row, car) {
   row.kebab.classList.toggle("arming", armedKick !== null && armedKick.carId === car.carId);
 
   updateCarDetail(row, grupo);
+}
+
+/**
+ * El punto de la columna App: verde titilando si la app del piloto está reportando, rojo fijo si
+ * no. Rojo fijo y no titilando porque el que tiene que llamar la atención es el que falta, y veinte
+ * puntos rojos parpadeando juntos serían ruido.
+ *
+ * Un desconectado va en gris: ni tiene ni le falta la app, no está en el servidor.
+ *
+ * El `<span>` se crea una sola vez y después solo cambia de clase: reemplazarlo en cada poll
+ * reiniciaría la animación cada segundo y el verde se vería a los saltos.
+ */
+function renderAppDot(td, car) {
+  let dot = td.firstChild;
+  if (!dot) {
+    dot = document.createElement("span");
+    td.appendChild(dot);
+  }
+  const estado = car.connected === false ? "off" : car.appReporting ? "ok" : "bad";
+  const clase = "app-dot " + estado;
+  if (dot.className === clase) return;
+  dot.className = clase;
+  const texto =
+    estado === "off"
+      ? "No está conectado"
+      : estado === "ok"
+        ? "App de Race Control activa"
+        : "Sin la app de Race Control: no la tiene instalada, no la activó o se le cayó";
+  dot.title = texto;
+  dot.setAttribute("aria-label", texto);
 }
 
 /** Un valor ausente nunca se dibuja como vacío: un hueco se lee como "cero" o como un bug, y acá
