@@ -297,6 +297,15 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   const sessionTracker = new SessionTracker();
   udpClient.on("SESSION_INFO", (data: SessionInfo) => {
     sessionTracker.onSessionInfo(data);
+    // El tipo de sesión también, por el mismo motivo que el circuito de abajo (desde la 1.43).
+    //
+    // `sessionType` arranca en carrera y hasta acá solo lo corregía el `NEW_SESSION`. Un reinicio
+    // del worker a mitad de una práctica —un deploy— lo dejaba en carrera hasta la sesión
+    // siguiente, mientras el reloj del panel (que lee el `SessionTracker`) decía "P". Visto en Spa
+    // de FSL: con "No contar incidentes en práctica" activado, entraban cortes a la bandeja,
+    // marcados con la chapa R. Solo se asigna: los resets de cambio de sesión siguen siendo cosa
+    // del `NEW_SESSION`, que es el que marca que la sesión empezó.
+    sessionType = data.sessionType;
     // El circuito también se toma de acá, y no solo del `NEW_SESSION` de más abajo.
     //
     // `NEW_SESSION` llega cuando la sesión ARRANCA. El caso normal del producto es el contrario:

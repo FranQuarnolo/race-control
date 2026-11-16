@@ -3,6 +3,23 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.43] — 2026-11-16
+
+### Incidentes en práctica, marcados como de carrera, después de un deploy
+
+**Síntoma.** En Spa de FSL, en plena práctica y con "No contar incidentes en práctica" activado,
+entró a la bandeja un "Se fue de pista" con la chapa R. El reloj del panel decía "P".
+
+**Causa.** El tipo de sesión con el que trabaja el motor arranca en carrera y solo lo corregía el
+`NEW_SESSION`, que el servidor manda cuando una sesión empieza. El deploy de la 1.42 reinició el
+worker a mitad de la práctica: ese aviso no iba a llegar hasta la sesión siguiente, así que el
+motor creía estar en carrera. El reloj lee el `SESSION_INFO` del latido, y por eso él sí decía "P".
+
+**Decisión.** El `SESSION_INFO` (la respuesta al latido, cada 5 s) también actualiza el tipo de
+sesión, igual que ya hacía con el circuito desde la 1.0. Solo lo asigna: los resets de cambio de
+sesión siguen siendo del `NEW_SESSION`. El incidente que ya entró queda con su R; se descarta desde
+la bandeja.
+
 ## [1.42] — 2026-11-16
 
 ### "Sin señal" con el servidor andando y la pista vacía

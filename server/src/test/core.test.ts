@@ -250,6 +250,45 @@ const sesionDePrueba = (sessionType: number) => ({
 });
 
 /**
+ * El tipo de sesión se toma del `SESSION_INFO`, no solo del `NEW_SESSION` (1.43).
+ *
+ * Spa de FSL, después de un deploy a mitad de una práctica: `sessionType` quedó en su valor de
+ * arranque (carrera), así que con "No contar incidentes en práctica" activado igual entraban
+ * cortes a la bandeja, y con la chapa R. El reloj decía "P" porque lee otra fuente.
+ */
+test("un worker que arranca a mitad de una práctica sabe que es práctica", async () => {
+  const { rc, dataDir } = await levantar("practica-en-curso", 12690, 13690);
+  try {
+    rc.udpClient.emit("SESSION_INFO", sesionDePrueba(1));
+    const incidente = rc.incidentEngine.reportObserved({
+      kind: "track-limits",
+      carId: 0,
+      driverGuid: "7656",
+      driverName: "Piloto",
+      lap: 1,
+      splinePosition: 0.5,
+      detail: "corte",
+    });
+    assert.equal(incidente, null, "con el switch activado, la práctica no registra incidentes");
+    assert.equal(rc.incidentEngine.getAll().length, 0);
+
+    rc.config.presence.skipPracticeIncidents = false;
+    const registrado = rc.incidentEngine.reportObserved({
+      kind: "track-limits",
+      carId: 0,
+      driverGuid: "7656",
+      driverName: "Piloto",
+      lap: 1,
+      splinePosition: 0.5,
+      detail: "corte",
+    });
+    assert.equal(registrado?.sessionType, 1, "el incidente salió marcado como de carrera");
+  } finally {
+    limpiar(rc, dataDir);
+  }
+});
+
+/**
  * El semáforo se apaga con la carrera, no se arrastra a la práctica siguiente.
  *
  * Hasta la 1.5, `formationStart` solo volvía a "idle" con el botón "Reiniciar" o con una sesión
