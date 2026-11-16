@@ -1139,13 +1139,11 @@ td.num.has-pending {
    detrás. Algunos de los SVG de la biblioteca traían ellos mismos un rectángulo blanco de fondo —se
    les sacó al bajarlos, porque duplicaba esta placa con un blanco más duro y sin el radio. */
 .car-badge {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   display: block;
-  background: rgba(230, 232, 236, 0.9);
-  border-radius: 4px;
-  padding: 1px;
+  padding: 0.5px;
 }
 /* Escudo con el monograma de la marca: lo que se dibuja cuando `brandLogo` viene `null` —la marca
    no está en `brands/`, o es un mod sin badge reconocible— del mismo tamaño que el logo real para

@@ -65,4 +65,5 @@ No hay wiki: la documentación del producto son los `.md` de la raíz.
 | [**PUESTA-EN-MARCHA.md**](PUESTA-EN-MARCHA.md) | El operador que levanta el servicio y da de alta ligas, y el admin que conecta su servidor de AC. |
 | [**INTEGRAR-EMBED.md**](INTEGRAR-EMBED.md) | La IA (o la persona) que incrusta el embed en la página de la liga. |
 | [**CHANGELOG.md**](CHANGELOG.md) | Qué cambió en cada versión, y por qué. |
+| [**PENDIENTES.md**](PENDIENTES.md) | Lo que ya se investigó y decidió, y todavía no se construyó. |
 | [**CLAUDE.md**](CLAUDE.md) | Convenciones del repositorio, para quien toque el código. |
