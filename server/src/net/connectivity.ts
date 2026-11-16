@@ -104,8 +104,8 @@ export class ConnectivityManager {
   /** Un latido: reafirma el streaming de posiciones y pide algo que el servidor siempre contesta. */
   private latir(): void {
     try {
-      this.udpClient.setRealtimePosInterval(200);
-      this.udpClient.requestSessionInfo();
+      // A todos los puertos conocidos del servidor, no solo al último: ver `sendHeartbeat`.
+      this.udpClient.sendHeartbeat(200);
     } catch {
       // best-effort: si falla, el próximo tick reintenta solo.
     }

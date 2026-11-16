@@ -158,6 +158,82 @@ describe("autodetección del servidor de AC", () => {
     assert.equal(client.getRemoteTarget().port, 12000);
   });
 
+  // --- El latido va a todos los puertos conocidos (1.42) -----------------------------------------
+  //
+  // Spa de FSL: el servidor hablaba desde 913 y a veces desde 11000. Si lo último había sido 11000
+  // y la pista quedaba vacía, el latido salía solo hacia ahí, no atravesaba el NAT, y el panel decía
+  // "Sin señal" con el servidor andando.
+
+  /** Junta lo que le llega a un servidor falso durante `ms`. */
+  function recibido(socket: dgram.Socket, ms = 200): Promise<number> {
+    return new Promise((resolve) => {
+      let n = 0;
+      socket.on("message", () => (n += 1));
+      setTimeout(() => resolve(n), ms);
+    });
+  }
+
+  it("el latido le llega al servidor por todos los puertos desde los que habló", async () => {
+    const client = trackCliente(config());
+    await client.start();
+    const bueno = await servidorFalso(18020);
+    const otro = await servidorFalso(18021);
+    await hablar(bueno, puertoDe(client));
+    await hablar(otro, puertoDe(client));
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(client.getRemoteTarget().port, 18021, "los comandos siguen yendo al último");
+
+    const alBueno = recibido(bueno);
+    const alOtro = recibido(otro);
+    client.sendHeartbeat(200);
+    assert.ok((await alBueno) >= 2, "el latido no le llegó al puerto anterior: Spa queda en 'Sin señal'");
+    assert.ok((await alOtro) >= 2);
+  });
+
+  it("los comandos no se duplican: van solo al último puerto", async () => {
+    const client = trackCliente(config());
+    await client.start();
+    const viejo = await servidorFalso(18022);
+    const ultimo = await servidorFalso(18023);
+    await hablar(viejo, puertoDe(client));
+    await hablar(ultimo, puertoDe(client));
+    await new Promise((r) => setTimeout(r, 100));
+
+    const alViejo = recibido(viejo);
+    const alUltimo = recibido(ultimo);
+    client.broadcastChat("hola");
+    assert.equal(await alViejo, 0, "un chat repetido por cada puerto conocido se vería en pantalla");
+    assert.equal(await alUltimo, 1);
+  });
+
+  it("con el puerto escrito a mano, el latido va solo ahí", async () => {
+    const manual = await servidorFalso(18024);
+    const client = trackCliente(
+      config({ remotePort: 18024, remotePortSource: "manual", knownPorts: [18025] })
+    );
+    await client.start();
+    const otro = await servidorFalso(18025);
+    const alManual = recibido(manual);
+    const alOtro = recibido(otro);
+    client.sendHeartbeat(200);
+    assert.ok((await alManual) >= 2);
+    assert.equal(await alOtro, 0);
+  });
+
+  it("recuerda a lo sumo 4 puertos, el más reciente primero", () => {
+    const cfg = config({ remoteHost: "198.51.100.9", remotePortSource: "detected" });
+    const client = trackCliente(cfg);
+    for (const port of [901, 902, 903, 904, 905, 903]) recibirDe(client, "198.51.100.9", port);
+    assert.deepEqual(cfg.knownPorts, [903, 905, 904, 902]);
+  });
+
+  it("al mudarse el servidor, se olvidan los puertos del anterior", () => {
+    const cfg = config({ remoteHost: "198.51.100.10", remotePortSource: "detected", knownPorts: [913, 11000] });
+    const client = trackCliente(cfg);
+    recibirDe(client, "198.51.100.11", 914);
+    assert.deepEqual(cfg.knownPorts, [914]);
+  });
+
   it("dos servidores de AC en el mismo puerto: deja de saltar entre ellos y avisa", () => {
     const client = trackCliente(config({ remoteHost: "198.51.100.1", remotePort: 9000, remotePortSource: "detected" }));
     let aviso: Record<string, unknown> | null = null;

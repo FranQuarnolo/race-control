@@ -20,7 +20,15 @@ export interface AcUdpConfig {
   remotePort: number;
   /** Ver `AppConfig["acUdp"]`. Si falta, se trata como `"default"` y el puerto se autodetecta. */
   remotePortSource?: "default" | "manual" | "detected";
+  /** Ver `sendHeartbeat`. El más reciente primero, a lo sumo `KNOWN_PORTS_MAX`. */
+  knownPorts?: number[];
 }
+
+/**
+ * Cuántos puertos de origen se recuerdan por servidor. Detrás de un NAT se vieron dos (911 y
+ * 11000 en FSL); cuatro dan margen sin convertir el latido en un barrido de puertos.
+ */
+const KNOWN_PORTS_MAX = 4;
 
 /** `0.0.0.0` incluido a propósito: como destino de un `send()` es equivalente a loopback. */
 export function isLoopback(host: string): boolean {
@@ -156,6 +164,8 @@ export class AcUdpClient extends EventEmitter {
       }
       this.lastHostChangeAt = now;
       if (this.config.remotePortSource !== "manual") this.config.remotePortSource = "default";
+      // Los puertos del servidor viejo no le sirven al nuevo: el latido no tiene por qué ir ahí.
+      this.config.knownPorts = [];
     }
     this.config.remoteHost = rinfo.address;
     this.emit("remoteHostDetected", {
@@ -195,17 +205,57 @@ export class AcUdpClient extends EventEmitter {
    * El puerto fijado a mano manda siempre: es la salida para un hosting que sí abre su
    * "Listen Address" y manda desde otro lado.
    */
-  private adoptRemotePortIfNeeded(rinfo: dgram.RemoteInfo): void {
+  private adoptRemotePortIfNeeded(rinfo: dgram.RemoteInfo, packetType: number): void {
     if (this.config.remotePortSource === "manual") return;
+    const nuevoEnLaLista = this.recordKnownPort(rinfo.port);
     if (rinfo.port === this.config.remotePort) return;
     const previous = this.config.remotePort;
     const followed = this.config.remotePortSource === "detected";
     this.config.remotePort = rinfo.port;
     this.config.remotePortSource = "detected";
     const now = Date.now();
-    if (followed && now - this.lastPortNoticeAt < HOST_FLAP_WINDOW_MS) return;
+    // Un puerto que el latido todavía no conocía se persiste siempre, sin la pausa de un minuto:
+    // es lo que hace que después de un deploy el latido ya salga hacia él.
+    if (!nuevoEnLaLista && followed && now - this.lastPortNoticeAt < HOST_FLAP_WINDOW_MS) return;
     this.lastPortNoticeAt = now;
-    this.emit("remotePortDetected", { previous, detected: rinfo.port, followed });
+    // `packetType` es diagnóstico: en FSL todavía no se sabe qué manda el servidor desde 11000.
+    this.emit("remotePortDetected", { previous, detected: rinfo.port, followed, packetType });
+  }
+
+  /** Pone el puerto primero en `knownPorts`. Devuelve si no estaba (o sea, si hay que persistir). */
+  private recordKnownPort(port: number): boolean {
+    const lista = this.config.knownPorts ?? [];
+    const estaba = lista.includes(port);
+    this.config.knownPorts = [port, ...lista.filter((p) => p !== port)].slice(0, KNOWN_PORTS_MAX);
+    return !estaba;
+  }
+
+  /**
+   * El latido: reafirma el streaming de posiciones y pide la sesión, a TODOS los puertos desde
+   * los que habló el servidor, no solo al último (desde la 1.42).
+   *
+   * **Por qué.** Detrás del NAT de FSL cada servidor habla desde su puerto bueno (9813 adentro →
+   * 913 afuera) y, de vez en cuando, desde 11000. Contestarle a 11000 no atraviesa el router. Si lo
+   * último que llegó fue un paquete desde 11000 y la pista se quedaba vacía, el latido salía hacia
+   * ahí, el servidor no se enteraba, no contestaba nada, y el panel decía "Sin señal" con el
+   * servidor andando —hasta que entraba un piloto—. Spa estuvo así una mañana entera.
+   *
+   * Duplicar ESTOS dos paquetes no hace daño: el intervalo es idempotente y `GET_SESSION_INFO` solo
+   * pide información. Por eso los comandos (chat, sanciones, kicks) NO se mandan a todos: un chat o
+   * un `/ballast` repetido sí se notaría. Tampoco hace falta: el servidor contesta el latido desde
+   * su puerto bueno, y con eso `remotePort` se corrige solo antes del próximo comando.
+   *
+   * Con un puerto escrito a mano va solo a ese: ahí el admin sabe más que nosotros.
+   */
+  sendHeartbeat(intervalMs: number): void {
+    const puertos =
+      this.config.remotePortSource === "manual"
+        ? [this.config.remotePort]
+        : [this.config.remotePort, ...(this.config.knownPorts ?? [])].filter((p, i, arr) => arr.indexOf(p) === i);
+    const paquetes = [encodeRealtimePosInterval(intervalMs), encodeGetSessionInfo()];
+    for (const port of puertos) {
+      for (const buf of paquetes) this.sendTo(buf, port);
+    }
   }
 
   /**
@@ -222,7 +272,7 @@ export class AcUdpClient extends EventEmitter {
     this.stats.lastPacketAt = Date.now();
     this.stats.lastSourcePort = rinfo.port;
     this.adoptRemoteHostIfNeeded(rinfo);
-    this.adoptRemotePortIfNeeded(rinfo);
+    this.adoptRemotePortIfNeeded(rinfo, msg.length > 0 ? msg[0] : -1);
     this.emit("rawPacket", msg);
 
     const packet = decodePacket(msg);
@@ -235,8 +285,12 @@ export class AcUdpClient extends EventEmitter {
   }
 
   private send(buf: Buffer): void {
+    this.sendTo(buf, this.config.remotePort);
+  }
+
+  private sendTo(buf: Buffer, port: number): void {
     this.stats.commandsSent += 1;
-    this.socket.send(buf, this.config.remotePort, this.config.remoteHost, (err) => {
+    this.socket.send(buf, port, this.config.remoteHost, (err) => {
       if (err) {
         this.stats.commandSendErrors += 1;
         this.emit("sendError", err);

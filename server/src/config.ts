@@ -38,6 +38,9 @@ export interface AppConfig {
      * dato más difícil de encontrar de toda la puesta en marcha, cambia de nombre según la versión
      * del panel, y el servidor lo dice solo con cada paquete que manda. */
     remotePortSource: "default" | "manual" | "detected";
+    /** Puertos desde los que habló el servidor actual, el más reciente primero. Solo los usa el
+     * latido (ver `sendHeartbeat` en udp/client.ts). Lo llena la autodetección; no se edita. */
+    knownPorts?: number[];
   };
   /** Única fuente de verdad de las reglas de largada: la usa tanto el detector como la sanción. */
   formation: { penalty: PenaltyRules };
@@ -510,6 +513,13 @@ export function validateConfig(config: AppConfig): void {
   // el campo recién existe en el panel desde la 0.3.
   if (!["default", "manual", "detected"].includes(config.acUdp.remotePortSource)) {
     config.acUdp.remotePortSource = "default";
+  }
+  if (config.acUdp.knownPorts !== undefined) {
+    const puertos = Array.isArray(config.acUdp.knownPorts) ? config.acUdp.knownPorts : [];
+    config.acUdp.knownPorts = puertos
+      .filter((p): p is number => Number.isInteger(p) && p > 0 && p <= 65535)
+      .filter((p, i, arr) => arr.indexOf(p) === i)
+      .slice(0, 4);
   }
   config.http.adminPort = clampPort(config.http.adminPort, 3000);
   config.http.clientPort = clampPort(config.http.clientPort, 3001);

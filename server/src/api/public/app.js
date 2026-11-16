@@ -1999,11 +1999,12 @@ function renderNetwork(network) {
   acEl.textContent = ac.autodetected ? ac.host + ":" + ac.port : "esperando la primera señal...";
   acEl.className = !ac.autodetected && network.receivingTelemetry ? "bad" : "";
 
-  // El manual de "Cómo conectar tu servidor" es para quien todavía no lo hizo. Con la conexión ya
-  // confirmada —mismo criterio que pinta de verde el botón de la barra— seguir mostrándolo es
-  // ruido: ocupa lugar arriba de todo en un cajón que, a partir de acá, se abre sobre todo para
-  // mirar el estado o tocar el modo.
-  $("network-howto").hidden = hayServidorConectado(network);
+  // El manual de "Cómo conectar tu servidor" es para quien todavía no lo hizo. Desde la 1.42 se
+  // esconde apenas el servidor se identificó alguna vez, aunque ahora no llegue nada: hasta ahí
+  // dependía de que hubiera señal EN ESE MOMENTO, y un servidor ya conectado que se apagaba (o que
+  // no contestaba) le volvía a mostrar el manual de alta al admin, como si nunca lo hubiera
+  // configurado. Es el mismo criterio que separa "Esperando UDP" de "Sin señal" en el portal.
+  $("network-howto").hidden = Boolean(ac.autodetected);
 
   renderNetworkButton(network);
 }

@@ -3,6 +3,35 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.42] — 2026-11-16
+
+### "Sin señal" con el servidor andando y la pista vacía
+
+**Síntoma.** El admin de FSL veía sus tres servidores en "Sin señal" con nadie en pista, y el
+cajón de conexión le volvía a mostrar "Cómo conectar tu servidor", como si nunca los hubiera
+configurado. Parecía que un servidor vacío no manda nada; no es así: el acServer contesta el
+`GET_SESSION_INFO` del latido haya o no autos.
+
+**Causa.** Detrás del NAT de FSL cada servidor habla desde su puerto bueno (9811/9812/9813 adentro
+→ 911/912/913 afuera) y, de vez en cuando, desde 11000. La 1.40 le contesta al último puerto que
+habló, y una respuesta a 11000 no atraviesa el router. Si lo último había sido 11000, con la pista
+vacía el latido no le llegaba nunca, el servidor no contestaba y quedaba mudo hasta que entraba un
+piloto o cambiaba la sesión. Después del deploy de la 1.41 los tres arrancaron con 11000 guardado:
+dos se recuperaron al cambiar de sesión y Spa siguió mudo.
+
+**Decisión.** El latido (`setRealtimePosInterval` + `GET_SESSION_INFO`) sale a todos los puertos
+desde los que habló el servidor —hasta cuatro, guardados en `acUdp.knownPorts` para que sobrevivan
+a un deploy—. Repetir esos dos paquetes no hace daño. Los comandos (chat, sanciones, kicks) siguen
+yendo solo al último puerto, porque repetidos sí se notarían; tampoco hace falta, porque el servidor
+contesta el latido desde su puerto bueno y con eso el destino se corrige solo. Con un puerto escrito
+a mano, el latido va solo a ese. Al mudarse de host, la lista se vacía.
+
+"Cómo conectar tu servidor" ahora se esconde apenas el servidor se identificó alguna vez, aunque en
+ese momento no llegue nada: es un manual de alta, no un aviso de estado.
+
+De paso, el evento `udp.remotePortDetected` guarda el tipo del paquete que trajo el puerto nuevo,
+para saber la próxima vez qué manda el servidor desde 11000.
+
 ## [1.41] — 2026-11-16
 
 Cinco pedidos del admin de FSL después de la primera semana usando Race Control en sus tres

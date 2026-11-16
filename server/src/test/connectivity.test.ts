@@ -33,10 +33,9 @@ function fakeUdp(lastPacketHaceMs: number, latido: Latido) {
       commandSendErrors: 0,
       lastSourcePort: 11000,
     }),
-    setRealtimePosInterval: () => {
+    // Desde la 1.42 los dos paquetes salen juntos, a todos los puertos conocidos (`sendHeartbeat`).
+    sendHeartbeat: () => {
       latido.realtime += 1;
-    },
-    requestSessionInfo: () => {
       latido.sessionInfo += 1;
     },
   } as unknown as AcUdpClient;
@@ -68,8 +67,7 @@ test("sin ningún paquete nunca, no se inventa una conexión", () => {
       commandSendErrors: 0,
       lastSourcePort: 0,
     }),
-    setRealtimePosInterval: () => {},
-    requestSessionInfo: () => {},
+    sendHeartbeat: () => {},
   } as unknown as AcUdpClient;
   const c = new ConnectivityManager(udp, () => "200.1.2.3");
   c.refreshTelemetryFlag();
