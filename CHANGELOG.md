@@ -3,6 +3,31 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.45] — 2026-11-21
+
+### El Drive-Through que no se daba por cumplido, y penalización de tiempo en las reglas
+
+**Síntoma.** Un piloto con un DT pasaba por boxes y la sanción seguía pendiente, y el renglón
+seguía en "RC mensajes" de la app.
+
+**Causa.** El cumplimiento se medía solo con la zona de spline de `config.pit.zone`, que por
+defecto es una sola para todas las pistas (0.97–0.995). Si no coincide con el pit lane real, el
+auto nunca figuraba "dentro" y nada cumplía el DT. La app borra el renglón sola cuando la
+sanción pasa a cumplida, así que el problema estaba entero en la detección. No se confirmó contra
+los logs de producción (no hubo acceso): es la explicación que dejan el código y la falta de tests.
+
+**Decisión.**
+- Se usa primero el `inPitLane` que la app ya manda (lo sabe el juego); la zona de spline queda
+  de respaldo para quien no tiene la app. No cambió nada en la app del piloto.
+- Un DT se cumple si el auto cruzó el pit lane sin detenerse: ≤ límite + 5 km/h de margen y sin
+  haber estado quieto (≤ 2 km/h) 3 s seguidos. Si se quedó parado es una parada en boxes y no
+  cumple nada; frenar un instante en la calle no lo penaliza. El margen y los 3 s son decisión
+  mía, no medidos en pista.
+- **Penalización de tiempo** como sanción de las reglas de Largada y Pit lane (y, por lo tanto, de
+  los cortes de pista, que usan la de Pit lane), con sus segundos. Suma al resultado en el acto,
+  sin vueltas de gracia. Antes una regla guardada con tiempo volvía a DT sin avisar. En la
+  sanción manual del comisario ya existía.
+
 ## [1.44] — 2026-11-16
 
 ### Quién tiene la app del piloto, no solo cuántos

@@ -236,7 +236,15 @@ function validatePenalty(rules: PenaltyRules): void {
   rules.speedThresholdKmh = clampPositive(rules.speedThresholdKmh, 80);
   rules.toleranceSeconds = clampPositive(rules.toleranceSeconds, 5);
   rules.graceLaps = clampPositive(rules.graceLaps, 3);
-  if (rules.penaltyType !== "DT" && rules.penaltyType !== "SG" && rules.penaltyType !== "BALLAST") {
+  // `TIME` también es válida como sanción de regla (desde la 1.45): suma `timePenaltySeconds` al
+  // resultado final en el acto, sin vueltas de gracia. Antes solo la podía dar el comisario a mano
+  // y una regla automática con "penalización de tiempo" se guardaba como DT sin avisar.
+  if (
+    rules.penaltyType !== "DT" &&
+    rules.penaltyType !== "SG" &&
+    rules.penaltyType !== "BALLAST" &&
+    rules.penaltyType !== "TIME"
+  ) {
     rules.penaltyType = "DT";
   }
   if (rules.escalation !== "DQ" && rules.escalation !== "TIME_PENALTY") {

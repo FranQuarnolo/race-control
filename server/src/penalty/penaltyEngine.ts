@@ -1,9 +1,10 @@
 import { EventEmitter } from "events";
 
 /**
- * `TIME` no es una sanción que el piloto pueda cumplir en pista: se suma a su tiempo final. Por eso
- * no se ofrece como sanción automática de largada ni de pit lane —ahí el piloto tiene que poder
- * hacer algo al respecto— y solo la emite el comisario desde la bandeja de incidentes.
+ * `TIME` no es una sanción que el piloto pueda cumplir en pista: se suma a su tiempo final y nace
+ * cumplida. La da el comisario desde la bandeja de incidentes y, desde la 1.45, también se puede
+ * elegir como sanción de las reglas automáticas (largada, pit lane, límites de pista) con sus
+ * propios segundos (`timePenaltySeconds`).
  */
 export type PenaltyType = "DT" | "SG" | "BALLAST" | "TIME";
 export type EscalationType = "DQ" | "TIME_PENALTY";

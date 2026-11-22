@@ -617,7 +617,9 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     [formationPenaltyEngine, pitPenaltyEngine, stewardPenaltyEngine],
     config.pit.zone,
     () => config.pit.stopGoSeconds,
-    () => config.pit.penalty.speedThresholdKmh
+    () => config.pit.penalty.speedThresholdKmh,
+    undefined,
+    (guid) => telemetryStore.get(guid)?.inPitLane ?? null
   );
 
   // El monitor de pit lane solo se arma durante la carrera — no antes (formación/idle).

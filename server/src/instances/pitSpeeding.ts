@@ -61,6 +61,13 @@ export class PitComplianceTracker {
   private sawInZone = new Set<number>();
   private maxSpeedInPass = new Map<number, number>();
   private stoppedSinceMs = new Map<number, number>();
+  private dtStoppedSince = new Map<number, number>();
+  private stoppedInPass = new Set<number>();
+
+  /** Tiempo detenido (≤ 2 km/h) a partir del cual un pasaje por boxes deja de ser un
+   * Drive-Through y pasa a ser una parada. Corto a propósito: un auto que se frena un instante
+   * por tráfico en la calle no debería perder el DT, uno que se queda en el box sí. */
+  private static readonly DT_STOP_MS = 3000;
 
   /**
    * Recibe TODOS los motores de sanción, no solo el de pit.
@@ -82,10 +89,25 @@ export class PitComplianceTracker {
     /** Velocidad legal de pit lane. Se toma del motor de pit (única fuente de verdad), no del
      * motor que emitió la sanción: el límite del pit lane no cambia según por qué te sancionaron. */
     private getLegalPitSpeedKmh: () => number,
-    private clock: Clock = systemClock
+    private clock: Clock = systemClock,
+    /**
+     * Si el piloto está en el pit lane según SU juego (`inPitLane` de la telemetría de la app), o
+     * `null` si no hay dato fresco. Con dato, manda sobre la zona de spline.
+     *
+     * Hasta la 1.44 el cumplimiento se medía solo con la zona de spline (`config.pit.zone`), que
+     * por defecto es una sola para todas las pistas (0.97–0.995). Si no coincide con el pit lane
+     * real —y casi nunca coincide sin calibrar— el piloto pasaba por boxes, el auto nunca figuraba
+     * "dentro de la zona" y el Drive-Through quedaba pendiente para siempre, aparte de seguir
+     * figurando en "RC mensajes". Lo sabe el juego; no hay por qué deducirlo.
+     */
+    private getInPitLane: (driverGuid: string) => boolean | null = () => null
   ) {
     this.stateTracker.on("update", (car: CarState) => this.handleUpdate(car));
   }
+
+  /** Margen sobre el límite: el CAR_UPDATE llega a pocos Hz y el auto todavía viene frenando al
+   * cruzar la línea de entrada, así que la muestra más alta puede ser de antes del limitador. */
+  private static readonly SPEED_MARGIN_KMH = 5;
 
   private get legalPitSpeedKmh(): number {
     return this.getLegalPitSpeedKmh();
@@ -106,12 +128,15 @@ export class PitComplianceTracker {
     const pending = this.pendingFor(car.carId);
     if (pending.length === 0) return;
 
-    const currentlyInZone = inZone(car, this.zone);
+    const fromGame = car.driverGuid ? this.getInPitLane(car.driverGuid) : null;
+    const currentlyInZone = fromGame ?? inZone(car, this.zone);
 
     if (currentlyInZone) {
       this.sawInZone.add(car.carId);
       const prevMax = this.maxSpeedInPass.get(car.carId) ?? 0;
       this.maxSpeedInPass.set(car.carId, Math.max(prevMax, car.speedKmh));
+
+      this.trackStopInPass(car);
 
       for (const { penalty, engine } of pending) {
         if (penalty.type === "SG") {
@@ -120,16 +145,38 @@ export class PitComplianceTracker {
       }
     } else if (this.sawInZone.has(car.carId)) {
       // Acaba de salir de pit lane: evaluar si el pasaje cumplió el Drive-Through.
+      // Un Drive-Through es pasar SIN detenerse: si el auto se quedó parado más de
+      // DT_STOP_MS fue una parada en boxes (el piloto entró a lo suyo) y no cumple nada.
       const maxSpeed = this.maxSpeedInPass.get(car.carId) ?? 0;
+      const seDetuvo = this.stoppedInPass.has(car.carId);
       for (const { penalty, engine } of pending) {
-        if (penalty.type === "DT" && maxSpeed > 0 && maxSpeed <= this.legalPitSpeedKmh) {
+        if (
+          penalty.type === "DT" &&
+          !seDetuvo &&
+          maxSpeed > 0 &&
+          maxSpeed <= this.legalPitSpeedKmh + PitComplianceTracker.SPEED_MARGIN_KMH
+        ) {
           engine.markServed(penalty.id);
         }
       }
       this.sawInZone.delete(car.carId);
       this.maxSpeedInPass.delete(car.carId);
       this.stoppedSinceMs.delete(car.carId);
+      this.dtStoppedSince.delete(car.carId);
+      this.stoppedInPass.delete(car.carId);
     }
+  }
+
+  /** Marca el pasaje como "con parada" si el auto estuvo detenido DT_STOP_MS seguidos. */
+  private trackStopInPass(car: CarState): void {
+    if (car.speedKmh > 2) {
+      this.dtStoppedSince.delete(car.carId);
+      return;
+    }
+    const now = this.clock.now();
+    const since = this.dtStoppedSince.get(car.carId) ?? now;
+    this.dtStoppedSince.set(car.carId, since);
+    if (now - since >= PitComplianceTracker.DT_STOP_MS) this.stoppedInPass.add(car.carId);
   }
 
   private checkStopAndGo(car: CarState, penalty: Penalty, engine: PenaltyEngine): void {

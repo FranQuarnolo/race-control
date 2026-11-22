@@ -457,9 +457,12 @@
   panelLargada.appendChild(filaFTimePenalty);
   panelLargada.appendChild(btnGuardarFormation);
 
-  campoFEscalation.addEventListener("change", function () {
-    filaFTimePenalty.hidden = campoFEscalation.value !== "TIME_PENALTY";
-  });
+  // Los segundos sirven si la sanción ES de tiempo o si es de tiempo la que escala.
+  function mostrarSegundosF() {
+    filaFTimePenalty.hidden = campoFPenaltyType.value !== "TIME" && campoFEscalation.value !== "TIME_PENALTY";
+  }
+  campoFEscalation.addEventListener("change", mostrarSegundosF);
+  campoFPenaltyType.addEventListener("change", mostrarSegundosF);
 
   // -- Pista --
   var tituloPista = document.createElement("h3");
@@ -526,9 +529,11 @@
   panelPit.appendChild(filaPTimePenalty);
   panelPit.appendChild(btnGuardarPit);
 
-  campoPEscalation.addEventListener("change", function () {
-    filaPTimePenalty.hidden = campoPEscalation.value !== "TIME_PENALTY";
-  });
+  function mostrarSegundosP() {
+    filaPTimePenalty.hidden = campoPPenaltyType.value !== "TIME" && campoPEscalation.value !== "TIME_PENALTY";
+  }
+  campoPEscalation.addEventListener("change", mostrarSegundosP);
+  campoPPenaltyType.addEventListener("change", mostrarSegundosP);
   btnUsarCalibracion.addEventListener("click", function () {
     if (!pitZoneSuggestion) return;
     campoPZoneStart.value = pitZoneSuggestion.splineStart.toFixed(3);
@@ -786,6 +791,7 @@
       ["DT", "Drive-Through (pasar por pits)"],
       ["SG", "Stop-and-Go (parar en pits)"],
       ["BALLAST", "Lastre (peso extra)"],
+      ["TIME", "Penalización de tiempo (suma segundos)"],
     ].forEach(function (pair) {
       var o = document.createElement("option");
       o.value = pair[0];
@@ -1227,7 +1233,8 @@
     campoFPenaltyType.value = config.formation.penalty.penaltyType;
     campoFEscalation.value = config.formation.penalty.escalation;
     campoFTimePenalty.value = config.formation.penalty.timePenaltySeconds != null ? config.formation.penalty.timePenaltySeconds : 5;
-    filaFTimePenalty.hidden = config.formation.penalty.escalation !== "TIME_PENALTY";
+    filaFTimePenalty.hidden =
+      config.formation.penalty.penaltyType !== "TIME" && config.formation.penalty.escalation !== "TIME_PENALTY";
 
     campoPZoneStart.value = config.pit.zone.splineStart;
     campoPZoneEnd.value = config.pit.zone.splineEnd;
@@ -1238,7 +1245,8 @@
     campoPPenaltyType.value = config.pit.penalty.penaltyType;
     campoPEscalation.value = config.pit.penalty.escalation;
     campoPTimePenalty.value = config.pit.penalty.timePenaltySeconds != null ? config.pit.penalty.timePenaltySeconds : 5;
-    filaPTimePenalty.hidden = config.pit.penalty.escalation !== "TIME_PENALTY";
+    filaPTimePenalty.hidden =
+      config.pit.penalty.penaltyType !== "TIME" && config.pit.penalty.escalation !== "TIME_PENALTY";
 
     llenarInfracciones(config);
     renderPerfiles(config);

@@ -334,9 +334,13 @@ function setupForms() {
   );
   // El campo de segundos solo tiene sentido con "Penalización de tiempo" elegida: el resto del
   // tiempo queda oculto, no deshabilitado, para no mandar un número que no se va a usar.
-  $("f-escalation").addEventListener("change", () => {
-    $("f-time-penalty-row").hidden = $("f-escalation").value !== "TIME_PENALTY";
-  });
+  // Los segundos sirven en dos casos: la sanción ES de tiempo, o es de tiempo la que escala.
+  const mostrarSegundosF = () => {
+    $("f-time-penalty-row").hidden =
+      $("f-penalty-type").value !== "TIME" && $("f-escalation").value !== "TIME_PENALTY";
+  };
+  $("f-escalation").addEventListener("change", mostrarSegundosF);
+  $("f-penalty-type").addEventListener("change", mostrarSegundosF);
 
   registerForm(
     "pit",
@@ -357,9 +361,12 @@ function setupForms() {
       },
     })
   );
-  $("p-escalation").addEventListener("change", () => {
-    $("p-time-penalty-row").hidden = $("p-escalation").value !== "TIME_PENALTY";
-  });
+  const mostrarSegundosP = () => {
+    $("p-time-penalty-row").hidden =
+      $("p-penalty-type").value !== "TIME" && $("p-escalation").value !== "TIME_PENALTY";
+  };
+  $("p-escalation").addEventListener("change", mostrarSegundosP);
+  $("p-penalty-type").addEventListener("change", mostrarSegundosP);
 
   // El botón de la sugerencia no es parte del form "pit": copia los valores aprendidos a los dos
   // campos manuales y dispara el guardado de siempre, para que la calibración automática pase por
@@ -692,7 +699,8 @@ function fillConfigForm(config) {
   $("f-penalty-type").value = config.formation.penalty.penaltyType;
   $("f-escalation").value = config.formation.penalty.escalation;
   $("f-time-penalty").value = config.formation.penalty.timePenaltySeconds ?? 5;
-  $("f-time-penalty-row").hidden = config.formation.penalty.escalation !== "TIME_PENALTY";
+  $("f-time-penalty-row").hidden =
+    config.formation.penalty.penaltyType !== "TIME" && config.formation.penalty.escalation !== "TIME_PENALTY";
 
   $("p-zone-start").value = config.pit.zone.splineStart;
   $("p-zone-end").value = config.pit.zone.splineEnd;
@@ -703,7 +711,8 @@ function fillConfigForm(config) {
   $("p-penalty-type").value = config.pit.penalty.penaltyType;
   $("p-escalation").value = config.pit.penalty.escalation;
   $("p-time-penalty").value = config.pit.penalty.timePenaltySeconds ?? 5;
-  $("p-time-penalty-row").hidden = config.pit.penalty.escalation !== "TIME_PENALTY";
+  $("p-time-penalty-row").hidden =
+    config.pit.penalty.penaltyType !== "TIME" && config.pit.penalty.escalation !== "TIME_PENALTY";
 
   for (const type of Object.keys(INFRACTION_UI)) {
     const rule = config.infractions[type];
