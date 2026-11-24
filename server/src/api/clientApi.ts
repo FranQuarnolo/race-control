@@ -25,6 +25,11 @@ export interface ClientApiDeps {
    * `getPilotStatus` y no depende del guid. El cliente lo muestra junto con "Vuelta de formación"
    * mientras el semáforo esté en rojo parpadeando. */
   getFormationSpeedLimitKmh: () => number;
+  /** Segundos de gracia que le quedan a ESTE piloto antes de que lo sancionen por exceso en la
+   * vuelta de formación, o `null` si no está por encima del límite. La app lo muestra como cuenta
+   * regresiva en RC Largada. Opcional para que los dobles de los tests viejos no tengan que
+   * conocerlo: sin la función, el campo va siempre en `null`. */
+  getFormationGraceSeconds?: (driverGuid: string) => number | null;
   /** Devuelve el `steamGuid` que acredita el token, o `null`. Ver security/pilotToken.ts. */
   verifyToken: (token: string | undefined) => string | null;
   /**
@@ -69,6 +74,10 @@ interface AuthedRequest extends express.Request {
 function plausiblePing(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 5000) return undefined;
   return Math.round(value);
+}
+
+function redondearGracia(segundos: number | null): number | null {
+  return segundos === null ? null : Math.round(segundos * 10) / 10;
 }
 
 /**
@@ -156,6 +165,9 @@ export function createClientApi(deps: ClientApiDeps): Express {
       messages,
       status,
       formationSpeedLimitKmh: deps.getFormationSpeedLimitKmh(),
+      // Aditivo: una app vieja lo ignora. Redondeado a décimas porque la app interpola entre
+      // polls y no necesita más.
+      formationGraceSeconds: conocido && deps.getFormationGraceSeconds ? redondearGracia(deps.getFormationGraceSeconds(guid)) : null,
     });
   });
 

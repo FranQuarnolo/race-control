@@ -922,6 +922,12 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       if (car) pitZoneLearner.observe(trackKey, car.normalizedSplinePosition);
     },
     getFormationSpeedLimitKmh: () => config.formation.penalty.speedThresholdKmh,
+    // Por guid y no por carId: es lo que trae el poll. Si el piloto no tiene auto en pista no hay
+    // nada que contar.
+    getFormationGraceSeconds: (driverGuid) => {
+      const car = stateTracker.getConnected().find((c) => c.driverGuid === driverGuid);
+      return car ? formationSpeedWatcher.getGraceRemaining(car.carId) : null;
+    },
     verifyToken: (token) => pilotTokens.verify(token),
     /**
      * El estado permanente del piloto: su cuenta de cortes y lo que debe.

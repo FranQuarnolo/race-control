@@ -3,6 +3,30 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.47] — 2026-11-24
+
+### La gracia de la vuelta de formación, visible para el piloto
+
+**Síntoma.** En la largada en movimiento el piloto se enteraba de que se había pasado del límite
+cuando ya tenía la sanción. La gracia existía —es la "Tolerancia" de la sección Largada: segundos
+seguidos por encima del límite antes de sancionar—, pero corría sin que nadie la viera.
+
+**Decisión.**
+- El poll de la app trae `formationGraceSeconds`: los segundos que le quedan a ese piloto mientras
+  está por encima del límite y todavía no lo sancionaron; `null` si no. Sale de
+  `SpeedWatcher.getGraceRemaining`, el mismo acumulado que decide la sanción, así que la cuenta que
+  ve el piloto es exactamente la que lo va a sancionar. Es un campo aditivo: la app vieja lo ignora.
+- Durante el debounce de 500 ms por debajo del límite la cuenta queda congelada en vez de
+  desaparecer, para que no parpadee a quien roza el límite.
+- La etiqueta pasa a llamarse **"Tiempo de gracia (s)"** en el panel y el embed (solo en Largada;
+  la de Pit lane sigue siendo "Tolerancia"). El default de la formación sube de 5 a 10 s: 5 no
+  alcanzan para leer la cuenta y frenar. Una config guardada conserva su valor.
+
+### App del piloto (sin publicar todavía, sale junto con el VSC)
+RC Largada suma un tercer renglón, "BAJA LA VELOCIDAD: 7" en rojo, mientras dure la gracia. Entre
+polls (uno por segundo) la cuenta se descuenta con el reloj local, desde `acUpdate`, para que baje
+de a un segundo y no quede quieta si un poll se demora. La ventana crece de 94 a 120 px de alto.
+
 ## [1.46] — 2026-11-24
 
 ### Exceso en pit lane en la recta principal, una sanción por vuelta

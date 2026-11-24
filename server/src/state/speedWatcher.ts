@@ -66,6 +66,22 @@ export class SpeedWatcher extends EventEmitter {
     this.unsubscribe = null;
   }
 
+  /**
+   * Segundos de gracia que le quedan a un auto que está por encima del límite y todavía no fue
+   * sancionado; `null` si no está en racha (o ya se sancionó, o el watcher está desarmado). La
+   * app del piloto lo muestra como cuenta regresiva en RC Largada: la gracia existía desde
+   * siempre (es `toleranceSeconds`), pero el piloto no tenía forma de saber que estaba corriendo.
+   * Durante el debounce de 500 ms por debajo del límite se sigue informando, congelada: si se
+   * cortara ahí, un piloto que roza el límite vería la cuenta parpadear.
+   */
+  getGraceRemaining(carId: number): number | null {
+    if (!this.armed || this.alreadyFlagged.has(carId)) return null;
+    const state = this.tracking.get(carId);
+    if (!state) return null;
+    const restante = this.rules.toleranceSeconds - state.accumulatedMs / 1000;
+    return Math.max(0, restante);
+  }
+
   private handleUpdate(car: CarState): void {
     if (!this.armed) return;
     if (this.isInZone && !this.isInZone(car)) {

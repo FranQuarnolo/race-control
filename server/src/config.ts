@@ -149,7 +149,10 @@ function defaultConfig(): AppConfig {
     leagueName: "",
     http: { adminPort: 3000, clientPort: 3001, publicHost: "" },
     acUdp: { localPort: 12000, remoteHost: "127.0.0.1", remotePort: 11000, remotePortSource: "default" },
-    formation: { penalty: defaultPenalty() },
+    // La gracia de la formación es más larga que la del pit (10 s contra 5): desde la 1.47 el
+    // piloto la ve como cuenta regresiva en RC Largada, y 5 s no alcanzan para leerla y frenar.
+    // Solo cambia el default; una config guardada conserva su valor.
+    formation: { penalty: { ...defaultPenalty(), toleranceSeconds: 10 } },
     pit: { zone: { splineStart: 0.97, splineEnd: 0.995 }, stopGoSeconds: 30, penalty: defaultPenalty() },
     presence: { graceSeconds: 60, enforce: true, skipPracticeIncidents: true },
     // 30 km/h de impacto deja afuera los roces de parrilla y los pianos, que si no inundan la

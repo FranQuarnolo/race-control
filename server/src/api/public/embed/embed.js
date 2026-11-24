@@ -450,7 +450,7 @@
   tituloLargada.textContent = "Largada (vuelta de formación)";
   panelLargada.appendChild(tituloLargada);
   panelLargada.appendChild(filaCampo("Velocidad máxima (km/h)", campoFThreshold));
-  panelLargada.appendChild(filaCampo("Tolerancia (s)", campoFTolerance));
+  panelLargada.appendChild(filaCampo("Tiempo de gracia (s)", campoFTolerance));
   panelLargada.appendChild(filaCampo("Vueltas para cumplirla", campoFGrace));
   panelLargada.appendChild(filaCampo("Sanción", campoFPenaltyType));
   panelLargada.appendChild(filaCampo("Si no la cumple", campoFEscalation));

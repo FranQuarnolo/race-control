@@ -73,6 +73,7 @@ function deps(board: PilotMessageBoard, guidAcreditado: string | null) {
     onSurfaceGrip: () => {},
     onPitLaneSample: () => {},
     getFormationSpeedLimitKmh: () => 80,
+    getFormationGraceSeconds: (guid: string) => (guid === GUID ? 7.4321 : null),
     verifyToken: () => guidAcreditado,
     // El estado permanente del piloto: acá devuelve siempre lo mismo porque lo que se prueba es
     // el reparto de la cola de avisos, no el contador. Su cálculo real se prueba en
@@ -94,6 +95,7 @@ async function pedir(board: PilotMessageBoard, guidAcreditado: string | null, qu
       messages: Array<{ seq: number; text: string }>;
       status: { cuts: number; cutsLimit: number; penalty: string | null };
       formationSpeedLimitKmh: number;
+      formationGraceSeconds: number | null;
     };
   } finally {
     server.close();
@@ -154,4 +156,14 @@ test("un poll sin `since` igual trae el estado: son dos cosas independientes", a
 test("el poll trae el límite de velocidad de la vuelta de formación configurado", async () => {
   const body = await pedir(new PilotMessageBoard(), GUID, "?since=0&guid=" + GUID);
   assert.equal(body.formationSpeedLimitKmh, 80);
+});
+
+test("el poll trae la gracia que le queda al piloto, redondeada a décimas", async () => {
+  const body = await pedir(new PilotMessageBoard(), GUID, "?since=0&guid=" + GUID);
+  assert.equal(body.formationGraceSeconds, 7.4);
+});
+
+test("sin racha por encima del límite la gracia viaja en null", async () => {
+  const body = await pedir(new PilotMessageBoard(), OTRO, "?since=0&guid=" + OTRO);
+  assert.equal(body.formationGraceSeconds, null);
 });

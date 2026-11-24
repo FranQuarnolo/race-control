@@ -309,6 +309,7 @@ label_pending = None
 label_alert = None
 label_formation_lap = None
 label_formation_limit = None
+label_formation_grace = None
 label_messages = []
 
 backend_url = None  # None hasta que llega el chat de auto-discovery.
@@ -472,7 +473,7 @@ def posicionarVentanasDeFabrica(ventanas):
 def acMain(ac_version):
     global window_messages, window_flags, window_lights, window_alert
     global label_backend_status, label_cuts, label_pending, label_alert, label_messages
-    global label_formation_lap, label_formation_limit
+    global label_formation_lap, label_formation_limit, label_formation_grace
     global steam_guid, poll_thread_running
 
     # ---------------------------------------------------------------- RC Mensajes
@@ -544,6 +545,12 @@ def acMain(ac_version):
     ac.setFontSize(label_formation_limit, FORMATION_LIMIT_FONT_SIZE)
     ac.setFontColor(label_formation_limit, *FORMATION_LIMIT_COLOR)
 
+    # Tercer renglon: la cuenta de la gracia cuando el piloto se pasa del limite. Ver `renderGrace`.
+    label_formation_grace = ac.addLabel(window_lights, "")
+    ac.setPosition(label_formation_grace, 6, LIGHTS_ROW_HEIGHT + 46)
+    ac.setFontSize(label_formation_grace, FORMATION_GRACE_FONT_SIZE)
+    ac.setFontColor(label_formation_grace, *FORMATION_GRACE_COLOR)
+
     # ---------------------------------------------------------------- RC Alerta
     # Invisible mientras todo este bien, que es el 99% del tiempo. Ver el bloque de comentarios de
     # ALERT_WINDOW_WIDTH para por que es un marco y no un fondo.
@@ -596,6 +603,8 @@ def acUpdate(deltaT):
     checkLapInvalidated()
     # Y el acomodo de las ventanas, porque `ac.getPosition` tambien es del hilo del juego.
     chequearAcomodo()
+    # Y la cuenta de la gracia, que baja entre polls: ver `renderGrace`.
+    renderGrace()
 
 
 def readSteamGuid():
@@ -931,6 +940,7 @@ def pollLoop():
             # que la app viene adelantando sola. Ver `applyServerStatus`.
             applyServerStatus(data.get("status", {}))
             applyFormationSpeedLimit(data.get("formationSpeedLimitKmh"))
+            applyFormationGrace(data.get("formationGraceSeconds"))
 
             for message in data.get("messages", []):
                 showMessage(message.get("text", ""))
@@ -1083,7 +1093,10 @@ LIGHTS_WINDOW_WIDTH = 260
 # y el limite de velocidad -- pedido explicito de la prueba en pista, para que durante la
 # formacion se sepa a que velocidad ir sin tener que adivinarla ni buscarla en otro lado.
 LIGHTS_ROW_HEIGHT = 46
-LIGHTS_WINDOW_HEIGHT = LIGHTS_ROW_HEIGHT + 48
+# Los 26 px de mas (desde la 1.47 del servidor) son para el tercer renglon, la cuenta de la
+# gracia: ver `renderGrace`. Con 120 de alto la ventana de fabrica termina justo donde empieza RC
+# Alerta (220 + 120 = 340), sin pisarla.
+LIGHTS_WINDOW_HEIGHT = LIGHTS_ROW_HEIGHT + 74
 
 # ---------------------------------------------------------------------------------------------
 # La alerta de credencial (1.3)
@@ -1150,6 +1163,22 @@ FORMATION_LAP_COLOR = (1.00, 0.85, 0.05, 1.0)
 FORMATION_LIMIT_COLOR = (0.92, 0.93, 0.96, 1.0)
 FORMATION_LAP_FONT_SIZE = 16
 FORMATION_LIMIT_FONT_SIZE = 14
+
+# La gracia de la formacion (servidor 1.47). El servidor siempre la tuvo -- es la "Tolerancia" del
+# panel, ahora "Tiempo de gracia" -- pero el piloto no sabia que estaba corriendo: se enteraba de
+# que se habia pasado cuando ya tenia la sancion. Ahora, mientras este por encima del limite y sin
+# sancionar, el poll trae `formationGraceSeconds` y aca se muestra la cuenta en rojo.
+#
+# El poll es cada 1 s, asi que entre poll y poll la cuenta se descuenta sola con el reloj local
+# (`renderGrace`, desde acUpdate): si no, bajaria a saltos y quedaria quieta si un poll se demora.
+# Cuando el poll trae null (bajo del limite, o ya lo sancionaron) el renglon se borra.
+FORMATION_GRACE_TEXT = "BAJA LA VELOCIDAD: {0}"
+FORMATION_GRACE_COLOR = (1.00, 0.20, 0.15, 1.0)
+FORMATION_GRACE_FONT_SIZE = 18
+
+formation_grace_seconds = None  # Lo ultimo que trajo el poll. None = no hay cuenta.
+formation_grace_at = 0.0  # Cuando llego, para descontar lo que paso desde entonces.
+formation_grace_shown = ""  # Lo ultimo que se escribio, para no llamar a setText en cada frame.
 
 # El color de cada bandera del juego. Las claves son los valores de `graphics.flag` de la Shared
 # Memory: 0 ninguna, 1 azul, 2 amarilla, 3 negra, 4 blanca, 5 a cuadros, 6 penalidad.
@@ -1221,6 +1250,34 @@ def applyFormationSpeedLimit(value):
         return
     formation_speed_limit_kmh = value
     renderFormationLines()
+
+
+def applyFormationGrace(value):
+    """Guarda la gracia que trajo el poll. La dibuja `renderGrace`, en el hilo del juego."""
+    global formation_grace_seconds, formation_grace_at
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = None
+    formation_grace_seconds = value
+    formation_grace_at = time.time()
+
+
+def renderGrace():
+    """Escribe la cuenta regresiva, descontando lo que paso desde el ultimo poll. Solo en la
+    vuelta de formacion: fuera de ella el watcher del servidor esta desarmado y no deberia llegar
+    nada, pero si llegara no tiene sentido mostrarlo."""
+    global formation_grace_shown
+    if label_formation_grace is None:
+        return
+    texto = ""
+    if light_state == "formation" and formation_grace_seconds is not None:
+        restante = formation_grace_seconds - (time.time() - formation_grace_at)
+        # Hacia arriba: "1" hasta el ultimo instante, y nunca un 0 mientras todavia no sanciono.
+        texto = FORMATION_GRACE_TEXT.format(max(1, int(math.ceil(restante))))
+    if texto != formation_grace_shown:
+        formation_grace_shown = texto
+        ac.setText(label_formation_grace, texto)
 
 
 def renderFormationLines():

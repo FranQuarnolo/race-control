@@ -304,3 +304,9 @@ test("los avisos se parten en renglones y las ventanas se resaltan hasta que el 
   assert.ok(/def marcarAcomodadas\(\)[\s\S]*?open\(ARRANGED_MARKER_PATH, "w"\)/.test(ejecutable), "la marca ya no se escribe");
   assert.ok(/chequearAcomodo\(\)/.test(ejecutable.split("def acUpdate")[1] || ""), "acUpdate dejó de chequear el acomodo");
 });
+
+test("RC Largada muestra la cuenta de la gracia y la descuenta entre polls", () => {
+  assert.ok(/applyFormationGrace\(data\.get\("formationGraceSeconds"\)\)/.test(ejecutable), "el poll dejó de leer formationGraceSeconds");
+  assert.ok(/renderGrace\(\)/.test(ejecutable.split("def acUpdate")[1] || ""), "acUpdate dejó de dibujar la cuenta");
+  assert.ok(/label_formation_grace = ac\.addLabel\(window_lights/.test(ejecutable), "falta el renglón de la gracia en RC Largada");
+});
