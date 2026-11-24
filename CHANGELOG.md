@@ -3,6 +3,20 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.50] — 2026-11-24
+
+### Logos de la parrilla de TCR
+
+**Síntoma.** En TCR casi todos los autos salían con el escudo de iniciales en vez del logo.
+
+**Causa.** El pack T78 nombra los autos solo por el modelo ("T78 TCR '19 Civic", "... i30N",
+"... Veloce"), sin la marca. Cupra y SEAT además no estaban en la lista de marcas.
+
+**Decisión.** Se suman Cupra, SEAT y Lynk & Co a las marcas, y los modelos de TCR (Civic, i30N,
+Golf GTI, RS3, Veloce, Leon, LCo) a la lista de modelos sin marca. El operador eligió logos nuevos
+para Porsche y Corvette y sumó Alfa Romeo, Cupra, Honda, Hyundai y SEAT. Lynk & Co no tiene logo
+en la biblioteca: sale con el escudo de iniciales, pero con el nombre de la marca bien.
+
 ## [1.49] — 2026-11-24
 
 ### Los perfiles son de la liga, y la última carrera sobrevive a un deploy

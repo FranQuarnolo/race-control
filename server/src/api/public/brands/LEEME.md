@@ -26,6 +26,10 @@ lamborghini, lexus, mazda, mclaren, mercedes-benz, nissan, peugeot, porsche, ren
 volkswagen. Antes de reemplazar alguno de estos con el paso de abajo, fijate si no se pisa una
 elección hecha a propósito.
 
+En la **1.50** el operador cambió porsche y corvette por versiones nuevas y sumó alfa-romeo, cupra,
+honda, hyundai y seat, para la parrilla de TCR. `porsche.svg` pesa ~1 MB (trae la imagen
+embebida); el navegador lo cachea, pero si alguna vez molesta, es el primero a aligerar.
+
 Además hay cuatro logos de **categoría**: `f1`, `f2`, `f3` y `lmp2`. No salen de la marca sino
 del nombre del modelo (`categorySlug` en `carBadges.ts`): si el mod dice `f1`, `f2`, `f3`,
 `formula_2` o `lmp2` como palabra suelta, gana sobre el logo de la marca.

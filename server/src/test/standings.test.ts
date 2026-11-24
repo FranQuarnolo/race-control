@@ -299,3 +299,20 @@ test("los monoplazas y los LMP2 llevan el logo de su categoría", () => {
   assert.equal(categorySlug("ks_mclaren_f1_gtr"), null);
   assert.equal(categorySlug("ks_porsche_911_gt3_r_2016"), null);
 });
+
+test("los TCR de T78 se reconocen por el modelo (1.50)", () => {
+  const casos: Array<[string, string, string | null]> = [
+    ["t78_tcr_19_civic", "Honda", "honda"],
+    ["t78_tcr_19_cupra", "Cupra", "cupra"],
+    ["t78_tcr_19_golf_gti", "Volkswagen", "volkswagen"],
+    ["t78_tcr_19_i30n", "Hyundai", "hyundai"],
+    ["t78_tcr_19_rs3", "Audi", "audi"],
+    ["t78_tcr_19_veloce", "Alfa Romeo", "alfa-romeo"],
+    // Sin logo en la biblioteca: escudo con monograma, pero con la marca bien.
+    ["t78_tcr_19_lco_03", "Lynk & Co", null],
+  ];
+  for (const [modelo, marca, slug] of casos) {
+    assert.equal(brandOf(modelo), marca, modelo);
+    assert.equal(brandSlug(marca), slug, modelo);
+  }
+});

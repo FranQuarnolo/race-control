@@ -36,6 +36,7 @@ const BRANDS: Array<[string, string]> = [
   ["cadillac", "Cadillac"],
   ["chevrolet", "Chevrolet"],
   ["citroen", "Citroën"],
+  ["cupra", "Cupra"],
   ["corvette", "Chevrolet Corvette"],
   ["dallara", "Dallara"],
   ["datsun", "Datsun"],
@@ -55,6 +56,7 @@ const BRANDS: Array<[string, string]> = [
   ["lancia", "Lancia"],
   ["lexus", "Lexus"],
   ["lotus", "Lotus"],
+  ["lynkco", "Lynk & Co"],
   ["maserati", "Maserati"],
   ["matra", "Matra"],
   ["mazda", "Mazda"],
@@ -71,6 +73,7 @@ const BRANDS: Array<[string, string]> = [
   ["renault", "Renault"],
   ["rss", "Race Sim Studio"],
   ["ruf", "RUF"],
+  ["seat", "SEAT"],
   ["shelby", "Shelby"],
   ["subaru", "Subaru"],
   ["tatuus", "Tatuus"],
@@ -137,6 +140,19 @@ const MODELOS: Record<string, string> = {
   gtr: "Nissan",
   // Alpine
   a110: "Alpine",
+  // TCR (1.50). El pack T78 los nombra solo por el modelo: "T78 TCR '19 Civic", "... i30N",
+  // "... Veloce". Sin estas claves la parrilla de TCR entera caía al escudo de iniciales.
+  civic: "Honda",
+  i30n: "Hyundai",
+  i30: "Hyundai",
+  elantra: "Hyundai",
+  golf: "Volkswagen",
+  gti: "Volkswagen",
+  rs3: "Audi",
+  veloce: "Alfa Romeo",
+  giulietta: "Alfa Romeo",
+  leon: "Cupra",
+  lco: "Lynk & Co",
 };
 
 /**
