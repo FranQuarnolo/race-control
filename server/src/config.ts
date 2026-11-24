@@ -44,6 +44,12 @@ export interface AppConfig {
   };
   /** Única fuente de verdad de las reglas de largada: la usa tanto el detector como la sanción. */
   formation: { penalty: PenaltyRules };
+  /** Virtual Safety Car (1.48). Reglas propias, con su pestaña, pero nacen como COPIA de las de
+   * la largada: el pedido fue que "comparta la configuración" con la formación —límite, gracia,
+   * sanción— y que se pueda ajustar aparte. Copia y no referencia, para que cambiar el límite de
+   * la formación no mueva el del VSC sin que nadie lo vea. `endingSeconds` es cuánto dura el "VSC
+   * ENDING" antes del verde automático. */
+  vsc: VscRules;
   /** Única fuente de verdad de las reglas de pit lane: el límite de velocidad es el mismo valor
    * que se usa para detectar el exceso y para validar que un Drive-Through se cumplió legal. */
   pit: { zone: PitZone; stopGoSeconds: number; penalty: PenaltyRules };
@@ -84,9 +90,17 @@ export interface AppConfig {
  * perfil "Endurance" no puede dejar a nadie sin servidor, y ese es el único motivo por el que un
  * admin podría tenerle miedo al botón.
  */
+export interface VscRules {
+  endingSeconds: number;
+  penalty: PenaltyRules;
+}
+
 export interface ProfileRules {
   infractions: InfractionCatalog;
   formation: { penalty: PenaltyRules };
+  /** Opcional: un perfil guardado antes de la 1.48 no lo trae, y al cargarlo el VSC conserva lo
+   * que tenía. */
+  vsc?: VscRules;
   pit: { zone: PitZone; stopGoSeconds: number; penalty: PenaltyRules };
   presence: { graceSeconds: number; enforce: boolean; skipPracticeIncidents: boolean };
 }
@@ -153,6 +167,7 @@ function defaultConfig(): AppConfig {
     // piloto la ve como cuenta regresiva en RC Largada, y 5 s no alcanzan para leerla y frenar.
     // Solo cambia el default; una config guardada conserva su valor.
     formation: { penalty: { ...defaultPenalty(), toleranceSeconds: 10 } },
+    vsc: { endingSeconds: 10, penalty: { ...defaultPenalty(), toleranceSeconds: 10 } },
     pit: { zone: { splineStart: 0.97, splineEnd: 0.995 }, stopGoSeconds: 30, penalty: defaultPenalty() },
     presence: { graceSeconds: 60, enforce: true, skipPracticeIncidents: true },
     // 30 km/h de impacto deja afuera los roces de parrilla y los pianos, que si no inundan la
@@ -324,6 +339,7 @@ function validateProfiles(config: AppConfig): void {
     const base = defaultConfig();
     if (isPlainObject(crudo.rules)) mergeConfigInto(base as unknown as Record<string, any>, crudo.rules);
     validatePenalty(base.formation.penalty);
+    validatePenalty(base.vsc.penalty);
     validatePenalty(base.pit.penalty);
     base.presence.graceSeconds = clampPositive(base.presence.graceSeconds, 60);
     base.presence.enforce = typeof base.presence.enforce === "boolean" ? base.presence.enforce : true;
@@ -335,7 +351,7 @@ function validateProfiles(config: AppConfig): void {
       id,
       name: name.slice(0, 60),
       createdAt: typeof crudo.createdAt === "string" ? crudo.createdAt : new Date(0).toISOString(),
-      rules: snapshotRules(base),
+      rules: sinVscSiNoLoTraia(snapshotRules(base), crudo.rules),
     });
   }
   config.ruleProfiles = limpios;
@@ -343,6 +359,13 @@ function validateProfiles(config: AppConfig): void {
     typeof config.activeProfileId === "string" && limpios.some((p) => p.id === config.activeProfileId)
       ? config.activeProfileId
       : "";
+}
+
+/** Un perfil de antes de la 1.48 no tiene VSC. Si se le pusieran los valores de fábrica, cargarlo
+ * pisaría el VSC que el admin ya ajustó con números que nunca eligió. */
+function sinVscSiNoLoTraia(rules: ProfileRules, crudo: unknown): ProfileRules {
+  if (!isPlainObject(crudo) || !isPlainObject(crudo.vsc)) delete rules.vsc;
+  return rules;
 }
 
 /**
@@ -396,6 +419,7 @@ export function snapshotRules(config: AppConfig): ProfileRules {
     JSON.stringify({
       infractions: config.infractions,
       formation: { penalty: config.formation.penalty },
+      vsc: config.vsc,
       pit: { zone: config.pit.zone, stopGoSeconds: config.pit.stopGoSeconds, penalty: config.pit.penalty },
       presence: config.presence,
     })
@@ -515,6 +539,15 @@ export function validateConfig(config: AppConfig): void {
   if (!isPlainObject(config.pit.zone)) resetToDefaults(config.pit, "zone", defaults.pit.zone);
 
   validatePenalty(config.formation.penalty);
+  // Un config de antes de la 1.48 no trae `vsc`: nace copiando lo que ya está puesto para la
+  // largada (ver el comentario del campo), no los valores de fábrica — si el admin ya ajustó el
+  // límite de formación para su liga, el VSC arranca con ese mismo número.
+  if (!isPlainObject(config.vsc)) {
+    config.vsc = { endingSeconds: 10, penalty: { ...config.formation.penalty } };
+  }
+  if (!isPlainObject(config.vsc.penalty)) config.vsc.penalty = { ...config.formation.penalty };
+  validatePenalty(config.vsc.penalty);
+  config.vsc.endingSeconds = clampIntIn(config.vsc.endingSeconds, 1, 60, 10);
   validatePenalty(config.pit.penalty);
   if (!isPlausibleHost(config.acUdp.remoteHost)) config.acUdp.remoteHost = "127.0.0.1";
   config.acUdp.localPort = clampPort(config.acUdp.localPort, 12000);
@@ -571,6 +604,9 @@ export function parseConfig(raw: unknown): AppConfig {
   if (isPlainObject(raw)) {
     migrateLegacyRules(raw);
     mergeConfigInto(config, raw);
+    // Un config de antes de la 1.48 no trae `vsc`. Sin esto se quedaría con los valores de
+    // fábrica de `defaultConfig`, y no con la copia de la largada que arma `validateConfig`.
+    if (!isPlainObject(raw.vsc)) delete (config as Partial<AppConfig>).vsc;
   }
   validateConfig(config);
   return config;

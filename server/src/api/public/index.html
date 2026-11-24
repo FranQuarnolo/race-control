@@ -110,6 +110,9 @@
             <button id="btn-green" class="secondary" title="Apretalo en el instante en que se apaga el semáforo en el juego: avisa por chat y corta el control de velocidad de formación.">Verde</button>
             <!-- "Reset" no le decía nada a nadie y el título explica lo único que importa: qué NO
                  deshace. Las sanciones ya emitidas siguen en pie. -->
+            <!-- Virtual Safety Car (1.48). Un solo botón: con la carrera en curso lo despliega, con
+                 el VSC desplegado arranca el "VSC ENDING" y el verde llega solo. -->
+            <button id="btn-vsc" class="secondary" title="Con la carrera en curso despliega el Virtual Safety Car: límite de velocidad para todos y bandera amarilla en la app. Apretalo de nuevo para terminarlo: avisa “VSC ENDING” y da el verde solo después de los segundos configurados en Reglas › VSC.">VSC</button>
             <button id="btn-reset" class="secondary" title="Vuelve el semáforo a “Esperando” y apaga el control de velocidad de formación, para rearmar una largada abortada. No borra las sanciones ya emitidas ni toca el servidor de Assetto Corsa.">Reiniciar largada</button>
           </div>
           <!-- Con el verde dado, el renglón gris de ayuda deja lugar a este aviso: es el estado
@@ -117,7 +120,7 @@
                escritorio. -->
           <span class="race-live" id="race-live" hidden>
             <span class="dot" aria-hidden="true"></span>
-            Carrera en curso
+            <span id="race-live-text">Carrera en curso</span>
           </span>
           <span class="start-hint" id="start-hint"></span>
         </div>
@@ -332,6 +335,7 @@
         <button type="button" class="tab" role="tab" aria-selected="true" data-tab="perfiles">Perfiles</button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="app">App pilotos</button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="largada">Largada</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="vsc">VSC</button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pista">Pista</button>
         <button type="button" class="tab" role="tab" aria-selected="false" data-tab="pit">Pit lane</button>
       </div>
@@ -419,6 +423,42 @@
             <input type="number" min="1" max="600" id="f-time-penalty" inputmode="numeric" />
           </div>
           <button id="btn-save-formation" data-form="formation">Guardar</button>
+        </section>
+      </div>
+
+      <!-- Virtual Safety Car (1.48). Mismos campos que Largada, con sus propios valores: arrancan
+           copiados de la largada y desde ahí se ajustan aparte. -->
+      <div class="tab-panel" data-panel="vsc" hidden>
+        <section>
+          <h3>Virtual Safety Car</h3>
+          <p class="muted">
+            Se despliega con el botón <strong>VSC</strong> de la largada, con la carrera en curso.
+            Apretándolo de nuevo empieza el <strong>VSC ending</strong>, y el verde llega solo
+            después de los segundos de abajo.
+          </p>
+          <div class="row"><label for="v-ending">Duración del VSC ending (s)</label><input type="number" min="1" max="60" id="v-ending" inputmode="numeric" /></div>
+          <div class="row"><label for="v-threshold">Velocidad máxima (km/h)</label><input type="number" id="v-threshold" inputmode="numeric" /></div>
+          <div class="row"><label for="v-tolerance">Tiempo de gracia (s)</label><input type="number" id="v-tolerance" inputmode="decimal" /></div>
+          <div class="row"><label for="v-grace">Vueltas para cumplirla</label><input type="number" id="v-grace" inputmode="numeric" /></div>
+          <div class="row"><label for="v-penalty-type">Sanción</label>
+            <select id="v-penalty-type">
+              <option value="DT">Drive-Through (pasar por pits)</option>
+              <option value="SG">Stop-and-Go (parar en pits)</option>
+              <option value="BALLAST">Lastre (peso extra)</option>
+              <option value="TIME">Penalización de tiempo (suma segundos)</option>
+            </select>
+          </div>
+          <div class="row"><label for="v-escalation">Si no la cumple</label>
+            <select id="v-escalation">
+              <option value="DQ">Expulsar de la carrera</option>
+              <option value="TIME_PENALTY">Penalización de tiempo</option>
+            </select>
+          </div>
+          <div class="row" id="v-time-penalty-row" hidden>
+            <label for="v-time-penalty">Segundos de penalización</label>
+            <input type="number" min="1" max="600" id="v-time-penalty" inputmode="numeric" />
+          </div>
+          <button id="btn-save-vsc" data-form="vsc">Guardar</button>
         </section>
       </div>
 

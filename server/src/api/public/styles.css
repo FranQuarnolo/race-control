@@ -620,6 +620,13 @@ main[hidden] {
   box-shadow: 0 0 8px rgba(224, 85, 85, 0.75);
   animation: light-blink 0.5s step-end infinite;
 }
+/* Con VSC (1.48) las luces vuelven a rojo titilando, igual que en la formación: es lo mismo que
+   ve el piloto en RC Largada. */
+.lights.vsc .light {
+  background: var(--red);
+  box-shadow: 0 0 8px rgba(224, 85, 85, 0.75);
+  animation: light-blink 0.5s step-end infinite;
+}
 .lights.green .light {
   background: var(--green);
   box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
@@ -630,7 +637,8 @@ main[hidden] {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lights.formation .light {
+  .lights.formation .light,
+  .lights.vsc .light {
     animation: none;
   }
 }
@@ -654,6 +662,11 @@ main[hidden] {
 }
 .semaforo.formation {
   background: rgba(239, 142, 60, 0.15);
+  color: var(--yellow);
+}
+.semaforo.vsc,
+.semaforo.vscEnding {
+  background: rgba(250, 204, 21, 0.18);
   color: var(--yellow);
 }
 .semaforo.green {
@@ -709,6 +722,21 @@ main[hidden] {
 }
 .race-live[hidden] {
   display: none;
+}
+/* "VSC DESPLEGADO": amarillo y titilando, el texto entero y no solo el punto. Es el estado que el
+   admin no se puede olvidar de que dejó puesto. */
+.race-live.vsc {
+  color: var(--yellow);
+  animation: light-blink 1s step-end infinite;
+}
+.race-live.vsc .dot {
+  background: var(--yellow);
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .race-live.vsc {
+    animation: none;
+  }
 }
 .race-live .dot {
   width: 10px;

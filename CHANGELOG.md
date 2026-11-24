@@ -3,6 +3,45 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.48] — 2026-11-24
+
+### Virtual Safety Car
+
+**Síntoma.** Para neutralizar la carrera sin auto de seguridad no había herramienta: dirección de
+carrera mandaba un mensaje por chat pidiendo bajar la velocidad y no había forma de controlar a
+quién no le hacía caso, ni de avisar a todos a la vez cuándo se relargaba.
+
+**Decisión.** Un botón **VSC** junto a "Carrera en curso", en el panel y en el embed (`POST
+/api/vsc/toggle`, solo con la carrera en curso). Apretado una vez despliega el VSC: chat a todos,
+luces rojas parpadeando y bandera amarilla en la app, y un `SpeedWatcher` propio que controla el
+límite. Apretado otra vez empieza el **VSC ending**: se deja de controlar la velocidad y, pasados
+los segundos configurados (10 por defecto), el verde llega solo — el mismo verde de la largada,
+con su "VERDE VERDE VERDE" y el audio de la app.
+
+- **Fase:** el VSC no cambia la fase, que sigue siendo `race`. Así el pit lane sigue controlado y
+  nada se reinicia.
+- **Reglas propias:** pestaña nueva "VSC" en Reglas, con los mismos campos que Largada más la
+  duración del VSC ending. Un config o perfil de antes de la 1.48 arranca con una **copia** de las
+  reglas de la largada, no con los defaults: es lo que dirección de carrera ya había elegido.
+- **Sanciones:** motor aparte (`vsc`), con el tipo de incidente `vsc-speeding`. Entra en el
+  informe, revocar, el reinicio de sesión, la persistencia y el estado del piloto, igual que los
+  otros tres.
+- **Poll:** `vscSpeedLimitKmh` y `vscSecondsLeft`, aditivos. Con VSC armado,
+  `formationGraceSeconds` trae la gracia del watcher del VSC.
+
+### App del piloto 1.10 (hay que reinstalar el .zip)
+
+Sale una sola vez con todo lo acumulado desde la 1.9, para que los pilotos reinstalen una vez:
+
+- **Ventanas resaltadas** hasta que el piloto mueve alguna, y avisos de RC Mensajes partidos en
+  renglones para que no se salgan del recuadro.
+- **Cuenta de la gracia** en RC Largada (servidor 1.47): "BAJA LA VELOCIDAD: N".
+- **VSC** en RC Largada ("VSC", límite y gracia; después "VSC ENDING" con "Verde en N s") y
+  bandera amarilla parpadeando en RC Banderas mientras dure.
+
+La app vieja sigue andando con este servidor: ignora los campos nuevos, y en el VSC simplemente no
+muestra nada.
+
 ## [1.47] — 2026-11-24
 
 ### La gracia de la vuelta de formación, visible para el piloto

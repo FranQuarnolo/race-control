@@ -379,6 +379,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     formationPenaltyEngine.resetSession();
     pitPenaltyEngine.resetSession();
     stewardPenaltyEngine.resetSession();
+    vscPenaltyEngine.resetSession();
     // Las salidas de pista de la clasificación no se arrastran a la carrera.
     trackLimits.resetSession();
     // Ni los avisos: que la app del piloto siga mostrando una sanción de la qualy en la vuelta 1
@@ -493,8 +494,17 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   // Instancia 1: largada en movimiento.
   const formationPenaltyEngine = new PenaltyEngine(config.formation.penalty);
   const formationSpeedWatcher = new SpeedWatcher(stateTracker, config.formation.penalty);
-  const formationStart = new FormationStart(udpClient, formationSpeedWatcher, formationPenaltyEngine);
-  formationStart.on("stateChanged", (type: "idle" | "formation" | "green") => {
+  // Virtual Safety Car (1.48): motor y watcher propios, con `config.vsc.penalty` por referencia —
+  // la pestaña VSC del panel se aplica en vivo, igual que Largada y Pit lane.
+  const vscPenaltyEngine = new PenaltyEngine(config.vsc.penalty);
+  const vscSpeedWatcher = new SpeedWatcher(stateTracker, config.vsc.penalty);
+  const formationStart = new FormationStart(udpClient, formationSpeedWatcher, formationPenaltyEngine, {
+    speedWatcher: vscSpeedWatcher,
+    penaltyEngine: vscPenaltyEngine,
+    getEndingSeconds: () => config.vsc.endingSeconds,
+  });
+  // `vsc`/`vscEnding` no cambian la fase a propósito: siguen siendo `race` (ver `deployVsc`).
+  formationStart.on("stateChanged", (type: string) => {
     if (type === "formation") phaseTracker.set("formation");
     if (type === "green") phaseTracker.set("race");
     if (type === "idle") phaseTracker.set("idle");
@@ -524,7 +534,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
    * actual no sirve: el aviso llega después de los segundos de tolerancia, cuando el auto ya
    * viene frenando.
    */
-  const reportarExceso = (kind: "pit-speeding" | "formation-speeding", contexto: string) => (data: {
+  const reportarExceso = (kind: "pit-speeding" | "formation-speeding" | "vsc-speeding", contexto: string) => (data: {
     violation: SpeedViolation;
   }) => {
     const { violation } = data;
@@ -538,12 +548,17 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       splinePosition: car.normalizedSplinePosition,
       speedKmh: violation.maxSpeedKmh,
       detail: `${contexto}: llegó a ${violation.maxSpeedKmh.toFixed(1)} km/h con el límite en ${
-        kind === "pit-speeding" ? config.pit.penalty.speedThresholdKmh : config.formation.penalty.speedThresholdKmh
+        kind === "pit-speeding"
+          ? config.pit.penalty.speedThresholdKmh
+          : kind === "vsc-speeding"
+            ? config.vsc.penalty.speedThresholdKmh
+            : config.formation.penalty.speedThresholdKmh
       } km/h`,
     });
   };
   pitSpeedMonitor.on("violation", reportarExceso("pit-speeding", "Exceso en pit lane"));
   formationStart.on("violation", reportarExceso("formation-speeding", "Exceso en la vuelta de formación"));
+  formationStart.on("vscViolation", reportarExceso("vsc-speeding", "Exceso con VSC"));
 
   /**
    * Instancia 3: las sanciones que aplica el comisario a mano desde la bandeja de incidentes.
@@ -586,6 +601,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
         ["formation", formationPenaltyEngine.getAll()],
         ["pit", pitPenaltyEngine.getAll()],
         ["steward", stewardPenaltyEngine.getAll()],
+        ["vsc", vscPenaltyEngine.getAll()],
       ],
       incidents: incidentEngine.getAll().filter((i) => i.createdAt >= startedAt),
       now: Date.now(),
@@ -607,18 +623,20 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
       sanciones:
         formationPenaltyEngine.getAll().length +
         pitPenaltyEngine.getAll().length +
-        stewardPenaltyEngine.getAll().length,
+        stewardPenaltyEngine.getAll().length +
+        vscPenaltyEngine.getAll().length,
     });
     incidentEngine.clearAll();
     formationPenaltyEngine.resetSession();
     pitPenaltyEngine.resetSession();
     stewardPenaltyEngine.resetSession();
+    vscPenaltyEngine.resetSession();
   };
 
   // Los tres motores: una sanción de largada o del comisario también se cumple pasando por el pit.
   new PitComplianceTracker(
     stateTracker,
-    [formationPenaltyEngine, pitPenaltyEngine, stewardPenaltyEngine],
+    [formationPenaltyEngine, pitPenaltyEngine, stewardPenaltyEngine, vscPenaltyEngine],
     config.pit.zone,
     () => config.pit.stopGoSeconds,
     () => config.pit.penalty.speedThresholdKmh,
@@ -643,6 +661,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     formationPenaltyEngine.onLapCompleted(data.carId);
     pitPenaltyEngine.onLapCompleted(data.carId);
     stewardPenaltyEngine.onLapCompleted(data.carId);
+    vscPenaltyEngine.onLapCompleted(data.carId);
     // `cuts` es el dato autoritativo contra el que se contrasta lo que reporta la app del piloto.
     // En práctica, con "No contar incidentes en práctica" activo, los cortes no se cuentan: hasta
     // la 1.40 el incidente se descartaba pero el conteo seguía, y al llegar al límite caía una
@@ -723,6 +742,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   formationPenaltyEngine.on("penalty-issued", handlePenaltyIssued("formation"));
   pitPenaltyEngine.on("penalty-issued", handlePenaltyIssued("pit"));
   stewardPenaltyEngine.on("penalty-issued", handlePenaltyIssued("steward"));
+  vscPenaltyEngine.on("penalty-issued", handlePenaltyIssued("vsc"));
 
   /**
    * Sanción anulada por el comisario.
@@ -756,6 +776,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   formationPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("formation"));
   pitPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("pit"));
   stewardPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("steward"));
+  vscPenaltyEngine.on("penalty-revoked", handlePenaltyRevoked("vsc"));
 
   const handleEscalation = (engineLabel: string) => (p: Penalty) => {
     const carId = resolveCurrentCarId(p);
@@ -774,6 +795,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
   formationPenaltyEngine.on("penalty-escalated", handleEscalation("formation"));
   pitPenaltyEngine.on("penalty-escalated", handleEscalation("pit"));
   stewardPenaltyEngine.on("penalty-escalated", handleEscalation("steward"));
+  vscPenaltyEngine.on("penalty-escalated", handleEscalation("vsc"));
 
   // Estado completo de cada sanción, cada vez que cambia. Igual que con los incidentes: es la
   // línea que permite restaurar, aparte de las de auditoría que ya se escriben arriba.
@@ -781,6 +803,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     ["formation", formationPenaltyEngine],
     ["pit", pitPenaltyEngine],
     ["steward", stewardPenaltyEngine],
+    ["vsc", vscPenaltyEngine],
   ] as const) {
     const persist = (penalty: Penalty) => journal.log("penalty.state", { engine: engineLabel, penalty });
     engine.on("penalty-issued", persist);
@@ -799,11 +822,13 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     formationPenaltyEngine.restore(restored.penalties.get("formation") || []);
     pitPenaltyEngine.restore(restored.penalties.get("pit") || []);
     stewardPenaltyEngine.restore(restored.penalties.get("steward") || []);
+    vscPenaltyEngine.restore(restored.penalties.get("vsc") || []);
     incidentEngine.restore(restored.incidents);
     const count =
       (restored.penalties.get("formation")?.length || 0) +
       (restored.penalties.get("pit")?.length || 0) +
-      (restored.penalties.get("steward")?.length || 0);
+      (restored.penalties.get("steward")?.length || 0) +
+      (restored.penalties.get("vsc")?.length || 0);
     console.log(
       `[race-control] Carrera interrumpida: recuperadas ${count} sanción(es) y ${restored.incidents.length} incidente(s).`
     );
@@ -874,6 +899,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     formationPenaltyEngine,
     pitPenaltyEngine,
     stewardPenaltyEngine,
+    vscPenaltyEngine,
     presenceWatchdog,
     connectivity,
     udpClient,
@@ -926,8 +952,12 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
     // nada que contar.
     getFormationGraceSeconds: (driverGuid) => {
       const car = stateTracker.getConnected().find((c) => c.driverGuid === driverGuid);
-      return car ? formationSpeedWatcher.getGraceRemaining(car.carId) : null;
+      if (!car) return null;
+      // Solo uno de los dos está armado a la vez (formación o VSC), así que el otro da null.
+      return formationSpeedWatcher.getGraceRemaining(car.carId) ?? vscSpeedWatcher.getGraceRemaining(car.carId);
     },
+    getVscSpeedLimitKmh: () => config.vsc.penalty.speedThresholdKmh,
+    getVscSecondsLeft: () => formationStart.getVscSecondsLeft(),
     verifyToken: (token) => pilotTokens.verify(token),
     /**
      * El estado permanente del piloto: su cuenta de cortes y lo que debe.
@@ -942,7 +972,7 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
      */
     getPilotStatus: (driverGuid: string) => {
       const progreso = trackLimits.getCutProgress(driverGuid);
-      const pendiente = [formationPenaltyEngine, pitPenaltyEngine, stewardPenaltyEngine]
+      const pendiente = [formationPenaltyEngine, pitPenaltyEngine, stewardPenaltyEngine, vscPenaltyEngine]
         .flatMap((engine) => engine.getAll())
         .find((p) => p.driverGuid === driverGuid && p.status === "servingWindow");
       return {

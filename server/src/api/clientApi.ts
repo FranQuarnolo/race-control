@@ -30,6 +30,11 @@ export interface ClientApiDeps {
    * regresiva en RC Largada. Opcional para que los dobles de los tests viejos no tengan que
    * conocerlo: sin la función, el campo va siempre en `null`. */
   getFormationGraceSeconds?: (driverGuid: string) => number | null;
+  /** Virtual Safety Car (1.48): el límite configurado en la pestaña VSC y, durante el "VSC
+   * ENDING", los segundos que faltan para el verde. Opcionales por lo mismo que la gracia. Con el
+   * VSC desplegado, `formationGraceSeconds` trae la gracia del VSC: nunca están armados los dos. */
+  getVscSpeedLimitKmh?: () => number;
+  getVscSecondsLeft?: () => number | null;
   /** Devuelve el `steamGuid` que acredita el token, o `null`. Ver security/pilotToken.ts. */
   verifyToken: (token: string | undefined) => string | null;
   /**
@@ -168,6 +173,8 @@ export function createClientApi(deps: ClientApiDeps): Express {
       // Aditivo: una app vieja lo ignora. Redondeado a décimas porque la app interpola entre
       // polls y no necesita más.
       formationGraceSeconds: conocido && deps.getFormationGraceSeconds ? redondearGracia(deps.getFormationGraceSeconds(guid)) : null,
+      vscSpeedLimitKmh: deps.getVscSpeedLimitKmh ? deps.getVscSpeedLimitKmh() : null,
+      vscSecondsLeft: deps.getVscSecondsLeft ? deps.getVscSecondsLeft() : null,
     });
   });
 

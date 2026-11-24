@@ -941,6 +941,7 @@ def pollLoop():
             applyServerStatus(data.get("status", {}))
             applyFormationSpeedLimit(data.get("formationSpeedLimitKmh"))
             applyFormationGrace(data.get("formationGraceSeconds"))
+            applyVsc(data.get("vscSpeedLimitKmh"), data.get("vscSecondsLeft"))
 
             for message in data.get("messages", []):
                 showMessage(message.get("text", ""))
@@ -1180,6 +1181,30 @@ formation_grace_seconds = None  # Lo ultimo que trajo el poll. None = no hay cue
 formation_grace_at = 0.0  # Cuando llego, para descontar lo que paso desde entonces.
 formation_grace_shown = ""  # Lo ultimo que se escribio, para no llamar a setText en cada frame.
 
+# Virtual Safety Car (servidor 1.48). Llega por el mismo semaforo del poll: `lightEvent.type` pasa
+# a "vsc" mientras esta desplegado y a "vscEnding" durante la cuenta hasta el verde, que es el
+# mismo "green" de la largada -- con su "green green green" y todo.
+#
+#   - RC Largada: "VSC" con las luces rojas parpadeando y el limite del VSC, que es OTRO numero
+#     que el de la formacion (tiene su propia pestana en el panel). La cuenta de la gracia es la
+#     misma de la formacion: el servidor manda la del VSC en `formationGraceSeconds`.
+#   - En "vscEnding": "VSC ENDING" y "Verde en N s", descontado localmente entre polls igual que la
+#     gracia.
+#   - RC Banderas: amarilla parpadeando mientras dure, aunque la Shared Memory diga 0 -- el juego no
+#     sabe nada de este VSC, lo maneja direccion de carrera desde el panel.
+#
+# La secuencia de audio de la formacion NO suena en el VSC: `pollLoop` solo la dispara con
+# "formation".
+VSC_TEXT = "VSC"
+VSC_ENDING_TEXT = "VSC ENDING"
+VSC_ENDING_COUNT_TEXT = "Verde en {0} s"
+VSC_STATES = ("vsc", "vscEnding")
+
+vsc_speed_limit_kmh = None
+vsc_seconds_left = None  # Lo ultimo que trajo el poll durante el VSC ending.
+vsc_seconds_at = 0.0
+vsc_ending_shown = ""
+
 # El color de cada bandera del juego. Las claves son los valores de `graphics.flag` de la Shared
 # Memory: 0 ninguna, 1 azul, 2 amarilla, 3 negra, 4 blanca, 5 a cuadros, 6 penalidad.
 #
@@ -1263,6 +1288,24 @@ def applyFormationGrace(value):
     formation_grace_at = time.time()
 
 
+def applyVsc(limit, seconds_left):
+    """Guarda lo que trajo el poll sobre el VSC. Lo dibujan renderFormationLines y renderGrace."""
+    global vsc_speed_limit_kmh, vsc_seconds_left, vsc_seconds_at
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = None
+    try:
+        seconds_left = float(seconds_left)
+    except (TypeError, ValueError):
+        seconds_left = None
+    vsc_seconds_left = seconds_left
+    vsc_seconds_at = time.time()
+    if limit != vsc_speed_limit_kmh:
+        vsc_speed_limit_kmh = limit
+        renderFormationLines()
+
+
 def renderGrace():
     """Escribe la cuenta regresiva, descontando lo que paso desde el ultimo poll. Solo en la
     vuelta de formacion: fuera de ella el watcher del servidor esta desarmado y no deberia llegar
@@ -1270,8 +1313,9 @@ def renderGrace():
     global formation_grace_shown
     if label_formation_grace is None:
         return
+    renderVscEnding()
     texto = ""
-    if light_state == "formation" and formation_grace_seconds is not None:
+    if light_state in ("formation", "vsc") and formation_grace_seconds is not None:
         restante = formation_grace_seconds - (time.time() - formation_grace_at)
         # Hacia arriba: "1" hasta el ultimo instante, y nunca un 0 mientras todavia no sanciono.
         texto = FORMATION_GRACE_TEXT.format(max(1, int(math.ceil(restante))))
@@ -1280,9 +1324,40 @@ def renderGrace():
         ac.setText(label_formation_grace, texto)
 
 
+def renderVscEnding():
+    """El segundo renglon durante el VSC ending: la cuenta hasta el verde, que baja sola entre
+    polls. Se llama desde acUpdate (via renderGrace), en el hilo del juego."""
+    global vsc_ending_shown
+    if label_formation_limit is None or light_state != "vscEnding":
+        vsc_ending_shown = ""
+        return
+    texto = ""
+    if vsc_seconds_left is not None:
+        restante = vsc_seconds_left - (time.time() - vsc_seconds_at)
+        texto = VSC_ENDING_COUNT_TEXT.format(max(0, int(math.ceil(restante))))
+    if texto != vsc_ending_shown:
+        vsc_ending_shown = texto
+        ac.setText(label_formation_limit, texto)
+
+
 def renderFormationLines():
     """Escribe (o borra) los dos renglones debajo de las luces. Estado, no aviso: ver el bloque de
     comentarios de FORMATION_LAP_TEXT."""
+    global vsc_ending_shown
+    if light_state == "vsc":
+        ac.setText(label_formation_lap, VSC_TEXT)
+        if vsc_speed_limit_kmh and vsc_speed_limit_kmh > 0:
+            ac.setText(label_formation_limit, "Limite de velocidad: {0} km/h".format(vsc_speed_limit_kmh))
+        else:
+            ac.setText(label_formation_limit, "")
+        return
+    if light_state == "vscEnding":
+        # El segundo renglon lo escribe renderVscEnding, que es el que lleva la cuenta: aca se
+        # borra el limite que quedo del VSC y se le avisa que tiene que volver a escribir.
+        ac.setText(label_formation_lap, VSC_ENDING_TEXT)
+        ac.setText(label_formation_limit, "")
+        vsc_ending_shown = ""
+        return
     if light_state != "formation":
         ac.setText(label_formation_lap, "")
         ac.setText(label_formation_limit, "")
@@ -1328,6 +1403,10 @@ def renderFlag(deltaT):
     # de la Shared Memory sino del semaforo del poll. En la vuelta de formacion `light_state` es
     # "formation", asi que esto tambien es lo que deja la ventana invisible durante la formacion
     # -- que era el sintoma concreto: salir detras del pace car con un cuadro verde al lado.
+    # Con VSC desplegado la bandera es amarilla, diga lo que diga el juego: ver VSC_TEXT.
+    if light_state in VSC_STATES:
+        flag = FLAG_YELLOW
+
     if flag == 0 and not enVerdeDeLargada():
         return
 
@@ -1406,7 +1485,8 @@ def renderAlert(deltaT):
 
 
 def renderLights(deltaT):
-    if light_state == "formation":
+    # En el VSC las luces vuelven a rojo parpadeando, igual que en la formacion.
+    if light_state == "formation" or light_state in VSC_STATES:
         if int(time.time() / LIGHTS_BLINK_SECONDS) % 2 != 0:
             return  # Mitad del ciclo apagadas: eso es el parpadeo.
         color = LIGHT_RED

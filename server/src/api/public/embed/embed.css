@@ -319,13 +319,19 @@
   box-shadow: 0 0 8px var(--red);
   animation: rc-embed-light-blink 0.5s step-end infinite;
 }
+.rc-embed__lights--vsc .rc-embed__light {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  animation: rc-embed-light-blink 0.5s step-end infinite;
+}
 .rc-embed__lights--green .rc-embed__light {
   background: var(--green);
   box-shadow: 0 0 8px var(--green);
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .rc-embed__lights--formation .rc-embed__light { animation: none; }
+  .rc-embed__lights--formation .rc-embed__light,
+  .rc-embed__lights--vsc .rc-embed__light { animation: none; }
 }
 @keyframes rc-embed-light-blink {
   50% { opacity: 0.2; }
@@ -343,6 +349,8 @@
 }
 .rc-embed__semaforo--formation { color: var(--yellow); }
 .rc-embed__semaforo--green { color: var(--green); }
+.rc-embed__semaforo--vsc,
+.rc-embed__semaforo--vscEnding { color: var(--yellow); }
 
 .rc-embed__botones {
   display: flex;
@@ -371,6 +379,21 @@
 }
 .rc-embed__race-live[hidden] {
   display: none;
+}
+/* "VSC DESPLEGADO" (1.48): amarillo y titilando, igual que .race-live.vsc en styles.css. */
+.rc-embed__race-live--vsc {
+  color: var(--yellow);
+  animation: rc-embed-light-blink 1s step-end infinite;
+}
+.rc-embed__race-live--vsc .rc-embed__race-live-dot {
+  background: var(--yellow);
+  animation: none;
+}
+.rc-embed__race-live-text {
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-embed__race-live--vsc { animation: none; }
 }
 .rc-embed__race-live-dot {
   width: 10px;

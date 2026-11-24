@@ -163,8 +163,11 @@
   var btnBegin = boton("Formación", function () { ejecutar("/formation/begin"); });
   var btnGreen = boton("Verde", function () { ejecutar("/formation/green"); });
   var btnReset = boton("Reiniciar", function () { ejecutar("/formation/reset"); }, "secondary");
+  // VSC (1.48): un solo botón que despliega o termina. Ver handleVscToggle en adminApi.ts.
+  var btnVsc = boton("VSC", function () { ejecutar("/vsc/toggle"); }, "secondary");
   botones.appendChild(btnBegin);
   botones.appendChild(btnGreen);
+  botones.appendChild(btnVsc);
   botones.appendChild(btnReset);
   var hint = el("span", "rc-embed__hint");
 
@@ -174,7 +177,9 @@
   var raceLive = el("span", "rc-embed__race-live");
   raceLive.hidden = true;
   raceLive.appendChild(el("span", "rc-embed__race-live-dot"));
-  raceLive.appendChild(document.createTextNode("Carrera en curso"));
+  var raceLiveText = el("span", "rc-embed__race-live-text");
+  raceLiveText.textContent = "Carrera en curso";
+  raceLive.appendChild(raceLiveText);
 
   start.appendChild(sessionIndicator);
   start.appendChild(lightsWrap);
@@ -342,11 +347,13 @@
   var tabPerfiles = botonTab("Perfiles");
   var tabApp = botonTab("App pilotos");
   var tabLargada = botonTab("Largada");
+  var tabVsc = botonTab("VSC");
   var tabPista = botonTab("Pista");
   var tabPit = botonTab("Pit lane");
   tabsBar.appendChild(tabPerfiles);
   tabsBar.appendChild(tabApp);
   tabsBar.appendChild(tabLargada);
+  tabsBar.appendChild(tabVsc);
   tabsBar.appendChild(tabPista);
   tabsBar.appendChild(tabPit);
 
@@ -355,6 +362,8 @@
   panelApp.hidden = true;
   var panelLargada = el("div", "rc-embed__tab-panel");
   panelLargada.hidden = true;
+  var panelVsc = el("div", "rc-embed__tab-panel");
+  panelVsc.hidden = true;
   var panelPista = el("div", "rc-embed__tab-panel");
   panelPista.hidden = true;
   var panelPit = el("div", "rc-embed__tab-panel");
@@ -364,6 +373,7 @@
     { boton: tabPerfiles, panel: panelPerfiles },
     { boton: tabApp, panel: panelApp },
     { boton: tabLargada, panel: panelLargada },
+    { boton: tabVsc, panel: panelVsc },
     { boton: tabPista, panel: panelPista },
     { boton: tabPit, panel: panelPit },
   ];
@@ -464,6 +474,45 @@
   campoFEscalation.addEventListener("change", mostrarSegundosF);
   campoFPenaltyType.addEventListener("change", mostrarSegundosF);
 
+  // -- VSC (1.48) -- mismos campos que Largada, sobre `config.vsc`, más la duración del VSC ending.
+  var campoVEnding = campoNumero();
+  campoVEnding.min = "1";
+  campoVEnding.max = "60";
+  var campoVThreshold = campoNumero();
+  var campoVTolerance = campoNumero();
+  campoVTolerance.inputMode = "decimal";
+  var campoVGrace = campoNumero();
+  var campoVPenaltyType = selectSancion();
+  var campoVEscalation = selectEscalacion();
+  var campoVTimePenalty = campoNumero();
+  campoVTimePenalty.min = "1";
+  campoVTimePenalty.max = "600";
+  var filaVTimePenalty = filaCampo("Segundos de penalización", campoVTimePenalty);
+  filaVTimePenalty.hidden = true;
+  var btnGuardarVsc = boton("Guardar", undefined);
+  var tituloVsc = document.createElement("h3");
+  tituloVsc.textContent = "Virtual Safety Car";
+  var ayudaVsc = document.createElement("p");
+  ayudaVsc.className = "rc-embed__hint";
+  ayudaVsc.textContent =
+    "Se despliega con el botón VSC, con la carrera en curso. Apretándolo de nuevo empieza el VSC ending, y el verde llega solo después de los segundos de abajo.";
+  panelVsc.appendChild(tituloVsc);
+  panelVsc.appendChild(ayudaVsc);
+  panelVsc.appendChild(filaCampo("Duración del VSC ending (s)", campoVEnding));
+  panelVsc.appendChild(filaCampo("Velocidad máxima (km/h)", campoVThreshold));
+  panelVsc.appendChild(filaCampo("Tiempo de gracia (s)", campoVTolerance));
+  panelVsc.appendChild(filaCampo("Vueltas para cumplirla", campoVGrace));
+  panelVsc.appendChild(filaCampo("Sanción", campoVPenaltyType));
+  panelVsc.appendChild(filaCampo("Si no la cumple", campoVEscalation));
+  panelVsc.appendChild(filaVTimePenalty);
+  panelVsc.appendChild(btnGuardarVsc);
+
+  function mostrarSegundosV() {
+    filaVTimePenalty.hidden = campoVPenaltyType.value !== "TIME" && campoVEscalation.value !== "TIME_PENALTY";
+  }
+  campoVEscalation.addEventListener("change", mostrarSegundosV);
+  campoVPenaltyType.addEventListener("change", mostrarSegundosV);
+
   // -- Pista --
   var tituloPista = document.createElement("h3");
   tituloPista.textContent = "Qué se controla en pista";
@@ -555,6 +604,12 @@
     buildFormationPayload
   );
   registrarFormReglas(
+    "vsc",
+    btnGuardarVsc,
+    [campoVEnding, campoVThreshold, campoVTolerance, campoVGrace, campoVPenaltyType, campoVEscalation, campoVTimePenalty],
+    buildVscPayload
+  );
+  registrarFormReglas(
     "pit",
     btnGuardarPit,
     [campoPZoneStart, campoPZoneEnd, campoPThreshold, campoPTolerance, campoPGrace, campoPStopGo, campoPPenaltyType, campoPEscalation, campoPTimePenalty],
@@ -570,6 +625,7 @@
   modalReglas.appendChild(panelPerfiles);
   modalReglas.appendChild(panelApp);
   modalReglas.appendChild(panelLargada);
+  modalReglas.appendChild(panelVsc);
   modalReglas.appendChild(panelPista);
   modalReglas.appendChild(panelPit);
   modalReglas.appendChild(reglasAviso);
@@ -968,6 +1024,22 @@
     };
   }
 
+  function buildVscPayload() {
+    return {
+      vsc: {
+        endingSeconds: Number(campoVEnding.value),
+        penalty: {
+          speedThresholdKmh: Number(campoVThreshold.value),
+          toleranceSeconds: Number(campoVTolerance.value),
+          graceLaps: Number(campoVGrace.value),
+          penaltyType: campoVPenaltyType.value,
+          escalation: campoVEscalation.value,
+          timePenaltySeconds: Number(campoVTimePenalty.value),
+        },
+      },
+    };
+  }
+
   function buildPitPayload() {
     return {
       pit: {
@@ -1242,6 +1314,19 @@
     filaFTimePenalty.hidden =
       config.formation.penalty.penaltyType !== "TIME" && config.formation.penalty.escalation !== "TIME_PENALTY";
 
+    // Un servidor de antes de la 1.48 no manda `vsc`: los campos quedan vacíos en vez de romper.
+    if (config.vsc) {
+      campoVEnding.value = config.vsc.endingSeconds;
+      campoVThreshold.value = config.vsc.penalty.speedThresholdKmh;
+      campoVTolerance.value = config.vsc.penalty.toleranceSeconds;
+      campoVGrace.value = config.vsc.penalty.graceLaps;
+      campoVPenaltyType.value = config.vsc.penalty.penaltyType;
+      campoVEscalation.value = config.vsc.penalty.escalation;
+      campoVTimePenalty.value = config.vsc.penalty.timePenaltySeconds != null ? config.vsc.penalty.timePenaltySeconds : 5;
+      filaVTimePenalty.hidden =
+        config.vsc.penalty.penaltyType !== "TIME" && config.vsc.penalty.escalation !== "TIME_PENALTY";
+    }
+
     campoPZoneStart.value = config.pit.zone.splineStart;
     campoPZoneEnd.value = config.pit.zone.splineEnd;
     campoPThreshold.value = config.pit.penalty.speedThresholdKmh;
@@ -1296,6 +1381,7 @@
     disconnect: "se desconectó en carrera",
     "pit-speeding": "exceso en pit lane",
     "formation-speeding": "exceso en la formación",
+    "vsc-speeding": "exceso con VSC",
   };
 
   function tituloIncidente(incident, carId) {
@@ -1689,6 +1775,7 @@
   function applyLightsClass() {
     var sosteniendoVerde = lightsTrackedState === "green" && Date.now() < lightsGreenUntil;
     lights.classList.toggle("rc-embed__lights--formation", lightsTrackedState === "formation");
+    lights.classList.toggle("rc-embed__lights--vsc", lightsTrackedState === "vsc" || lightsTrackedState === "vscEnding");
     lights.classList.toggle("rc-embed__lights--green", sosteniendoVerde);
   }
 
@@ -1781,16 +1868,18 @@
   // ----------------------------------------------------------------------------------- render
 
   var START_ACTIONS = {
-    idle: { begin: true, green: false, reset: false },
-    formation: { begin: false, green: true, reset: true },
-    green: { begin: false, green: false, reset: true },
+    idle: { begin: true, green: false, reset: false, vsc: false },
+    formation: { begin: false, green: true, reset: true, vsc: false },
+    green: { begin: false, green: false, reset: true, vsc: true },
+    vsc: { begin: false, green: false, reset: true, vsc: true },
+    vscEnding: { begin: false, green: false, reset: true, vsc: false },
   };
 
   function renderStart(state) {
     var lightState = state.lightState;
     renderLights(lightState);
     semaforo.className = "rc-embed__semaforo rc-embed__semaforo--" + lightState;
-    var labels = { idle: "Esperando", formation: "Formación", green: "VERDE" };
+    var labels = { idle: "Esperando", formation: "Formación", green: "VERDE", vsc: "VSC", vscEnding: "VSC ending" };
     semaforo.textContent = labels[lightState] || lightState;
 
     var esCarrera = !state.session || state.session.sessionType === RACE_SESSION_TYPE;
@@ -1805,11 +1894,22 @@
     btnBegin.disabled = !allowed.begin || !operable;
     btnGreen.disabled = !allowed.green || !operable;
     btnReset.disabled = !allowed.reset || !conectado;
+    btnVsc.disabled = !allowed.vsc || !operable;
+    btnVsc.textContent = lightState === "vsc" ? "Terminar VSC" : "VSC";
 
     // Mismo criterio que renderStart en app.js: el aviso de "Carrera en curso" depende solo del
     // semáforo, no de la sesión — así un admin que recién abrió el embed en medio de una carrera
     // lo ve igual, sin esperar el primer SESSION_INFO.
-    raceLive.hidden = lightState !== "green";
+    // Con VSC el mismo aviso cambia de texto y se pone amarillo titilando (mismo criterio que app.js).
+    var enVsc = lightState === "vsc" || lightState === "vscEnding";
+    raceLive.hidden = lightState !== "green" && !enVsc;
+    raceLive.classList.toggle("rc-embed__race-live--vsc", enVsc);
+    raceLiveText.textContent =
+      lightState === "vsc"
+        ? "VSC desplegado"
+        : lightState === "vscEnding"
+          ? "VSC ending" + (state.vscSecondsLeft != null ? " — verde en " + state.vscSecondsLeft + " s" : "")
+          : "Carrera en curso";
 
     // Fuera de carrera no hay parrilla que formar ni nadie a quien sancionar por adelantarse —
     // mismo criterio que app.js: se vacía el renglón en vez de explicarlo, los botones ya quedan
@@ -1966,7 +2066,7 @@
     sincronizarKebab();
   }
 
-  var ENGINE_LABELS = { formation: "Largada", pit: "Pit lane", steward: "Comisario" };
+  var ENGINE_LABELS = { formation: "Largada", pit: "Pit lane", steward: "Comisario", vsc: "VSC" };
   var PENALTY_TYPE_LABELS = { DT: "Drive-Through", SG: "Stop & Go", BALLAST: "Lastre", TIME: "Tiempo" };
   var PENALTY_STATUS_LABELS = {
     servingWindow: "pendiente",
@@ -1980,6 +2080,7 @@
       .concat(state.formationPenalties.map(function (p) { return Object.assign({ engine: "formation" }, p); }))
       .concat(state.pitPenalties.map(function (p) { return Object.assign({ engine: "pit" }, p); }))
       .concat(state.stewardPenalties.map(function (p) { return Object.assign({ engine: "steward" }, p); }))
+      .concat((state.vscPenalties || []).map(function (p) { return Object.assign({ engine: "vsc" }, p); }))
       .sort(function (a, b) { return b.createdAt - a.createdAt; });
   }
 

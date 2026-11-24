@@ -342,6 +342,32 @@ function setupForms() {
   $("f-escalation").addEventListener("change", mostrarSegundosF);
   $("f-penalty-type").addEventListener("change", mostrarSegundosF);
 
+  // VSC (1.48): mismo formulario que Largada, sobre `config.vsc`.
+  registerForm(
+    "vsc",
+    "btn-save-vsc",
+    ["v-ending", "v-threshold", "v-tolerance", "v-grace", "v-penalty-type", "v-escalation", "v-time-penalty"],
+    () => ({
+      vsc: {
+        endingSeconds: num("v-ending"),
+        penalty: {
+          speedThresholdKmh: num("v-threshold"),
+          toleranceSeconds: num("v-tolerance"),
+          graceLaps: num("v-grace"),
+          penaltyType: $("v-penalty-type").value,
+          escalation: $("v-escalation").value,
+          timePenaltySeconds: num("v-time-penalty"),
+        },
+      },
+    })
+  );
+  const mostrarSegundosV = () => {
+    $("v-time-penalty-row").hidden =
+      $("v-penalty-type").value !== "TIME" && $("v-escalation").value !== "TIME_PENALTY";
+  };
+  $("v-escalation").addEventListener("change", mostrarSegundosV);
+  $("v-penalty-type").addEventListener("change", mostrarSegundosV);
+
   registerForm(
     "pit",
     "btn-save-pit",
@@ -701,6 +727,19 @@ function fillConfigForm(config) {
   $("f-time-penalty").value = config.formation.penalty.timePenaltySeconds ?? 5;
   $("f-time-penalty-row").hidden =
     config.formation.penalty.penaltyType !== "TIME" && config.formation.penalty.escalation !== "TIME_PENALTY";
+
+  // Un servidor de antes de la 1.48 no manda `vsc`: los campos quedan vacíos en vez de romper.
+  if (config.vsc) {
+    $("v-ending").value = config.vsc.endingSeconds;
+    $("v-threshold").value = config.vsc.penalty.speedThresholdKmh;
+    $("v-tolerance").value = config.vsc.penalty.toleranceSeconds;
+    $("v-grace").value = config.vsc.penalty.graceLaps;
+    $("v-penalty-type").value = config.vsc.penalty.penaltyType;
+    $("v-escalation").value = config.vsc.penalty.escalation;
+    $("v-time-penalty").value = config.vsc.penalty.timePenaltySeconds ?? 5;
+    $("v-time-penalty-row").hidden =
+      config.vsc.penalty.penaltyType !== "TIME" && config.vsc.penalty.escalation !== "TIME_PENALTY";
+  }
 
   $("p-zone-start").value = config.pit.zone.splineStart;
   $("p-zone-end").value = config.pit.zone.splineEnd;
@@ -1536,13 +1575,13 @@ const PENALTY_STATUS = {
   revoked: ["neutral", "anulada"],
 };
 
-const ENGINE_LABELS = { formation: "Largada", pit: "Pit lane", steward: "Comisario" };
+const ENGINE_LABELS = { formation: "Largada", pit: "Pit lane", steward: "Comisario", vsc: "VSC" };
 
 /** Cómo se lee cada tipo de sanción. Se muestra junto al motivo porque "+10s" y "Drive-Through"
  * son cosas muy distintas y hasta ahora la tabla no las distinguía. */
 const PENALTY_TYPE_LABELS = { DT: "Drive-Through", SG: "Stop & Go", BALLAST: "Lastre", TIME: "Tiempo" };
 
-function renderPenalties(formationPenalties, pitPenalties, stewardPenalties) {
+function renderPenalties(formationPenalties, pitPenalties, stewardPenalties, vscPenalties) {
   const body = $("penalties-body");
   clearChildren(body);
 
@@ -1552,6 +1591,7 @@ function renderPenalties(formationPenalties, pitPenalties, stewardPenalties) {
     // Las que aplica el comisario a mano desde la bandeja. Sin esto, apretar "Sancionar" no se
     // reflejaba en ningún lado.
     .concat((stewardPenalties || []).map((p) => ({ ...p, engine: "steward" })))
+    .concat((vscPenalties || []).map((p) => ({ ...p, engine: "vsc" })))
     .sort((a, b) => b.createdAt - a.createdAt);
 
   $("penalties-empty").hidden = all.length > 0;
@@ -1630,7 +1670,8 @@ function revokeButton(penalty) {
  * `armedRevoke` ya es null cuando `renderPenalties` lo vuelve a crear. */
 function desarmarAnulacion() {
   armedRevoke = null;
-  if (lastState) renderPenalties(lastState.formationPenalties, lastState.pitPenalties, lastState.stewardPenalties);
+  if (lastState)
+    renderPenalties(lastState.formationPenalties, lastState.pitPenalties, lastState.stewardPenalties, lastState.vscPenalties);
 }
 
 function appendCell(tr, text, className) {
@@ -1667,6 +1708,7 @@ const INCIDENT_KIND_LABELS = {
   disconnect: "se desconectó en carrera",
   "pit-speeding": "exceso en pit lane",
   "formation-speeding": "exceso en la formación",
+  "vsc-speeding": "exceso con VSC",
 };
 
 /**
@@ -1690,7 +1732,9 @@ const INCIDENT_KIND_LABELS = {
 const CUT_KINDS = ["track-limits", "cut-lap"];
 const CHOQUE_KINDS = ["car-contact", "env-collision"];
 const PIT_KINDS = ["pit-speeding"];
-const LARGADA_KINDS = ["formation-speeding"];
+// El exceso con VSC (1.48) cuenta acá: es el mismo tipo de hecho —un límite impuesto por
+// dirección de carrera— y comparte la entrada del catálogo con el de la formación.
+const LARGADA_KINDS = ["formation-speeding", "vsc-speeding"];
 
 const INCIDENT_STATUS = {
   dismissed: ["neutral", "descartado"],
@@ -2162,6 +2206,7 @@ function applyLightsClass() {
   const box = $("lights");
   const sosteniendoVerde = lightsTrackedState === "green" && Date.now() < lightsGreenUntil;
   box.classList.toggle("formation", lightsTrackedState === "formation");
+  box.classList.toggle("vsc", lightsTrackedState === "vsc" || lightsTrackedState === "vscEnding");
   box.classList.toggle("green", sosteniendoVerde);
 }
 
@@ -2238,18 +2283,21 @@ function renderSessionIndicator(session) {
 /** Qué acciones tienen sentido en cada estado. Antes los tres botones estaban siempre activos y
  * el servidor ignoraba en silencio los que no correspondían, sin ningún feedback. */
 const START_ACTIONS = {
-  idle: { begin: true, green: false, reset: false },
-  formation: { begin: false, green: true, reset: true },
-  green: { begin: false, green: false, reset: true },
+  idle: { begin: true, green: false, reset: false, vsc: false },
+  formation: { begin: false, green: true, reset: true, vsc: false },
+  green: { begin: false, green: false, reset: true, vsc: true },
+  // VSC (1.48): el mismo botón lo termina. Durante el VSC ENDING no hace nada: el verde llega solo.
+  vsc: { begin: false, green: false, reset: true, vsc: true },
+  vscEnding: { begin: false, green: false, reset: true, vsc: false },
 };
 
 /** El tipo de sesión "carrera" del protocolo de AC. Ver `RACE_SESSION_TYPE` en adminApi.ts. */
 const RACE_SESSION_TYPE = 3;
 
-function renderStart(lightState, session, network) {
+function renderStart(lightState, session, network, vscSecondsLeft) {
   const semaforo = $("semaforo");
   semaforo.className = "semaforo " + lightState;
-  const labels = { idle: "Esperando", formation: "Formación", green: "VERDE" };
+  const labels = { idle: "Esperando", formation: "Formación", green: "VERDE", vsc: "VSC", vscEnding: "VSC ending" };
   semaforo.textContent = labels[lightState] || lightState;
 
   // Fuera de carrera la tarjeta entera se apaga. En práctica y clasificación no hay parrilla que
@@ -2279,12 +2327,25 @@ function renderStart(lightState, session, network) {
   // alguien armó una formación y el servidor cambió de sesión tiene que poder apagarla. Sin señal
   // sí se bloquea, porque tampoco hay a quién mandarle el reinicio.
   $("btn-reset").disabled = !allowed.reset || !conectado;
+  $("btn-vsc").disabled = !allowed.vsc || !operable;
+  $("btn-vsc").textContent = lightState === "vsc" ? "Terminar VSC" : "VSC";
 
   // Con el verde dado, el renglón de ayuda se calla y habla el aviso grande: a esa altura el
   // admin ya no necesita instrucciones, necesita confirmar de un vistazo que la carrera corre.
-  const racing = lightState === "green";
+  //
+  // Con VSC el mismo aviso cambia de texto y de color en vez de sumar otro: es el estado de la
+  // carrera, y la carrera sigue en curso.
+  const enVsc = lightState === "vsc" || lightState === "vscEnding";
+  const racing = lightState === "green" || enVsc;
   card.classList.toggle("racing", racing);
   $("race-live").hidden = !racing;
+  $("race-live").classList.toggle("vsc", enVsc);
+  $("race-live-text").textContent =
+    lightState === "vsc"
+      ? "VSC desplegado"
+      : lightState === "vscEnding"
+        ? "VSC ending" + (vscSecondsLeft != null ? " — verde en " + vscSecondsLeft + " s" : "")
+        : "Carrera en curso";
 
   if (!operable) {
     $("start-hint").textContent = "";
@@ -2372,7 +2433,7 @@ async function refresh() {
     wizardOpen = false;
   }
 
-  renderStart(state.lightState, state.session, state.network);
+  renderStart(state.lightState, state.session, state.network, state.vscSecondsLeft);
   renderLights(state.lightState);
   renderSessionIndicator(state.session);
   renderServidorCircuito(state.session);
@@ -2383,7 +2444,7 @@ async function refresh() {
   renderTiming(state.cars);
   renderNetwork(state.network);
   renderMode(state.shadowMode);
-  renderPenalties(state.formationPenalties, state.pitPenalties, state.stewardPenalties);
+  renderPenalties(state.formationPenalties, state.pitPenalties, state.stewardPenalties, state.vscPenalties);
   renderEndEvent(state);
 
   renderPitZoneSuggestion(state.pitZoneSuggestion || null);
@@ -2398,6 +2459,7 @@ function wireButtons() {
   $("btn-begin").addEventListener("click", action("/api/formation/begin"));
   $("btn-green").addEventListener("click", action("/api/formation/green"));
   $("btn-reset").addEventListener("click", action("/api/formation/reset"));
+  $("btn-vsc").addEventListener("click", action("/api/vsc/toggle"));
   $("btn-end-event").addEventListener("click", onEndEventClick);
 
   $("btn-test-network").addEventListener("click", async (e) => {

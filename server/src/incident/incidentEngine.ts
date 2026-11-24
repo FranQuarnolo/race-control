@@ -19,7 +19,10 @@ export type IncidentKind =
   | "wrong-way"
   | "disconnect"
   | "pit-speeding"
-  | "formation-speeding";
+  | "formation-speeding"
+  /** Exceso durante el Virtual Safety Car (1.48). Comparte la entrada del catálogo con el de la
+   * formación: son la misma infracción —pasarse de un límite que impuso dirección de carrera—. */
+  | "vsc-speeding";
 
 /** Los que no nacen de una colisión: los reportan los watchers y el tracker de límites. */
 export type ObservedKind = Exclude<IncidentKind, "car-contact" | "env-collision">;
@@ -52,6 +55,7 @@ const TYPE_OF_KIND: Record<IncidentKind, InfractionType | null> = {
   disconnect: "disconnectDuringRace",
   "pit-speeding": "pitSpeeding",
   "formation-speeding": "formationSpeeding",
+  "vsc-speeding": "formationSpeeding",
   "telemetry-mismatch": null,
 };
 

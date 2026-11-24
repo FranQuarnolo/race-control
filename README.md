@@ -43,7 +43,7 @@ da la variante de React/Next.js, y tiene la tabla de "si ves esto, pasó esto ot
 
 | Para | Qué bajar |
 |---|---|
-| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.9** |
+| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.10** |
 
 ## 🏎️ Para el piloto
 

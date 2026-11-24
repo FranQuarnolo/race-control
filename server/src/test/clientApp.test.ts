@@ -310,3 +310,13 @@ test("RC Largada muestra la cuenta de la gracia y la descuenta entre polls", () 
   assert.ok(/renderGrace\(\)/.test(ejecutable.split("def acUpdate")[1] || ""), "acUpdate dejó de dibujar la cuenta");
   assert.ok(/label_formation_grace = ac\.addLabel\(window_lights/.test(ejecutable), "falta el renglón de la gracia en RC Largada");
 });
+
+test("la app maneja el VSC: luces, límite, cuenta del ending y bandera amarilla", () => {
+  assert.ok(/applyVsc\(data\.get\("vscSpeedLimitKmh"\), data\.get\("vscSecondsLeft"\)\)/.test(ejecutable), "el poll dejó de leer el VSC");
+  const flag = ejecutable.match(/def renderFlag\(deltaT\):[\s\S]*?(?=\ndef )/);
+  assert.ok(flag && /light_state in VSC_STATES:\s*\n\s*flag = FLAG_YELLOW/.test(flag[0]), "RC Banderas ya no pinta amarilla con VSC");
+  const lights = ejecutable.match(/def renderLights\(deltaT\):[\s\S]*?(?=\ndef )/);
+  assert.ok(lights && /VSC_STATES/.test(lights[0]), "RC Largada ya no prende las luces con VSC");
+  // La secuencia de audio de la formación no tiene que sonar en el VSC.
+  assert.ok(/if state == "formation":\s*\n\s*startFormationAudioSequence\(\)/.test(ejecutable), "el audio de formación dejó de estar atado a 'formation'");
+});

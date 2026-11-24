@@ -307,7 +307,7 @@ quiera:
 |---|---|
 | **RC Mensajes** | De arriba abajo: el estado de la conexión en gris chiquito, el contador de cortes (`CUTS: 3/5`) en amarillo y grande, la sanción pendiente en naranja, y los avisos de dirección de carrera en rojo. |
 | **RC Banderas** | Un cuadro de color con la bandera vigente: amarillo (parpadeando), azul, negro, blanco, el tablero de cuadros o el círculo naranja de la de penalidad. Y el verde, los 3 segundos que siguen a la largada. |
-| **RC Largada** | Cinco luces. Rojas parpadeando durante la formación, verdes con el aviso sonoro al verde, y después nada. |
+| **RC Largada** | Cinco luces. Rojas parpadeando durante la formación y el VSC, verdes con el aviso sonoro al verde, y después nada. Si el piloto se pasa del límite, la cuenta de la gracia ("BAJA LA VELOCIDAD: N"). |
 | **RC Alerta** | Un marco rojo pulsante, solo cuando falta la credencial. |
 
 **Desde la 1.1 son transparentes y no tienen barra de título.** En reposo no se ve ninguna. Para
@@ -353,7 +353,10 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
 - **La banda de largada**: iniciar formación, verde, reiniciar. El semáforo se pone en verde con
   aviso sonoro para todos los pilotos que tengan la app. Desde la **0.8** se atenúa y se
   deshabilita en práctica y clasificación, porque la largada es cosa de la carrera. "Reiniciar"
-  queda siempre disponible: es la salida de emergencia.
+  queda siempre disponible: es la salida de emergencia. Desde la **1.48**, con la carrera en
+  curso aparece **VSC**: lo despliega (límite de velocidad propio, que se configura en la pestaña
+  VSC de Reglas) y, apretado de nuevo, arranca el **VSC ending**, que da el verde solo a los
+  segundos configurados.
 - **La torre de tiempos**: posición, auto, velocidad, vueltas (`Laps`), última y mejor vuelta,
   paradas, compuesto, combustible y ping. Un click en un piloto lo resalta en el mapa; los tres
   puntitos del final de la fila abren el kick, que pide confirmación. **PIT** aparece tanto en la

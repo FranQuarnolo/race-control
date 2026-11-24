@@ -105,6 +105,7 @@ const INCIDENT_LABELS: Record<string, string> = {
   disconnect: "Se desconectó en carrera",
   "pit-speeding": "Exceso de velocidad en pit lane",
   "formation-speeding": "Exceso de velocidad en la formación",
+  "vsc-speeding": "Exceso de velocidad con VSC",
 };
 
 const INCIDENT_STATUS_LABELS: Record<string, string> = {

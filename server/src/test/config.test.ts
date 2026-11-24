@@ -190,7 +190,7 @@ test("la firma de las reglas no depende del orden de las claves", () => {
   // detectaría nada. Es el modo de falla peor: la validación existe y no hace nada.
   const a = snapshotRules(parseConfig({}));
   const b = snapshotRules(parseConfig({}));
-  const desordenado = JSON.parse(JSON.stringify({ presence: b.presence, pit: b.pit, formation: b.formation, infractions: b.infractions }));
+  const desordenado = JSON.parse(JSON.stringify({ vsc: b.vsc, presence: b.presence, pit: b.pit, formation: b.formation, infractions: b.infractions }));
   assert.equal(rulesFingerprint(a), rulesFingerprint(desordenado));
 });
 

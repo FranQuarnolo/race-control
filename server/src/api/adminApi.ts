@@ -27,6 +27,9 @@ export interface AdminApiDeps {
   formationPenaltyEngine: PenaltyEngine;
   pitPenaltyEngine: PenaltyEngine;
   stewardPenaltyEngine: PenaltyEngine;
+  /** Sanciones por exceso con Virtual Safety Car (1.48). Opcional para que los tests que arman la
+   * API a mano no tengan que conocerlo. */
+  vscPenaltyEngine?: PenaltyEngine;
   presenceWatchdog: PresenceWatchdog;
   connectivity: ConnectivityManager;
   udpClient: AcUdpClient;
@@ -68,7 +71,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.47";
+export const APP_VERSION = "1.48";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -140,6 +143,8 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       leagueName: deps.config.leagueName,
       shadowMode: deps.config.shadowMode,
       lightState: deps.formationStart.getLightState(),
+      /** Segundos que faltan para el verde automático durante el "VSC ENDING"; `null` fuera de él. */
+      vscSecondsLeft: deps.formationStart.getVscSecondsLeft(),
       phase: deps.getPhase(),
       cars: roster.map((car) => {
         const telemetry = deps.telemetryStore.get(car.driverGuid);
@@ -178,6 +183,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       formationPenalties: deps.formationPenaltyEngine.getAll(),
       pitPenalties: deps.pitPenaltyEngine.getAll(),
       stewardPenalties: deps.stewardPenaltyEngine.getAll(),
+      vscPenalties: deps.vscPenaltyEngine?.getAll() ?? [],
       incidents: deps.incidentEngine.getAll(),
       /** Contador aparte para el badge de la barra: la pantalla principal no muestra la bandeja,
        * así que sin esto un incidente nuevo pasaría desapercibido hasta entrar a /sanciones. */
@@ -254,6 +260,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       formationPenalties: full.formationPenalties.map(sinGuid),
       pitPenalties: full.pitPenalties.map(sinGuid),
       stewardPenalties: full.stewardPenalties.map(sinGuid),
+      vscPenalties: full.vscPenalties.map(sinGuid),
       network: {
         ...networkSinInterno,
         publicIpConfigured: Boolean(publicIp),
@@ -471,6 +478,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       activeProfileId: config.activeProfileId,
       presence: config.presence,
       formation: config.formation,
+      vsc: config.vsc,
       infractions: config.infractions,
       pit: config.pit,
       shadowMode: config.shadowMode,
@@ -526,6 +534,25 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   app.post("/api/formation/begin", handleFormationBegin);
   app.post("/api/formation/green", handleFormationGreen);
   app.post("/api/formation/reset", handleFormationReset);
+
+  /**
+   * Virtual Safety Car (1.48): un solo botón. Con la carrera en curso lo despliega; con el VSC
+   * desplegado arranca el "VSC ENDING", que termina en verde solo. En cualquier otro estado es un
+   * 409 con la razón, no un "ok" que no hizo nada.
+   */
+  function handleVscToggle(_req: express.Request, res: Response): void {
+    if (!soloEnCarrera(res)) return;
+    if (!deps.formationStart.toggleVsc()) {
+      res.status(409).json({
+        ok: false,
+        error: "El VSC se despliega con la carrera en curso, y se termina mientras está desplegado.",
+      });
+      return;
+    }
+    res.json({ ok: true, lightState: deps.formationStart.getLightState() });
+  }
+
+  app.post("/api/vsc/toggle", handleVscToggle);
 
   /** Las que el comisario puede aplicar a mano. `TIME` es la más habitual en una liga: se suma al
    * resultado final sin interrumpir la carrera. */
@@ -601,7 +628,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    */
   function handleRevokePenalty(req: express.Request, res: Response): void {
     const id = String(req.params.id);
-    for (const engine of [deps.formationPenaltyEngine, deps.pitPenaltyEngine, deps.stewardPenaltyEngine]) {
+    const engines = [deps.formationPenaltyEngine, deps.pitPenaltyEngine, deps.stewardPenaltyEngine];
+    if (deps.vscPenaltyEngine) engines.push(deps.vscPenaltyEngine);
+    for (const engine of engines) {
       const revoked = engine.revoke(id);
       if (revoked) {
         res.json({ ok: true, penalty: revoked });
@@ -696,6 +725,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
         ["formation", deps.formationPenaltyEngine.getAll()],
         ["pit", deps.pitPenaltyEngine.getAll()],
         ["steward", deps.stewardPenaltyEngine.getAll()],
+        ["vsc", deps.vscPenaltyEngine?.getAll() ?? []],
       ],
       incidents: deps.incidentEngine.getAll(),
       now: Date.now(),
@@ -724,6 +754,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   embedRouter.post("/formation/begin", handleFormationBegin);
   embedRouter.post("/formation/green", handleFormationGreen);
   embedRouter.post("/formation/reset", handleFormationReset);
+  embedRouter.post("/vsc/toggle", handleVscToggle);
   embedRouter.post("/cars/:carId/kick", handleCarKick);
   embedRouter.post("/evento/terminar", handleTerminarEvento);
 
