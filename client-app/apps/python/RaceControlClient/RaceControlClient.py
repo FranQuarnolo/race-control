@@ -207,6 +207,19 @@ FORMATION_NO_OVERTAKING_DELAY_SECONDS = 40.0
 # dato de la instalacion, no de una partida: tiene que sobrevivir a reinstalar el juego y no tiene
 # que ver con el circuito ni con el auto.
 FIRST_RUN_MARKER_PATH = os.path.join(os.path.dirname(__file__), "ventanas_posicionadas.flag")
+# Marca de que el piloto ya acomodo las ventanas a mano (ver `resaltarVentanas`). Es otra marca y
+# no la de arriba a proposito: aquella dice "ya les di la posicion de fabrica", esta dice "el piloto
+# ya las encontro". Quien venia de una version anterior tiene la primera pero no esta, y vuelve a
+# ver las ventanas resaltadas una vez -- que es justo lo que hace falta, porque esos son los que
+# reportaron que no las encontraban.
+ARRANGED_MARKER_PATH = os.path.join(os.path.dirname(__file__), "ventanas_acomodadas.flag")
+# Cuanto fondo llevan las ventanas mientras estan resaltadas. Lo bastante oscuro para que se vean
+# sobre cualquier cielo, lo bastante claro para que no parezcan el recuadro negro de la 1.0.
+HIGHLIGHT_OPACITY = 0.6
+# Cada cuanto se mira si el piloto movio alguna ventana, y cuantos pixeles cuentan como "movida"
+# (AC a veces reporta la misma posicion con un pixel de diferencia entre lecturas).
+ARRANGED_CHECK_SECONDS = 1.0
+ARRANGED_MOVE_PX = 3
 # La chicharra del corte. Dos bips cortos y ascendentes, de 220 ms en total: suena en el instante
 # del corte, con el auto todavia fuera de pista, y ahi lo ultimo que hace falta es un sonido que
 # tape el del motor medio segundo.
@@ -232,6 +245,23 @@ BACKEND_ANNOUNCE_SEPARATOR = "|"
 # termina siendo indistinguible de uno nuevo, que es el modo de fallo de este tipo de overlay.
 MESSAGE_LINES = 3
 MESSAGE_TTL_SECONDS = 25.0
+
+# Renglones DIBUJADOS para esos avisos, que son mas que los avisos: desde la 1.46 un aviso largo se
+# parte en dos renglones en vez de salirse del recuadro. Antes cada aviso era una sola etiqueta de
+# AC, que no corta nunca: un "PENALIDAD: Comisario: toque con ... Tenes 3 vuelta(s)..." seguia
+# derecho por fuera de la ventana y sobre la pista. Con cinco renglones entran tres avisos aunque
+# dos de ellos sean largos; si no entran, se cae el mas viejo, igual que con la cola.
+MESSAGE_ROWS = 5
+MESSAGE_ROW_HEIGHT = 26
+# Cuantos caracteres entran en un renglon de 448 px. AC no expone el ancho de un texto, asi que es
+# una estimacion por lo bajo para la letra de 20 px (las mayusculas son las anchas, y los avisos
+# del servidor vienen en buena parte en mayusculas). Corto de mas es un renglon con aire; largo de
+# mas es volver al bug.
+MESSAGE_MAX_CHARS = 36
+PENDING_MAX_CHARS = 42
+# Un aviso nunca ocupa mas de esto. Lo que sobra se corta con "...": un aviso de cuatro renglones a
+# 250 km/h no lo lee nadie, y el texto completo ya llego tambien por el chat.
+MESSAGE_MAX_ROWS_PER_MESSAGE = 3
 
 # Rojo de los avisos y gris del renglon de estado. El rojo es el mismo que usa el panel para las
 # sanciones; el gris del estado es deliberadamente apagado y en letra chica, porque "conectado" es
@@ -296,8 +326,39 @@ poll_thread_running = False
 telemetry_snapshot = None
 
 
-def ocultarChrome(window):
-    """Deja una ventana sin fondo, sin borde, sin titulo y sin icono.
+def ventanasResaltadas():
+    """True mientras el piloto no haya acomodado las ventanas a mano. Ver `ocultarChrome`."""
+    return not os.path.exists(ARRANGED_MARKER_PATH)
+
+
+# (ventana, titulo) de todas las ventanas creadas. Hace falta para devolverles el chrome invisible
+# cuando el piloto termina de acomodarlas, sin que cada ventana tenga que acordarse sola.
+ventanas_creadas = []
+# Posiciones de referencia para detectar que el piloto movio algo. Se toman en el primer chequeo y
+# no al crear las ventanas porque AC repone la posicion guardada recien despues de `acMain`.
+posiciones_base = None
+proximo_chequeo_acomodo = 0.0
+
+
+def sinChrome(window):
+    ac.setBackgroundOpacity(window, 0)
+    ac.drawBorder(window, 0)
+    ac.setTitle(window, "")
+    ac.setIconPosition(window, 0, -10000)
+
+
+def ocultarChrome(window, titulo):
+    """Deja una ventana sin fondo, sin borde, sin titulo y sin icono -- salvo la primera vez.
+
+    LA PRIMERA VEZ (desde la 1.46): mientras el piloto no haya movido ninguna ventana, salen con
+    fondo semitransparente, borde y un titulo que dice que se pueden arrastrar. Invisibles desde el
+    primer arranque, los pilotos no las encontraban: la de mensajes y la de largada no tienen nada
+    que dibujar hasta que pasa algo, asi que en el box el piloto veia una pantalla vacia y no sabia
+    donde estaban para acomodarlas. Apenas mueve una, `chequearAcomodo` las vuelve invisibles a
+    todas y deja la marca para las proximas sesiones.
+
+    El resto de la explicacion sigue valiendo para el modo invisible:
+
 
     Son cuatro llamadas y no una porque en Assetto Corsa el "chrome" de una app son cuatro cosas
     separadas, y dejarse una afuera se nota: sin `drawBorder` queda el marco flotando alrededor de
@@ -309,10 +370,63 @@ def ocultarChrome(window):
     redimensionar, y le vuelve a dibujar el fondo mientras el mouse esta encima. Eso es a
     proposito y es lo que permite acomodarlas la primera vez.
     """
-    ac.setBackgroundOpacity(window, 0)
-    ac.drawBorder(window, 0)
-    ac.setTitle(window, "")
+    ventanas_creadas.append((window, titulo))
+    if not ventanasResaltadas():
+        sinChrome(window)
+        return
+    ac.setBackgroundOpacity(window, HIGHLIGHT_OPACITY)
+    ac.drawBorder(window, 1)
+    ac.setTitle(window, "{0} - arrastrala a donde quieras".format(titulo))
     ac.setIconPosition(window, 0, -10000)
+
+
+def marcarAcomodadas():
+    """Vuelve invisibles todas las ventanas y deja la marca: no se resaltan nunca mas."""
+    for window, _ in ventanas_creadas:
+        sinChrome(window)
+    try:
+        with open(ARRANGED_MARKER_PATH, "w") as f:
+            f.write("1")
+    except Exception as e:
+        # Sin la marca, la proxima sesion vuelven a salir resaltadas: molesto, no grave.
+        ac.log("[RaceControlClient] no se pudo guardar la marca de ventanas acomodadas: {0}".format(e))
+
+
+def leerPosiciones():
+    return [tuple(ac.getPosition(window)) for window, _ in ventanas_creadas]
+
+
+def chequearAcomodo():
+    """Se llama desde `acUpdate`: apenas el piloto mueve una ventana resaltada, se terminan.
+
+    Si `ac.getPosition` no existe o falla en esta version de AC, no hay forma de saber si el
+    piloto las acomodo. Entonces se deja la marca de una: las ventanas quedan resaltadas esta
+    sesion -- que es la que importa, la primera -- y desde la siguiente salen invisibles.
+    """
+    global posiciones_base, proximo_chequeo_acomodo
+    if not ventanas_creadas or not ventanasResaltadas():
+        return
+    now = time.time()
+    if now < proximo_chequeo_acomodo:
+        return
+    proximo_chequeo_acomodo = now + ARRANGED_CHECK_SECONDS
+    try:
+        actuales = leerPosiciones()
+    except Exception as e:
+        ac.log("[RaceControlClient] no se pueden leer posiciones de ventanas: {0}".format(e))
+        try:
+            with open(ARRANGED_MARKER_PATH, "w") as f:
+                f.write("1")
+        except Exception:
+            pass
+        return
+    if posiciones_base is None:
+        posiciones_base = actuales
+        return
+    for antes, ahora in zip(posiciones_base, actuales):
+        if abs(antes[0] - ahora[0]) > ARRANGED_MOVE_PX or abs(antes[1] - ahora[1]) > ARRANGED_MOVE_PX:
+            marcarAcomodadas()
+            return
 
 
 def onMensajesDismissed(*args):
@@ -369,11 +483,12 @@ def acMain(ac_version):
     # la cola de avisos, que es lo que cambia. Si la cola fuera arriba, cada aviso empujaria el
     # contador a otra posicion de la pantalla y habria que buscarlo cada vez.
     #
-    # La ventana es mas alta que en la 1.1 (de 104 a 158) y eso no ocupa pantalla de mas: sin
-    # fondo, un renglon vacio no se ve. Lo que crecio es el espacio reservado, no lo dibujado.
+    # La ventana es mas alta que en la 1.1 (de 104 a 158, y desde la 1.46 a 212 por los renglones
+    # partidos) y eso no ocupa pantalla de mas: sin fondo, un renglon vacio no se ve. Lo que crecio
+    # es el espacio reservado, no lo dibujado.
     window_messages = ac.newApp("RC Mensajes")
-    ac.setSize(window_messages, 460, 158)
-    ocultarChrome(window_messages)
+    ac.setSize(window_messages, 460, 74 + MESSAGE_ROWS * MESSAGE_ROW_HEIGHT + 8)
+    ocultarChrome(window_messages, "RC Mensajes")
     # Ver "MENSAJES Y LARGADA NO SE PUEDEN SACAR" en el encabezado del archivo.
     ac.setVisible(window_messages, 1)
     ac.addOnAppDismissedListener(window_messages, onMensajesDismissed)
@@ -394,9 +509,9 @@ def acMain(ac_version):
     ac.setFontColor(label_pending, *PENDING_COLOR)
 
     label_messages = []
-    for i in range(MESSAGE_LINES):
+    for i in range(MESSAGE_ROWS):
         label = ac.addLabel(window_messages, "")
-        ac.setPosition(label, 6, 74 + i * 26)
+        ac.setPosition(label, 6, 74 + i * MESSAGE_ROW_HEIGHT)
         ac.setFontSize(label, MESSAGE_FONT_SIZE)
         ac.setFontColor(label, *MESSAGE_COLOR)
         label_messages.append(label)
@@ -406,13 +521,13 @@ def acMain(ac_version):
     # ventana ES el tamano del indicador. Sin etiquetas -- el dibujo entero lo hace renderFlag.
     window_flags = ac.newApp("RC Banderas")
     ac.setSize(window_flags, FLAG_WINDOW_SIZE, FLAG_WINDOW_SIZE)
-    ocultarChrome(window_flags)
+    ocultarChrome(window_flags, "RC Banderas")
     ac.addRenderCallback(window_flags, renderFlag)
 
     # ---------------------------------------------------------------- RC Largada
     window_lights = ac.newApp("RC Largada")
     ac.setSize(window_lights, LIGHTS_WINDOW_WIDTH, LIGHTS_WINDOW_HEIGHT)
-    ocultarChrome(window_lights)
+    ocultarChrome(window_lights, "RC Largada")
     ac.setVisible(window_lights, 1)
     ac.addOnAppDismissedListener(window_lights, onLargadaDismissed)
     ac.addRenderCallback(window_lights, renderLights)
@@ -434,7 +549,7 @@ def acMain(ac_version):
     # ALERT_WINDOW_WIDTH para por que es un marco y no un fondo.
     window_alert = ac.newApp("RC Alerta")
     ac.setSize(window_alert, ALERT_WINDOW_WIDTH, ALERT_WINDOW_HEIGHT)
-    ocultarChrome(window_alert)
+    ocultarChrome(window_alert, "RC Alerta")
     label_alert = ac.addLabel(window_alert, "")
     ac.setPosition(label_alert, ALERT_BORDER + 12, ALERT_WINDOW_HEIGHT / 2 - 12)
     ac.setFontSize(label_alert, ALERT_FONT_SIZE)
@@ -479,6 +594,8 @@ def acUpdate(deltaT):
     expireStatus()
     # Y la invalidacion se mira aca porque `ac.getCarState` solo contesta en el hilo del juego.
     checkLapInvalidated()
+    # Y el acomodo de las ventanas, porque `ac.getPosition` tambien es del hilo del juego.
+    chequearAcomodo()
 
 
 def readSteamGuid():
@@ -589,11 +706,57 @@ def expireMessages():
     renderMessages()
 
 
+def envolver(texto, max_chars, max_renglones):
+    """Parte un texto en renglones de hasta `max_chars`, cortando entre palabras.
+
+    Una etiqueta de AC dibuja una sola linea y no corta nunca: sin esto un aviso largo seguia de
+    largo por fuera de la ventana. Una palabra mas larga que el renglon (un nombre de 40 letras, un
+    link) se corta a la fuerza. Si sobra texto despues del ultimo renglon, ese renglon termina en
+    "..." para que se note que hay mas.
+    """
+    renglones = []
+    actual = ""
+    for palabra in (texto or "").split():
+        while len(palabra) > max_chars:
+            if actual:
+                renglones.append(actual)
+                actual = ""
+            renglones.append(palabra[:max_chars])
+            palabra = palabra[max_chars:]
+        if not actual:
+            actual = palabra
+        elif len(actual) + 1 + len(palabra) <= max_chars:
+            actual = actual + " " + palabra
+        else:
+            renglones.append(actual)
+            actual = palabra
+    if actual:
+        renglones.append(actual)
+    if len(renglones) > max_renglones:
+        renglones = renglones[:max_renglones]
+        ultimo = renglones[-1]
+        if len(ultimo) > max_chars - 3:
+            ultimo = ultimo[:max_chars - 3].rstrip()
+        renglones[-1] = ultimo + "..."
+    return renglones
+
+
 def renderMessages():
     with messages_lock:
         textos = [m["text"] for m in messages]
+    # Del mas nuevo al mas viejo: si no entran todos, el que se cae es el viejo, nunca el que
+    # acaba de llegar. Despues se dan vuelta para dibujarlos en orden de llegada.
+    bloques = []
+    usados = 0
+    for texto in reversed(textos):
+        renglones = envolver(texto, MESSAGE_MAX_CHARS, MESSAGE_MAX_ROWS_PER_MESSAGE)
+        if usados + len(renglones) > len(label_messages):
+            break
+        bloques.insert(0, renglones)
+        usados += len(renglones)
+    filas = [r for bloque in bloques for r in bloque]
     for i in range(len(label_messages)):
-        ac.setText(label_messages[i], textos[i] if i < len(textos) else "")
+        ac.setText(label_messages[i], filas[i] if i < len(filas) else "")
 
 
 # =============================================================================================
@@ -696,7 +859,10 @@ def applyServerStatus(status):
     penalty = status.get("penalty") or None
     if penalty != pending_penalty_text:
         pending_penalty_text = penalty
-        ac.setText(label_pending, penalty if penalty else "")
+        # Un solo renglon: es un estado fijo, y si el servidor manda algo largo se corta con "..."
+        # en vez de salirse del recuadro.
+        renglon = envolver(penalty, PENDING_MAX_CHARS, 1) if penalty else []
+        ac.setText(label_pending, renglon[0] if renglon else "")
     renderCuts()
 
 

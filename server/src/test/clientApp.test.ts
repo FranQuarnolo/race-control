@@ -282,3 +282,25 @@ test("la app del piloto trae sus propios .pyd y los pone en sys.path antes de im
   assert.ok(/if ctypes is not None:\s*\n\s*class SPageFilePhysics/.test(ejecutable),
     "las structs de la Shared Memory se declaran sin ctypes asegurado: el import revienta igual");
 });
+
+/**
+ * Los avisos no se salen del recuadro, y las ventanas se dejan encontrar la primera vez (1.46).
+ *
+ * Dos reportes de pista: un aviso largo seguía de largo por fuera de "RC Mensajes" (una etiqueta
+ * de AC no corta nunca), y los pilotos no encontraban las ventanas porque nacen invisibles. Lo
+ * primero se arregla partiendo el texto antes del `setText`; lo segundo, resaltándolas hasta que
+ * el piloto mueve una. Las dos cosas se rompen en silencio si alguien vuelve a escribir el texto
+ * crudo en la etiqueta o borra la marca.
+ */
+test("los avisos se parten en renglones y las ventanas se resaltan hasta que el piloto las mueve", () => {
+  assert.ok(/def envolver\(texto, max_chars, max_renglones\)/.test(ejecutable), "se borró envolver()");
+  const render = ejecutable.match(/def renderMessages\(\):[\s\S]*?(?=\ndef )/);
+  assert.ok(render, "no se encontró renderMessages");
+  assert.ok(/envolver\(/.test(render![0]), "renderMessages volvió a escribir el texto sin partirlo");
+  assert.ok(!/setText\(label_messages\[i\], textos\[i\]/.test(render![0]), "volvió el setText del texto crudo");
+  assert.ok(/envolver\(penalty, PENDING_MAX_CHARS, 1\)/.test(ejecutable), "la sanción pendiente se dejó de cortar");
+
+  assert.ok(/ARRANGED_MARKER_PATH = /.test(ejecutable), "se borró la marca de ventanas acomodadas");
+  assert.ok(/def marcarAcomodadas\(\)[\s\S]*?open\(ARRANGED_MARKER_PATH, "w"\)/.test(ejecutable), "la marca ya no se escribe");
+  assert.ok(/chequearAcomodo\(\)/.test(ejecutable.split("def acUpdate")[1] || ""), "acUpdate dejó de chequear el acomodo");
+});
