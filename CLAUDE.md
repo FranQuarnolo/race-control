@@ -18,7 +18,11 @@ cd server && npm test
 ```
 
 Es `npm run build && node --test "dist/test/*.test.js"`. Corre desde `server/`, no desde la raíz.
-Al 2026-10-27 son 270 y están todos en verde; que queden en verde es la condición para publicar.
+Al 2026-11-24 son 402 y están todos en verde; que queden en verde es la condición para publicar.
+
+Ojo: `node --test` corre los archivos en paralelo y `core.test` abre sockets UDP reales, así que a
+veces un archivo pisa el puerto de otro y uno falla o se cuelga. Si pasa, correlo en serie:
+`node --test --test-concurrency=1 "dist/test/*.test.js"`.
 
 **Los tests de `panel.test.ts`, `assets.test.ts` y `clientApp.test.ts` son distintos al resto**: no
 prueban lógica, prueban invariantes de archivos que nadie compila. Existen porque este proyecto
