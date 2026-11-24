@@ -1,5 +1,5 @@
 import * as http from "http";
-import { loadConfig, saveConfig, setConfigDir } from "../config";
+import { adoptLeagueProfiles, loadConfig, saveConfig, setConfigDir, setLeagueProfilesFile } from "../config";
 import { createRaceControl, RaceControl } from "../core/raceControl";
 import { FromWorker, StartMessage, ToWorker } from "./messages";
 
@@ -38,7 +38,9 @@ async function arrancar(msg: StartMessage): Promise<void> {
   servidorId = msg.servidorId;
   // El config.json de este servidor vive en SU carpeta. Se fija antes de cualquier load/save.
   setConfigDir(msg.dataDir);
+  setLeagueProfilesFile(msg.profilesFile ?? null);
   const config = loadConfig();
+  adoptLeagueProfiles(config);
 
   // Los puertos y la dirección pública los manda el portal y no son negociables: el panel no los
   // puede editar (ver la allowlist de POST /api/config). Se escriben igual en el config.json para

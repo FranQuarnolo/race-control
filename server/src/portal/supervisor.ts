@@ -127,6 +127,7 @@ export class Supervisor {
       publicIp: this.options.publicIp,
       clientBase: this.clientBaseOf(liga, servidor),
       udpBindAddress: this.options.udpBindAddress,
+      profilesFile: path.join(this.options.dataRoot, "ligas", liga.id, "perfiles.json"),
     };
     child.send(start);
   }

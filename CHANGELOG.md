@@ -3,6 +3,41 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.49] — 2026-11-24
+
+### Los perfiles son de la liga, y la última carrera sobrevive a un deploy
+
+**Síntoma.** "Cada vez que hago un deploy se me borran los perfiles de reglas y los datos de la
+carrera."
+
+**Causa.** No se borraba nada: el volumen de Fly (`/data`) es el mismo desde octubre y tenía todo.
+Eran dos cosas distintas que se veían igual:
+
+- **Perfiles:** cada servidor guardaba los suyos en su propio `config.json`. En el volumen había
+  once servidores y solo dos con perfiles; un perfil creado en el panel de un servidor no
+  aparecía en el de otro de la misma liga.
+- **Carrera:** al arrancar, el panel solo reconstruía las sanciones y los incidentes del journal
+  anterior, y lo descartaba si tenía más de 6 h. Una carrera de la noche anterior, después de un
+  deploy, aparecía vacía. Además, si el journal anterior era el de un arranque en el que no pasó
+  nada, no se miraba más atrás.
+
+**Decisión.**
+
+- Los perfiles viven en `/data/ligas/<ligaId>/perfiles.json`, compartidos por todos los servidores
+  de la liga. Cada worker los relee antes de mostrarlos o usarlos, porque son procesos aparte. Al
+  arrancar, cada servidor suma los perfiles que tenía en su `config.json` (los del mismo nombre no
+  se duplican), así que no se pierde ninguno de los que ya existían. El perfil *activo* sigue
+  siendo de cada servidor. Si dos admins guardan a la vez desde dos servidores, gana el último.
+- La restauración no tiene más límite de tiempo: la última carrera queda en el panel hasta que
+  llegue una sesión nueva o se toque "Terminar evento", igual que sin reinicio de por medio. Los
+  journals sin nada que restaurar se saltean.
+
+### Tests
+
+`npm test` corre los archivos en paralelo y `core.test` abre sockets UDP reales: a veces dos
+archivos se pisan y uno falla o se cuelga. Corrido en serie (`--test-concurrency=1`) da todo en
+verde. Queda anotado; no se cambió el script.
+
 ## [1.48] — 2026-11-24
 
 ### Virtual Safety Car

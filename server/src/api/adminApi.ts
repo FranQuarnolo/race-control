@@ -1,6 +1,6 @@
 import express, { Express, Response } from "express";
 import * as path from "path";
-import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveProfile } from "../config";
+import { AppConfig, applyConfigPatch, applyProfile, deleteProfile, isFirstRun, saveProfile, syncLeagueProfiles } from "../config";
 import { ACTION_LABELS, AUTO_PENALTY_ALLOWED } from "../incident/catalog";
 import { FormationStart } from "../instances/formationStart";
 import { PenaltyEngine, PenaltyType } from "../penalty/penaltyEngine";
@@ -71,7 +71,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.48";
+export const APP_VERSION = "1.49";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -283,7 +283,11 @@ export function createAdminApi(deps: AdminApiDeps): Express {
     res.json(outline);
   });
 
-  app.get("/api/config", (_req, res) => res.json(deps.config));
+  // Los perfiles son de la liga (1.49): se releen por si los cambió el panel de otro servidor.
+  app.get("/api/config", (_req, res) => {
+    syncLeagueProfiles(deps.config);
+    res.json(deps.config);
+  });
 
   /**
    * "¿Algo anda mal?": los chequeos, cada uno con qué hacer si falló.
@@ -375,6 +379,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * está bien formado, lo que pasa es que ese perfil ya está.
    */
   app.get("/api/profiles", (_req, res) => {
+    syncLeagueProfiles(deps.config);
     res.json({ profiles: deps.config.ruleProfiles, activeProfileId: deps.config.activeProfileId });
   });
 
@@ -769,7 +774,10 @@ export function createAdminApi(deps: AdminApiDeps): Express {
    * para `embed.*` porque ese dato ya no vive en este `AppConfig` — es `Liga.embed`, en el portal.
    */
   embedRouter.get("/catalog", handleCatalog);
-  embedRouter.get("/config", (_req, res) => res.json(redactConfigForEmbed(deps.config)));
+  embedRouter.get("/config", (_req, res) => {
+    syncLeagueProfiles(deps.config);
+    res.json(redactConfigForEmbed(deps.config));
+  });
 
   embedRouter.post("/config", (req, res) => {
     const result = applyConfigPatchCore(req.body, stripManagedFields);
@@ -781,6 +789,7 @@ export function createAdminApi(deps: AdminApiDeps): Express {
   });
 
   embedRouter.get("/profiles", (_req, res) => {
+    syncLeagueProfiles(deps.config);
     res.json({ profiles: deps.config.ruleProfiles, activeProfileId: deps.config.activeProfileId });
   });
 

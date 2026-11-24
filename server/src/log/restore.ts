@@ -21,12 +21,16 @@ import { Penalty } from "../penalty/penaltyEngine";
  * Lo que NO se restaura, a propósito:
  * - Posiciones, velocidades y vueltas: el servidor las vuelve a mandar en segundos, y una copia
  *   vieja sería peor que no tener nada.
- * - Carreras de hace rato: ver `MAX_AGE_MS`.
+ * - Lo de antes de una sesión nueva (`ac.newSession`) o de "Terminar evento" (`evento.terminar`):
+ *   esas dos cosas son las que vacían el panel en vivo, y un reinicio no puede deshacerlas.
+ *
+ * Hasta la 1.48 había además un límite de 6 h: más viejo que eso se daba por "otra carrera". Pero
+ * lo que reportó el usuario fue justamente lo contrario: corría la carrera, a la noche o al día
+ * siguiente se hacía un deploy, y el panel aparecía vacío sin que nadie hubiera terminado el
+ * evento. Desde la 1.49 la última carrera queda a la vista hasta que la vacíe una de las dos
+ * acciones de arriba, como pasaría sin reinicio de por medio. `maxAgeMs` sigue existiendo como
+ * opción por si alguna vez hace falta volver a acotarlo.
  */
-
-/** Más allá de esto, lo que haya en el journal es de otra carrera, no de la que se interrumpió.
- * Una carrera de liga rara vez pasa de las 2 h, y un reinicio se hace en minutos. */
-const MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
 export interface RestoredState {
   /** Sanciones por motor, con la misma etiqueta con que se registraron ("formation" | "pit"). */
@@ -56,23 +60,56 @@ export function restoreState(
   options: { excludeFile?: string; now?: number; maxAgeMs?: number } = {}
 ): RestoredState | null {
   const now = options.now ?? Date.now();
-  const maxAgeMs = options.maxAgeMs ?? MAX_AGE_MS;
-  const file = findPreviousJournal(logDir, options.excludeFile);
-  if (!file) return null;
+  const maxAgeMs = options.maxAgeMs ?? Infinity;
 
-  let content: string;
-  try {
-    content = fs.readFileSync(file, "utf-8");
-  } catch {
-    // Un journal ilegible no puede impedir que Race Control arranque: se sigue sin restaurar.
-    return null;
+  // Del más nuevo al más viejo. Un journal sin nada que restaurar y sin marca de corte es el de un
+  // arranque en el que no pasó nada (por ejemplo, dos deploys seguidos): hasta la 1.48 se miraba
+  // solo el anterior, y el segundo reinicio encontraba ese journal vacío y perdía la carrera.
+  for (const file of previousJournals(logDir, options.excludeFile)) {
+    let content: string;
+    try {
+      content = fs.readFileSync(file, "utf-8");
+    } catch {
+      // Un journal ilegible no puede impedir que Race Control arranque: se prueba con el anterior.
+      continue;
+    }
+    const leido = leerJournal(content);
+    if (leido.penalties.size === 0 && leido.incidents.size === 0) {
+      // Vacío después de un corte: la carrera se terminó a propósito, no hay nada que traer.
+      if (leido.huboCorte) return null;
+      continue;
+    }
+    if (leido.lastAt > 0 && now - leido.lastAt > maxAgeMs) return null;
+
+    const byEngine = new Map<string, Penalty[]>();
+    for (const { engine, penalty } of leido.penalties.values()) {
+      const list = byEngine.get(engine) || [];
+      list.push(penalty);
+      byEngine.set(engine, list);
+    }
+    return {
+      penalties: byEngine,
+      incidents: [...leido.incidents.values()],
+      interruptedAt: leido.lastAt,
+      sourceFile: file,
+    };
   }
+  return null;
+}
+
+function leerJournal(content: string): {
+  penalties: Map<string, { engine: string; penalty: Penalty }>;
+  incidents: Map<string, Incident>;
+  lastAt: number;
+  huboCorte: boolean;
+} {
 
   // Por id, para quedarnos con la última versión de cada objeto. Un Map preserva el orden de
   // inserción, así que el orden original de los incidentes se conserva aunque se hayan reescrito.
   const penalties = new Map<string, { engine: string; penalty: Penalty }>();
   const incidents = new Map<string, Incident>();
   let lastAt = 0;
+  let huboCorte = false;
 
   for (const line of content.split("\n")) {
     if (line.length === 0) continue;
@@ -88,9 +125,10 @@ export function restoreState(
 
     // Una sesión nueva invalida todo lo anterior: las sanciones de la clasificación no se arrastran
     // a la carrera. Es la misma regla que aplica el motor en vivo al recibir NEW_SESSION.
-    if (entry.type === "ac.newSession") {
+    if (entry.type === "ac.newSession" || entry.type === "evento.terminar") {
       penalties.clear();
       incidents.clear();
+      huboCorte = true;
       continue;
     }
     if (entry.type === "penalty.state" && isPenalty(entry.penalty)) {
@@ -100,34 +138,24 @@ export function restoreState(
     }
   }
 
-  if (penalties.size === 0 && incidents.size === 0) return null;
-  if (lastAt > 0 && now - lastAt > maxAgeMs) return null;
-
-  const byEngine = new Map<string, Penalty[]>();
-  for (const { engine, penalty } of penalties.values()) {
-    const list = byEngine.get(engine) || [];
-    list.push(penalty);
-    byEngine.set(engine, list);
-  }
-
-  return { penalties: byEngine, incidents: [...incidents.values()], interruptedAt: lastAt, sourceFile: file };
+  return { penalties, incidents, lastAt, huboCorte };
 }
 
-/** El journal anterior a este arranque: el más reciente por nombre, que lleva la marca de tiempo
- * ISO del momento en que se creó y por eso ordena cronológicamente como texto. */
-function findPreviousJournal(logDir: string, excludeFile?: string): string | null {
+/** Los journals anteriores a este arranque, del más reciente al más viejo. El nombre lleva la
+ * marca de tiempo ISO del momento en que se creó y por eso ordena cronológicamente como texto. */
+function previousJournals(logDir: string, excludeFile?: string): string[] {
   let names: string[];
   try {
     names = fs.readdirSync(logDir);
   } catch {
-    return null;
+    return [];
   }
-  const candidates = names
+  return names
     .filter((name) => name.startsWith("events-") && name.endsWith(".jsonl"))
     .map((name) => path.join(logDir, name))
     .filter((full) => full !== excludeFile)
-    .sort();
-  return candidates.length > 0 ? candidates[candidates.length - 1] : null;
+    .sort()
+    .reverse();
 }
 
 /**

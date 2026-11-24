@@ -457,11 +457,106 @@ export function normalizeProfileName(name: string): string {
 }
 
 /** Los ids no se muestran nunca: solo tienen que ser distintos entre sí dentro de una liga. */
-function nextProfileId(config: AppConfig): string {
-  let n = config.ruleProfiles.length + 1;
+function nextProfileId(perfiles: RuleProfile[]): string {
+  let n = perfiles.length + 1;
   let id = "perfil-" + n;
-  while (config.ruleProfiles.some((p) => p.id === id)) id = "perfil-" + ++n;
+  while (perfiles.some((p) => p.id === id)) id = "perfil-" + ++n;
   return id;
+}
+
+/*
+ * Perfiles compartidos por la liga (1.49).
+ *
+ * Hasta la 1.48 cada servidor guardaba sus perfiles en SU config.json. Una liga con varios
+ * servidores (uno por categoría, uno de práctica...) veía un perfil creado en el panel de un
+ * servidor y no en el de otro, y lo que se reportó fue "el deploy me borra los perfiles": en el
+ * volumen estaban, pero en el config.json de otro servidor.
+ *
+ * Ahora la lista vive en `<dataRoot>/ligas/<ligaId>/perfiles.json` y la comparten todos los
+ * servidores de la liga. Cada worker es un proceso aparte, así que no hay memoria compartida: la
+ * lista se relee del archivo antes de mostrarla o usarla (`syncLeagueProfiles`) y se escribe
+ * después de cada cambio. Dos admins guardando perfiles en el mismo segundo desde dos servidores
+ * distintos: gana el último. Se aceptó; es una operación de a una persona y de vez en cuando.
+ *
+ * El config.json sigue llevando una copia de la lista: no la lee nadie mientras haya archivo de
+ * liga, pero es la que hay que mirar si alguna vez este archivo se pierde.
+ *
+ * `activeProfileId` (el perfil cargado ahora) sigue siendo de cada servidor: dos servidores de la
+ * misma liga pueden correr reglamentos distintos.
+ */
+let leagueProfilesFile: string | null = null;
+
+/** La fija el worker con lo que manda el portal, ANTES de `loadConfig()`. `null` (en local, en los
+ * tests) deja los perfiles en el config.json, como antes. */
+export function setLeagueProfilesFile(file: string | null): void {
+  leagueProfilesFile = file;
+}
+
+function leerPerfilesDeLiga(): RuleProfile[] | null {
+  if (!leagueProfilesFile || !fs.existsSync(leagueProfilesFile)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(leagueProfilesFile, "utf-8"));
+    // Misma validación que los perfiles del config.json: el archivo se puede editar a mano.
+    const tmp = defaultConfig();
+    tmp.ruleProfiles = isPlainObject(raw) && Array.isArray(raw.profiles) ? raw.profiles : [];
+    validateProfiles(tmp);
+    return tmp.ruleProfiles;
+  } catch (err) {
+    console.error(`[config] No se pudo leer ${leagueProfilesFile}:`, err);
+    return null;
+  }
+}
+
+function escribirPerfilesDeLiga(perfiles: RuleProfile[]): void {
+  if (!leagueProfilesFile) return;
+  fs.mkdirSync(path.dirname(leagueProfilesFile), { recursive: true });
+  // El tmp lleva el pid: dos workers de la misma liga escribiendo a la vez no se pisan el tmp.
+  const tmp = `${leagueProfilesFile}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ profiles: perfiles }, null, 2), "utf-8");
+  fs.renameSync(tmp, leagueProfilesFile);
+}
+
+/** Trae a `config` la lista de la liga, que pudo haber cambiado desde el panel de otro servidor. */
+export function syncLeagueProfiles(config: AppConfig): void {
+  if (!leagueProfilesFile) return;
+  const deLiga = leerPerfilesDeLiga();
+  if (!deLiga) return;
+  config.ruleProfiles = deLiga;
+  if (config.activeProfileId && !deLiga.some((p) => p.id === config.activeProfileId)) config.activeProfileId = "";
+}
+
+/**
+ * Al arrancar el worker: suma a la lista de la liga los perfiles que este servidor tenía en su
+ * config.json. Es la migración desde la 1.48 y corre en cada arranque, pero después de la primera
+ * vez no encuentra nada nuevo. Un perfil con el mismo nombre que uno de la liga no se duplica:
+ * se considera el mismo. Si el id choca con otro de la liga (todos empezaban en "perfil-1"), se
+ * le da uno nuevo y se corrige el `activeProfileId` si era ese.
+ */
+export function adoptLeagueProfiles(config: AppConfig): void {
+  if (!leagueProfilesFile) return;
+  const existia = fs.existsSync(leagueProfilesFile);
+  const leidos = leerPerfilesDeLiga();
+  // Si el archivo existe pero no se pudo leer, no se escribe encima: se perdería lo que tenga.
+  if (existia && leidos === null) return;
+  const deLiga = leidos ?? [];
+  const activoOriginal = config.activeProfileId;
+  let activo = activoOriginal;
+  let cambio = !existia;
+  for (const propio of config.ruleProfiles) {
+    const mismo = deLiga.find((p) => normalizeProfileName(p.name) === normalizeProfileName(propio.name));
+    if (mismo) {
+      if (propio.id === activoOriginal) activo = mismo.id;
+      continue;
+    }
+    const id = deLiga.some((p) => p.id === propio.id) ? nextProfileId(deLiga) : propio.id;
+    if (propio.id === activoOriginal) activo = id;
+    deLiga.push({ ...propio, id });
+    cambio = true;
+  }
+  if (cambio) escribirPerfilesDeLiga(deLiga);
+  config.ruleProfiles = deLiga;
+  config.activeProfileId = deLiga.some((p) => p.id === activo) ? activo : "";
+  saveConfig(config);
 }
 
 export type ProfileError = { error: string };
@@ -475,6 +570,7 @@ export type ProfileError = { error: string };
  */
 export function saveProfile(config: AppConfig, rawName: string): RuleProfile | ProfileError {
   const name = String(rawName ?? "").trim();
+  syncLeagueProfiles(config);
   if (name.length === 0) return { error: "El perfil necesita un nombre." };
   if (name.length > 60) return { error: "El nombre del perfil es demasiado largo." };
 
@@ -488,9 +584,10 @@ export function saveProfile(config: AppConfig, rawName: string): RuleProfile | P
   const igual = config.ruleProfiles.find((p) => rulesFingerprint(p.rules) === firma);
   if (igual) return { error: `Estas mismas reglas ya están guardadas como "${igual.name}".` };
 
-  const profile: RuleProfile = { id: nextProfileId(config), name, createdAt: new Date().toISOString(), rules };
+  const profile: RuleProfile = { id: nextProfileId(config.ruleProfiles), name, createdAt: new Date().toISOString(), rules };
   config.ruleProfiles.push(profile);
   config.activeProfileId = profile.id;
+  escribirPerfilesDeLiga(config.ruleProfiles);
   saveConfig(config);
   return profile;
 }
@@ -504,6 +601,7 @@ export function saveProfile(config: AppConfig, rawName: string): RuleProfile | P
  * panel dice "guardado" y en pista no cambia nada—.
  */
 export function applyProfile(config: AppConfig, id: string): RuleProfile | ProfileError {
+  syncLeagueProfiles(config);
   const profile = config.ruleProfiles.find((p) => p.id === id);
   if (!profile) return { error: "Ese perfil ya no existe." };
   mergeConfigInto(config as unknown as Record<string, any>, JSON.parse(JSON.stringify(profile.rules)));
@@ -514,12 +612,14 @@ export function applyProfile(config: AppConfig, id: string): RuleProfile | Profi
 }
 
 export function deleteProfile(config: AppConfig, id: string): RuleProfile | ProfileError {
+  syncLeagueProfiles(config);
   const index = config.ruleProfiles.findIndex((p) => p.id === id);
   if (index === -1) return { error: "Ese perfil ya no existe." };
   const [borrado] = config.ruleProfiles.splice(index, 1);
   // Borrar el perfil no cambia el reglamento que está corriendo: solo deja de haber de dónde
   // volver a cargarlo. Interrumpir una carrera por borrar una fila de una lista sería inaceptable.
   if (config.activeProfileId === id) config.activeProfileId = "";
+  escribirPerfilesDeLiga(config.ruleProfiles);
   saveConfig(config);
   return borrado;
 }

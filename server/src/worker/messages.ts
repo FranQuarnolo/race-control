@@ -35,6 +35,8 @@ export interface StartMessage {
   clientBase: string;
   /** Interfaz a la que bindear el UDP. En Fly.io tiene que ser `fly-global-services`. */
   udpBindAddress?: string;
+  /** Los perfiles de reglas, compartidos por todos los servidores de la liga (1.49). */
+  profilesFile?: string;
 }
 
 export interface StopMessage {

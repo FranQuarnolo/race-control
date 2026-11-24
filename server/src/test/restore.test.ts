@@ -142,11 +142,34 @@ test("un cambio de sesión borra todo lo anterior", () => {
   assert.equal(restored.penalties.get("pit")?.[0].id, "p9");
 });
 
-test("una carrera de ayer no se restaura", () => {
+test("una carrera de ayer se restaura igual: solo la vacían una sesión nueva o terminar el evento (1.49)", () => {
   const dir = tempLogDir();
   writeJournal(dir, "events-2026-10-21T17-00-00.jsonl", [penaltyLine("p1", "pit", {}, "2026-10-21T18:00:00.000Z")]);
 
-  assert.equal(restoreState(dir, { now: Date.parse("2026-10-22T18:00:00.000Z") }), null);
+  const restored = restoreState(dir, { now: Date.parse("2026-10-22T18:00:00.000Z") });
+  assert.equal(restored?.penalties.get("pit")?.[0].id, "p1");
+});
+
+test("dos reinicios seguidos: se saltea el journal vacío del primero (1.49)", () => {
+  const dir = tempLogDir();
+  writeJournal(dir, "events-2026-10-22T17-00-00.jsonl", [penaltyLine("p1", "pit")]);
+  writeJournal(dir, "events-2026-10-22T19-00-00.jsonl", [
+    JSON.stringify({ type: "udp.listening", tWall: "2026-10-22T19:00:00.000Z" }),
+  ]);
+
+  const restored = restoreState(dir, { now: Date.parse("2026-10-22T19:05:00.000Z") });
+  assert.equal(restored?.penalties.get("pit")?.[0].id, "p1");
+});
+
+test("después de terminar el evento no se restaura nada, ni de journals más viejos (1.49)", () => {
+  const dir = tempLogDir();
+  writeJournal(dir, "events-2026-10-22T15-00-00.jsonl", [penaltyLine("p0", "pit")]);
+  writeJournal(dir, "events-2026-10-22T17-00-00.jsonl", [
+    penaltyLine("p1", "pit"),
+    JSON.stringify({ type: "evento.terminar", tWall: "2026-10-22T18:01:00.000Z" }),
+  ]);
+
+  assert.equal(restoreState(dir, { now: Date.parse("2026-10-22T19:00:00.000Z") }), null);
 });
 
 test("una línea cortada a la mitad no invalida el resto", () => {

@@ -401,7 +401,7 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   carrera" al terminar.
 - **Reglas**: qué se controla en pista y, arriba de todo, los **perfiles de carrera**. Un perfil
   guarda el reglamento completo con el nombre que la liga use para hablar de él, y cargarlo lo
-  repone entero. No toca nada de la conexión: elegir un perfil no puede desconfigurar el servidor.
+  repone entero. No toca nada de la conexión: elegir un perfil no puede desconfigurar el servidor. Desde la **1.49** los perfiles son de la liga: uno guardado en el panel de un servidor aparece en todos los de la misma liga.
 
 **Para las primeras carreras, dejá el modo sombra prendido.** Registra todo y no sanciona a nadie
 de verdad: sirve para mirar un fin de semana entero qué habría hecho el motor antes de confiarle el
