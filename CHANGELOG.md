@@ -3,6 +3,37 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.46] — 2026-11-24
+
+### Exceso en pit lane en la recta principal, una sanción por vuelta
+
+**Síntoma.** En una carrera de 3 hs en Spa, cada piloto recibió una sanción de 30 s por "exceso
+de velocidad en pit lane" en cada vuelta, pasando por la recta sin entrar a boxes. Tantas
+sanciones como vueltas, encima de las incidencias reales (que sí se tomaron bien).
+
+**Causa.** `PitSpeedMonitor` decidía "está en el pit lane" solo con la zona de spline
+(`config.pit.zone`), que trae de fábrica 0.97–0.995 para cualquier pista. En Spa ese tramo cae
+sobre la recta: cualquier auto a fondo ahí estaba "en pit" a 280 km/h. Pasa en cualquier circuito
+donde nadie calibró la zona, que es casi todos. El cumplimiento del DT ya usaba el dato del juego
+desde la 1.45; el control de velocidad no.
+
+**Decisión.** El exceso en pit se mide solo con el `inPitLane` que reporta la app del piloto, que
+sale del propio juego y es correcto en cualquier circuito. **Sin la app reportando no se mide**:
+quien no la tiene queda sin control de velocidad en pit, que es mucho menos grave que sancionar a
+toda la grilla en la recta. La columna App del panel muestra a quién no se le está midiendo, y la
+pestaña Pit lane (panel y embed) lo dice. La zona de spline queda solo como respaldo para dar por
+cumplido un DT/SG de quien no tiene la app.
+
+Aparte: los tests nuevos usan puertos propios. Varios archivos de test comparten puertos (12640
+aparece seis veces), y esa es la causa de los `EADDRINUSE` intermitentes de la suite completa.
+
+### App del piloto (sin publicar todavía: sale con el próximo .zip)
+
+- Las ventanas salen resaltadas (fondo, borde y título "arrastrala") hasta que el piloto mueve
+  una; desde ahí quedan invisibles como siempre. Los pilotos reportaban que no las encontraban.
+- RC Mensajes parte los avisos largos por palabras (hasta 3 renglones, con "..." si sobra) en vez
+  de dejar que se salgan del recuadro.
+
 ## [1.45] — 2026-11-21
 
 ### El Drive-Through que no se daba por cumplido, y penalización de tiempo en las reglas

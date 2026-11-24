@@ -517,6 +517,12 @@
   var tituloPit = document.createElement("h3");
   tituloPit.textContent = "Pit lane (durante la carrera)";
   panelPit.appendChild(tituloPit);
+  // Mismo texto que el panel: el exceso en pit ya no depende de la zona (1.46).
+  var notaPit = document.createElement("p");
+  notaPit.className = "rc-embed__hint";
+  notaPit.textContent =
+    "El exceso de velocidad en pit lo detecta la app del piloto, en cualquier circuito: a quien no la tiene reportando (columna App) no se le mide. La zona de abajo solo se usa para dar por cumplido un Drive-Through o Stop & Go de quien no tiene la app.";
+  panelPit.appendChild(notaPit);
   panelPit.appendChild(zoneSuggestionBox);
   panelPit.appendChild(filaCampo("Zona de pit — inicio", campoPZoneStart));
   panelPit.appendChild(filaCampo("Zona de pit — fin", campoPZoneEnd));

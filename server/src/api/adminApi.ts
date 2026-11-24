@@ -68,17 +68,17 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.45";
+export const APP_VERSION = "1.46";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
  *
  * 1. **La app del piloto**, cuando la tiene. `inPitLane` sale de la Shared Memory del juego, así
  *    que es el dato exacto: lo sabe el juego, no lo deducimos nosotros.
- * 2. **La zona de pit configurada**, cuando no. Es el mismo rango de `normalizedSplinePosition`
- *    que ya usan `PitSpeedMonitor` y `PitComplianceTracker`, y usar el mismo criterio es a
- *    propósito: si el panel dijera PIT con una definición propia, el admin vería a alguien "en
- *    boxes" al que el motor no le mide la velocidad de pit, y calibraría la zona a ciegas.
+ * 2. **La zona de pit configurada**, cuando no. Es el mismo respaldo que usa
+ *    `PitComplianceTracker` para dar por cumplido un DT/SG. `PitSpeedMonitor` NO la usa desde la
+ *    1.46: sin la app no mide exceso en pit, porque la zona de fábrica caía sobre la recta en
+ *    circuitos como Spa y sancionaba a todos en cada vuelta.
  *
  * Por qué no se deduce de "velocidad 0 por mucho tiempo", que sería lo intuitivo: un auto
  * detenido en la grava después de un despiste también tiene velocidad 0 por mucho tiempo, y es

@@ -17,16 +17,34 @@ function inZone(car: CarState, zone: PitZone): boolean {
 /**
  * Instancia 2 (parte 1): exceso de velocidad en pit lane durante la carrera.
  * Reusa el mismo SpeedWatcher que la largada, pero continuo durante toda la sesión
- * y acotado a la zona de pit lane en vez de a la ventana de formación.
+ * y acotado al pit lane en vez de a la ventana de formación.
+ *
+ * "En el pit lane" lo dice el juego del piloto (`inPitLane` de la app), no la zona de spline.
+ * Hasta la 1.45 era la zona: `config.pit.zone` trae de fábrica 0.97–0.995 para cualquier pista, y
+ * en un circuito donde ese tramo cae sobre la recta principal (pasó en Spa, 3 hs) cada pasada por
+ * la recta a fondo era "exceso en pit lane": una sanción de 30 s por vuelta y por piloto. La zona
+ * solo es correcta si alguien la calibra pista por pista, y nada obliga a hacerlo; el dato del
+ * juego es correcto en todas.
+ *
+ * Sin dato fresco de la app no se mide. Es una decisión, no un descuido: el que no tiene la app
+ * queda sin control de velocidad en pit, que es mucho menos grave que sancionar a todos en la
+ * recta. La columna App del panel dice a quién no se le está midiendo.
  */
 export class PitSpeedMonitor extends EventEmitter {
   private watcher: SpeedWatcher;
 
-  constructor(stateTracker: StateTracker, zone: PitZone, private penaltyEngine: PenaltyEngine) {
+  constructor(
+    stateTracker: StateTracker,
+    /** true solo si la app del piloto reporta, fresco, que está en el pit lane. */
+    isInPitLane: (driverGuid: string) => boolean,
+    private penaltyEngine: PenaltyEngine
+  ) {
     super();
     // Las reglas se pasan por referencia (penaltyEngine.getRules()): si el admin cambia el
     // límite de velocidad de pit desde el panel, el watcher lo ve en la próxima muestra.
-    this.watcher = new SpeedWatcher(stateTracker, this.penaltyEngine.getRules(), (car) => inZone(car, zone));
+    this.watcher = new SpeedWatcher(stateTracker, this.penaltyEngine.getRules(), (car) =>
+      car.driverGuid ? isInPitLane(car.driverGuid) : false
+    );
     this.watcher.on("violation", (v: SpeedViolation) => this.handleViolation(v));
   }
 

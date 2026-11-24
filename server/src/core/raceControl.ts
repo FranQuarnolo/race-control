@@ -502,7 +502,11 @@ export async function createRaceControl(options: RaceControlOptions): Promise<Ra
 
   // Instancia 2: pit lane speeding + cumplimiento de DT/SG durante la carrera.
   const pitPenaltyEngine = new PenaltyEngine(config.pit.penalty);
-  const pitSpeedMonitor = new PitSpeedMonitor(stateTracker, config.pit.zone, pitPenaltyEngine);
+  const pitSpeedMonitor = new PitSpeedMonitor(
+    stateTracker,
+    (guid) => telemetryStore.get(guid)?.inPitLane === true,
+    pitPenaltyEngine
+  );
 
   /**
    * El exceso de velocidad también es un hecho de la bandeja, no solo una sanción.

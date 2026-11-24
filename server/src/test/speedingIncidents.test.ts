@@ -95,8 +95,9 @@ test("el exceso en pit lane entra a la bandeja con la velocidad máxima, además
     // El monitor de pit solo se arma en carrera: en formación o en idle está apagado a propósito.
     rc.phaseTracker.set("race");
 
-    // 0.98 cae dentro de la zona de pit por defecto (0.97 a 0.995).
-    await pasarsePorDosMuestras(rc, 4, 0.98, 95);
+    // Desde la 1.46 "en pit" lo dice la app del piloto, no la zona de spline.
+    rc.telemetryStore.report(guid, { inPitLane: true });
+    await pasarsePorDosMuestras(rc, 4, 0.5, 95);
 
     const incidentes = rc.incidentEngine.getAll().filter((i) => i.kind === "pit-speeding");
     assert.equal(incidentes.length, 1, "el exceso en pit lane no llegó a la bandeja");
@@ -136,12 +137,41 @@ test('poner el tipo en "No controlar" lo saca de la bandeja pero no deja de sanc
     // viven en Pit lane. Si acá se suprimiera también la sanción, habría dos interruptores para
     // lo mismo y el día que se contradigan nadie sabría cuál manda.
     config.infractions.pitSpeeding.action = "ignore";
-    conectar(rc, 2, "Diego Sanz");
+    const guid = conectar(rc, 2, "Diego Sanz");
     rc.phaseTracker.set("race");
+    rc.telemetryStore.report(guid, { inPitLane: true });
 
-    await pasarsePorDosMuestras(rc, 2, 0.98, 110);
+    await pasarsePorDosMuestras(rc, 2, 0.5, 110);
 
     assert.equal(rc.incidentEngine.getAll().filter((i) => i.kind === "pit-speeding").length, 0);
     assert.equal(rc.pitPenaltyEngine.getPending(2).length, 1, "apagar el registro no puede apagar la sanción");
+  });
+});
+
+/**
+ * El bug de Spa (1.46): la zona de spline de fábrica (0.97–0.995) caía sobre la recta principal y
+ * cada pasada a fondo era "exceso en pit lane". Ahora manda el dato del juego, en cualquier pista.
+ */
+test("pasar por la recta a fondo dentro de la zona de spline no es exceso en pit lane", async () => {
+  await conMotor("recta", 12810, 13810, async (rc) => {
+    const guid = conectar(rc, 5, "Carla Vidal");
+    rc.phaseTracker.set("race");
+    rc.telemetryStore.report(guid, { inPitLane: false });
+
+    await pasarsePorDosMuestras(rc, 5, 0.98, 280);
+
+    assert.equal(rc.pitPenaltyEngine.getPending(5).length, 0, "la recta volvió a contar como pit lane");
+    assert.equal(rc.incidentEngine.getAll().filter((i) => i.kind === "pit-speeding").length, 0);
+  });
+});
+
+test("sin la app reportando no se mide el exceso en pit lane", async () => {
+  await conMotor("sinapp", 12820, 13820, async (rc) => {
+    conectar(rc, 6, "Tomás Ruiz");
+    rc.phaseTracker.set("race");
+
+    await pasarsePorDosMuestras(rc, 6, 0.98, 120);
+
+    assert.equal(rc.pitPenaltyEngine.getPending(6).length, 0, "sin dato del juego no se puede saber si estaba en boxes");
   });
 });
