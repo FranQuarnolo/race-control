@@ -3,6 +3,21 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.52] — 2026-11-25
+
+### Los tiempos de vuelta también en el panel
+
+**Síntoma.** En la 1.51 las columnas Última, Mejor y Vueltas, la mejor vuelta en violeta y la
+versión de la app en el tooltip del punto App se agregaron al embed y no al panel.
+
+**Decisión.** Se agregan al panel en el mismo orden y con el mismo criterio. Queda como regla: el
+panel y el embed son espejados, y cualquier cambio visible en uno va en el otro en la misma
+versión.
+
+Diferencias que ya existían y no se tocaron: el panel tiene la columna de posición (`#`) y el
+embed no; los cortes del panel salen de la bandeja de incidentes y los del embed del contador del
+servidor.
+
 ## [1.51] — 2026-11-25 · app del piloto 1.11
 
 ### Qué versión de la app tiene cada piloto

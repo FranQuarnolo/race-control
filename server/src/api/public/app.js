@@ -978,7 +978,7 @@ function updateIncidentGroups(incidents) {
   for (const grupo of agruparPorPiloto(incidents)) incidentGroups.set(grupo.clave, grupo);
 }
 
-function renderTiming(cars) {
+function renderTiming(cars, latestAppVersion) {
   const body = $("cars-body");
   $("cars-empty").hidden = cars.length > 0;
 
@@ -1000,6 +1000,15 @@ function renderTiming(cars) {
     return (a.position || 999) - (b.position || 999);
   });
 
+  // La vuelta más rápida de la sesión, entre todos — también los que ya se fueron: el récord
+  // sigue siendo suyo aunque se hayan desconectado. Se pinta en violeta, igual que en el embed.
+  let vueltaMasRapida = null;
+  for (const c of cars) {
+    if (typeof c.bestLapMs === "number" && c.bestLapMs > 0 && (vueltaMasRapida === null || c.bestLapMs < vueltaMasRapida)) {
+      vueltaMasRapida = c.bestLapMs;
+    }
+  }
+
   const seen = new Set();
   for (const car of ordered) {
     seen.add(car.carId);
@@ -1008,7 +1017,7 @@ function renderTiming(cars) {
       row = createCarRow(car.carId);
       carRows.set(car.carId, row);
     }
-    updateCarRow(row, car);
+    updateCarRow(row, car, vueltaMasRapida, latestAppVersion);
     // appendChild reordena si ya estaba: mantiene el orden de la torre. El detalle va siempre
     // pegado atrás de su propia fila, aunque las dos se muevan juntas en cada repintado.
     body.appendChild(row.tr);
@@ -1029,10 +1038,10 @@ function renderTiming(cars) {
 function createCarRow(carId) {
   const tr = document.createElement("tr");
 
-  // Acá vivían el intervalo, las vueltas y la última/mejor vuelta: la torre de tiempos completa de
-  // la rama main. Esta pantalla fusiona Control de carrera y Sanciones para incrustarla en
-  // fslmanager.vercel.app, y suma en cambio Cuts e Insi —que antes vivían en una bandeja aparte—
-  // directo en la fila de cada piloto.
+  // Esta pantalla fusiona Control de carrera y Sanciones para incrustarla en fslmanager.vercel.app,
+  // y suma Cuts e Insi —que antes vivían en una bandeja aparte— directo en la fila de cada piloto.
+  // La última y la mejor vuelta y las vueltas se habían sacado porque fslmanager tiene su live
+  // timing; volvieron en la 1.51 (embed) y la 1.52 (acá). El intervalo sigue afuera.
   const cells = {
     // Primera a pedido del admin: es lo que mira para saber a quién reclamarle la app.
     app: cell("c-app"),
@@ -1040,6 +1049,9 @@ function createCarRow(carId) {
     car: cell("c-car"),
     name: cell("c-driver"),
     speed: cell("num"),
+    lastLap: cell("num"),
+    bestLap: cell("num"),
+    laps: cell("num"),
     pits: cell("num"),
     fuel: cell("num"),
     cuts: cell("num"),
@@ -1141,19 +1153,26 @@ function cell(className) {
   return td;
 }
 
-function updateCarRow(row, car) {
+function updateCarRow(row, car, vueltaMasRapida, latestAppVersion) {
   const telemetry = car.telemetry || null;
 
   const label = car.driverName || "Auto " + car.carId;
   if (row.name.textContent !== label) row.name.textContent = label;
   row.name.title = label;
 
-  renderAppDot(row.app, car);
+  renderAppDot(row.app, car, latestAppVersion);
   setText(row.pos, car.position != null ? String(car.position) : null);
   renderCarBadge(row.car, car);
   // La velocidad sale del propio UDP del servidor (CAR_UPDATE), no de la app del piloto: por eso
   // no lleva `NO_APP_TITLE` como box y combustible, y nunca queda en "--" salvo sin dato todavía.
   setText(row.speed, typeof car.speedKmh === "number" ? Math.round(car.speedKmh) + " km/h" : null);
+  // Las tres salen del LAP_COMPLETED del servidor de AC: no dependen de la app del piloto.
+  setText(row.lastLap, formatLapTime(car.lastLapMs));
+  setText(row.bestLap, formatLapTime(car.bestLapMs));
+  const esRecord = vueltaMasRapida !== null && car.bestLapMs === vueltaMasRapida;
+  row.bestLap.classList.toggle("lap-record", esRecord);
+  row.bestLap.title = esRecord ? "Vuelta más rápida de la sesión" : "";
+  setText(row.laps, String(car.lapCount || 0));
   renderPits(row.pits, telemetry);
   setText(row.fuel, telemetry && telemetry.fuelLiters !== null ? telemetry.fuelLiters.toFixed(1) + " L" : null, NO_APP_TITLE);
 
@@ -1198,7 +1217,7 @@ function updateCarRow(row, car) {
  * El `<span>` se crea una sola vez y después solo cambia de clase: reemplazarlo en cada poll
  * reiniciaría la animación cada segundo y el verde se vería a los saltos.
  */
-function renderAppDot(td, car) {
+function renderAppDot(td, car, latestAppVersion) {
   let dot = td.firstChild;
   if (!dot) {
     dot = document.createElement("span");
@@ -1206,16 +1225,52 @@ function renderAppDot(td, car) {
   }
   const estado = car.connected === false ? "off" : car.appReporting ? "ok" : "bad";
   const clase = "app-dot " + estado;
-  if (dot.className === clase) return;
-  dot.className = clase;
+  // La clase solo se toca si cambió: reasignarla reiniciaría la animación. El tooltip sí se mira
+  // siempre, porque la versión puede llegar un heartbeat después de que el punto ya esté verde.
+  if (dot.className !== clase) dot.className = clase;
   const texto =
     estado === "off"
       ? "No está conectado"
       : estado === "ok"
-        ? "App de Race Control activa"
+        ? textoAppActiva(car.appVersion, latestAppVersion)
         : "Sin la app de Race Control: no la tiene instalada, no la activó o se le cayó";
+  if (dot.title === texto) return;
   dot.title = texto;
   dot.setAttribute("aria-label", texto);
+}
+
+/**
+ * El tooltip del punto verde dice qué versión de la app tiene el piloto, para saber quién
+ * reinstaló el .zip nuevo. Mismo texto que `textoAppActiva` en embed.js. Sin dato es que tiene una
+ * anterior a la 1.11, que no la mandaba: ya con eso se sabe que está vieja.
+ */
+function textoAppActiva(version, vigente) {
+  if (!version) return "App de Race Control activa · versión anterior a la 1.11: tiene que reinstalar el .zip";
+  if (versionVieja(version, vigente)) {
+    return "App de Race Control activa · versión " + version + " (la vigente es " + vigente + "): tiene que reinstalar el .zip";
+  }
+  return "App de Race Control activa · versión " + version;
+}
+
+/** Se compara número por número y no como texto: como texto, "1.9" sería más nueva que "1.10". */
+function versionVieja(tiene, vigente) {
+  if (!tiene || !vigente) return false;
+  const a = String(tiene).split(".").map((n) => parseInt(n, 10) || 0);
+  const b = String(vigente).split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+  }
+  return false;
+}
+
+/** Tiempo de vuelta en el formato de siempre: 1:47.312. `null` sin vuelta cerrada (queda "--"). */
+function formatLapTime(ms) {
+  if (typeof ms !== "number" || !isFinite(ms) || ms <= 0) return null;
+  const total = Math.round(ms);
+  const minutos = Math.floor(total / 60000);
+  const segundos = Math.floor((total % 60000) / 1000);
+  const milis = total % 1000;
+  return minutos + ":" + String(segundos).padStart(2, "0") + "." + String(milis).padStart(3, "0");
 }
 
 /** Un valor ausente nunca se dibuja como vacío: un hueco se lee como "cero" o como un bug, y acá
@@ -1234,10 +1289,9 @@ function setText(td, value, missingTitle) {
   if (td.textContent !== value) td.textContent = value;
 }
 
-// Acá vivían `renderGap`, `renderGapHeader`, `formatGap` y `formatLapTime`: el intervalo, la
-// última y la mejor vuelta. Es la pantalla fusionada para fslmanager.vercel.app, no el panel
-// completo — ese live timing ya lo tiene la página del admin por otro lado. La rama main conserva
-// las cuatro funciones intactas.
+// Acá vivían `renderGap`, `renderGapHeader` y `formatGap`: el intervalo con el de adelante y con el
+// líder. Es la pantalla fusionada para fslmanager.vercel.app, que ya tiene su live timing. La
+// última y la mejor vuelta volvieron en la 1.52 (ver `formatLapTime`); el intervalo no se pidió.
 
 // Acá vivía `renderSectors`. La columna de sectores se sacó de la torre en la 1.1 porque en pista
 // nunca mostró un número: los tiempos por sector solo existen en la Shared Memory del juego y los
@@ -2441,7 +2495,7 @@ async function refresh() {
   // Los grupos de incidentes van antes de pintar la tabla: cada fila lee de ahí sus columnas de
   // Cuts/Insi y el contenido de su propio detalle.
   updateIncidentGroups(state.incidents || []);
-  renderTiming(state.cars);
+  renderTiming(state.cars, state.latestAppVersion);
   renderNetwork(state.network);
   renderMode(state.shadowMode);
   renderPenalties(state.formationPenalties, state.pitPenalties, state.stewardPenalties, state.vscPenalties);

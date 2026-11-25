@@ -357,8 +357,10 @@ El admin abre el panel y lo deja en una segunda pantalla. De arriba a abajo:
   curso aparece **VSC**: lo despliega (límite de velocidad propio, que se configura en la pestaña
   VSC de Reglas) y, apretado de nuevo, arranca el **VSC ending**, que da el verde solo a los
   segundos configurados.
-- **La torre de tiempos**: posición, auto, velocidad, vueltas (`Laps`), última y mejor vuelta,
-  paradas, compuesto, combustible y ping. Un click en un piloto lo resalta en el mapa; los tres
+- **La torre de tiempos**: app, posición, auto, piloto, velocidad, última y mejor vuelta,
+  vueltas, paradas, combustible, cortes e incidentes, en ese orden y **igual en el panel y en el
+  embed** (1.52). La mejor vuelta de la sesión va en violeta, y pasando el mouse por el punto de
+  la columna App se ve qué versión de la app tiene el piloto. Un click en un piloto lo resalta en el mapa; los tres
   puntitos del final de la fila abren el kick, que pide confirmación. **PIT** aparece tanto en la
   columna de velocidad como en la de paradas cuando el auto está en el pit lane.
 

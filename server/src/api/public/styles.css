@@ -887,6 +887,11 @@ td.num {
 td.num {
   font-variant-numeric: tabular-nums;
 }
+/* La vuelta más rápida de la sesión, en violeta como en la F1 (1.52). Igual que en el embed. */
+td.num.lap-record {
+  color: var(--purple);
+  font-weight: 600;
+}
 th:last-child,
 td.actions {
   text-align: right;
