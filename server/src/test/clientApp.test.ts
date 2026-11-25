@@ -2,6 +2,7 @@ import { strict as assert } from "assert";
 import * as fs from "fs";
 import * as path from "path";
 import { test } from "node:test";
+import { CLIENT_APP_VERSION } from "../api/clientApi";
 
 /**
  * Invariantes de la app del piloto, que es el único código del producto que no corre acá.
@@ -244,6 +245,19 @@ test("el ui.json de la app del piloto declara la versión y las tres ventanas", 
       `la ventana "${nombre}" no figura en la descripción del ui.json`
     );
   }
+});
+
+/**
+ * La versión que el servidor anuncia como vigente (1.51) tiene que ser la del `ui.json`.
+ *
+ * El servidor se despliega sin `client-app/`, así que no puede leerla: la tiene escrita a mano. Si
+ * se sube el `ui.json` y no esto, el piloto con la app vieja no recibe el aviso de reinstalar; y al
+ * revés, todos reciben el aviso aunque no haya nada nuevo que bajar.
+ */
+test("la versión vigente que anuncia el servidor es la del ui.json", () => {
+  const ui = JSON.parse(fs.readFileSync(path.join(CLIENT, "ui.json"), "utf-8"));
+  assert.equal(CLIENT_APP_VERSION, ui.version,
+    "CLIENT_APP_VERSION (api/clientApi.ts) y el ui.json de la app del piloto no coinciden");
 });
 
 /**

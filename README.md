@@ -9,7 +9,8 @@ pantalla fusionada, sin salir del admin donde ya hacés todo lo demás. También
 cuenta, con su propio usuario y contraseña, si todavía no querés integrarlo.
 
 - 🟢 **Largada en movimiento**, controlada automáticamente.
-- 🏎️ **Una sola tabla** con el auto, el piloto, las paradas en boxes, el combustible, los cortes de
+- 🏎️ **Una sola tabla** con el auto, el piloto, la última y la mejor vuelta (la más rápida de la
+  sesión en violeta), las vueltas, las paradas en boxes, el combustible, los cortes de
   pista sin justificar y los incidentes pendientes de cada uno — lo que antes eran dos pestañas
   separadas (Control de carrera y Sanciones) se fusionó en una.
 - 💥 **Incidentes**: toques entre autos, choques contra el muro, salidas de pista, contramano y
@@ -43,7 +44,7 @@ da la variante de React/Next.js, y tiene la tabla de "si ves esto, pasó esto ot
 
 | Para | Qué bajar |
 |---|---|
-| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.10** |
+| 🏎️ Cada piloto | [**RaceControlClient.zip**](https://github.com/FranQuarnolo/race-control/releases/latest/download/RaceControlClient.zip) — versión actual: **1.11** |
 
 ## 🏎️ Para el piloto
 

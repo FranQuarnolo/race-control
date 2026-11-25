@@ -25,7 +25,7 @@ reportar apenas el piloto se conecta al servidor (ver "Auto-discovery" abajo).
 
 | Ventana | Qué muestra |
 |---|---|
-| **RC Mensajes** | De arriba abajo: el estado de la conexión en gris chiquito, el contador de cortes (`CUTS: 3/5`) en amarillo y grande, la sanción que falta cumplir en naranja, y abajo los avisos de dirección de carrera en rojo. |
+| **RC Mensajes** | De arriba abajo: el estado de la conexión en gris chiquito, el contador de cortes (`CUTS: 3/5`) en celeste y grande, la sanción que falta cumplir en naranja, y abajo los avisos de dirección de carrera en rojo. |
 | **RC Banderas** | Un cuadro con el color de la bandera vigente, leída de la memoria del propio juego. |
 | **RC Largada** | Cinco luces: rojas parpadeando en la formación, verdes con el audio al verde. Durante la formación, debajo de las luces aparecen "VUELTA DE FORMACION" y el límite de velocidad configurado en el panel; si el piloto se pasa, "BAJA LA VELOCIDAD: N" con los segundos de gracia que le quedan. Con **VSC** (servidor 1.48): "VSC", su límite y la misma cuenta; al terminar, "VSC ENDING" y "Verde en N s". Mientras dure el VSC, RC Banderas muestra amarilla parpadeando. |
 | **RC Alerta** | Un marco rojo pulsante, solo si falta la credencial. Ver "Si aparece el marco rojo". |
@@ -75,7 +75,7 @@ renglón de estado de **RC Mensajes** y el marco de **RC Alerta**.
 
 ### El contador de cortes
 
-`CUTS: 3/5` arriba de todo, en amarillo: cuántas vueltas invalidó el servidor por irse de pista y
+`CUTS: 3/5` arriba de todo, en celeste (amarillo hasta la 1.10): cuántas vueltas invalidó el servidor por irse de pista y
 cuántas hacen falta para la sanción. Se oculta en cero, así que después de una sanción —cuando la
 cuenta se reinicia— desaparece hasta el corte siguiente.
 
@@ -86,6 +86,17 @@ acomoda solo.
 
 Debajo, en naranja, la sanción que falta cumplir y las vueltas de gracia que quedan. Esa línea
 sigue al piloto aunque se reconecte y el servidor le dé otro número de auto.
+
+### Qué versión tiene cada piloto
+
+Desde la 1.11, debajo de "Buscando servidor de Race Control..." y de "Conectado a Race Control"
+aparece `App del piloto 1.11`. La app también le manda la versión al servidor, y en el embed se ve
+pasando el mouse por el punto verde de la columna App.
+
+Si el servidor tiene anotada una versión más nueva que la del piloto, la app avisa una vez por
+conexión, durante 30 segundos: "Hay una versión nueva de la app: reinstalá el .zip". Las apps
+anteriores a la 1.11 no mandan la versión ni reciben el aviso: en el embed figuran como
+"anterior a la 1.11".
 
 ### Si aparece el marco rojo
 
@@ -106,6 +117,9 @@ cuando ya la había manejado entera apretando para nada.
 La app lo lee de `acsys.CS.LapInvalidated`, que es el propio juego diciendo que la vuelta en curso
 ya no vale. No dice el número de vuelta —uno sabe en cuál está— y no aparece al salir de boxes,
 aunque la out lap nazca invalidada.
+
+Desde la 1.11 sale en **amarillo y dura 8 segundos**, no en rojo durante 25 como los avisos de
+dirección de carrera: no es una sanción, y el corte ya queda anotado en el contador.
 
 Esto es **solo el aviso al piloto**. El corte se sigue registrando en la bandeja de incidentes del
 comisario exactamente igual que antes.

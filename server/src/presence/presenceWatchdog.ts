@@ -75,6 +75,8 @@ const HEARTBEAT_VIVO_MS = 10_000;
 export class PresenceWatchdog {
   private lastHeartbeat = new Map<string, number>();
   private lastPing = new Map<string, number>();
+  /** Versión de la app que dijo tener cada piloto en su último heartbeat (1.51). */
+  private lastAppVersion = new Map<string, string>();
   private connectedSince = new Map<string, number>();
   private checkTimer: NodeJS.Timeout | null = null;
   /** Pilotos ya reportados como ausentes — se limpia al reconectar (ver listener "disconnected"). */
@@ -96,6 +98,7 @@ export class PresenceWatchdog {
       this.connectedSince.delete(car.driverGuid);
       this.lastHeartbeat.delete(car.driverGuid);
       this.lastPing.delete(car.driverGuid);
+      this.lastAppVersion.delete(car.driverGuid);
       this.kicked.delete(car.driverGuid);
       this.warnedAt.delete(car.driverGuid);
     });
@@ -109,9 +112,10 @@ export class PresenceWatchdog {
     if (this.checkTimer) clearInterval(this.checkTimer);
   }
 
-  onHeartbeat(driverGuid: string, pingMs?: number): void {
+  onHeartbeat(driverGuid: string, pingMs?: number, appVersion?: string): void {
     this.lastHeartbeat.set(driverGuid, this.now());
     if (pingMs !== undefined) this.lastPing.set(driverGuid, pingMs);
+    if (appVersion !== undefined) this.lastAppVersion.set(driverGuid, appVersion);
     // Apareció la app: los avisos de "te faltan 45 segundos" se olvidan, así que si más adelante
     // se le vuelve a caer la cuenta regresiva empieza de nuevo en vez de quedar muda.
     this.warnedAt.delete(driverGuid);
@@ -127,6 +131,16 @@ export class PresenceWatchdog {
   getPing(driverGuid: string): number | null {
     if (!this.isReporting(driverGuid)) return null;
     return this.lastPing.get(driverGuid) ?? null;
+  }
+
+  /**
+   * Versión de la app del piloto, para el tooltip del punto de la columna App. `null` si no tiene
+   * la app reportando, o si la que tiene es anterior a la 1.11, que no mandaba el dato: de lejos
+   * las dos cosas se ven igual, y "no sé" es lo único honesto para las dos.
+   */
+  getAppVersion(driverGuid: string): string | null {
+    if (!this.isReporting(driverGuid)) return null;
+    return this.lastAppVersion.get(driverGuid) ?? null;
   }
 
   /** ¿Este piloto tiene la app reportando ahora mismo? Lo usa el panel para mostrar, por piloto,

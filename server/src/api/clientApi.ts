@@ -81,6 +81,25 @@ function plausiblePing(value: unknown): number | undefined {
   return Math.round(value);
 }
 
+/**
+ * La versión vigente de la app del piloto: la del `ui.json` del `.zip` que linkea el README.
+ *
+ * Está escrita acá y no se lee del `ui.json` porque el servidor se despliega sin la carpeta
+ * `client-app/`. Para que no se desfasen, `clientApp.test.ts` falla si no coinciden: al subir el
+ * `ui.json` hay que subir esto también.
+ *
+ * Viaja en la respuesta del heartbeat. Con ella la app sabe si quedó vieja y se lo dice al piloto,
+ * que es lo único que hace que alguien reinstale: no hay actualización automática.
+ */
+export const CLIENT_APP_VERSION = "1.11";
+
+/** La versión que dice tener la app. Es texto que llega de un `.py` editable: se acepta solo con
+ * la forma de siempre ("1.11") para que el panel no termine mostrando cualquier cosa. */
+function plausibleAppVersion(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^\d{1,3}\.\d{1,3}$/.test(value)) return undefined;
+  return value;
+}
+
 function redondearGracia(segundos: number | null): number | null {
   return segundos === null ? null : Math.round(segundos * 10) / 10;
 }
@@ -197,7 +216,7 @@ export function createClientApi(deps: ClientApiDeps): Express {
     }
     const steamGuid = acreditado || delCuerpo;
     if (STEAM_GUID_PATTERN.test(steamGuid)) {
-      deps.presenceWatchdog.onHeartbeat(steamGuid, plausiblePing(req.body?.pingMs));
+      deps.presenceWatchdog.onHeartbeat(steamGuid, plausiblePing(req.body?.pingMs), plausibleAppVersion(req.body?.appVersion));
       deps.onHeartbeat(steamGuid);
       // `telemetry` es opcional: un cliente viejo (o uno al que le falló la lectura de Shared
       // Memory) sigue siendo un heartbeat válido. La torre de tiempos muestra guiones y listo.
@@ -212,7 +231,8 @@ export function createClientApi(deps: ClientApiDeps): Express {
       }
       if (req.body?.excursions !== undefined) deps.onExcursions(steamGuid, req.body.excursions);
     }
-    res.json({ ok: true });
+    // Aditivo: una app anterior a la 1.11 no lee la respuesta del heartbeat.
+    res.json({ ok: true, latestAppVersion: CLIENT_APP_VERSION });
   });
 
   app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

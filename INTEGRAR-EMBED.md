@@ -15,7 +15,7 @@ problemas de integración salen de suponer que esto es un iframe o un widget com
 
 **Qué es Race Control.** Un control de carrera para ligas de Assetto Corsa: lee la telemetría del
 servidor dedicado por UDP y muestra, en vivo, la tabla de autos con incidentes, sanciones,
-combustible, paradas en boxes y cortes de pista. El admin de la liga resuelve incidentes, aplica y
+última y mejor vuelta, vueltas completadas, combustible, paradas en boxes y cortes de pista. El admin de la liga resuelve incidentes, aplica y
 anula sanciones y controla la largada desde ahí.
 
 **Qué es el embed.** La misma pantalla, servida como un `<script>` que se pega en una página
@@ -61,7 +61,7 @@ Preguntale al admin y esperá la respuesta. No elijas vos.
 
 Reglas que valen para las cuatro:
 
-- El contenedor tiene que ser **ancho**. La tabla tiene nueve columnas; abajo de ~900 px de ancho
+- El contenedor tiene que ser **ancho**. La tabla tiene doce columnas; abajo de ~1100 px de ancho
   útil entra en scroll horizontal propio (no rompe la página, pero se usa incómodo). Si la página
   tiene un `max-width` angosto, pedí permiso para sacar el embed de ese contenedor.
 - La altura es **variable y crece sola** con la cantidad de autos. No le pongas `height` fija ni

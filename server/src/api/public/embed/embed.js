@@ -191,7 +191,7 @@
   var tabla = document.createElement("table");
   tabla.className = "rc-embed__tabla";
   tabla.innerHTML =
-    "<thead><tr><th title=\"Verde: la app de Race Control está andando en el juego de ese piloto. Rojo: no la tiene instalada, no la activó o se le cayó.\">App</th><th>Auto</th><th>Piloto</th><th>Velocidad</th><th>Paradas en box</th><th>Combustible</th><th>Cortes</th><th>Incidentes</th><th>Acciones</th></tr></thead><tbody></tbody>";
+    "<thead><tr><th title=\"Verde: la app de Race Control está andando en el juego de ese piloto. Rojo: no la tiene instalada, no la activó o se le cayó.\">App</th><th>Auto</th><th>Piloto</th><th>Velocidad</th><th title=\"Última vuelta cerrada. La da el servidor de AC: no requiere la app del piloto.\">Última</th><th title=\"Mejor vuelta del piloto en la sesión. En violeta, la más rápida de todos.\">Mejor</th><th title=\"Vueltas completadas.\">Vueltas</th><th>Paradas en box</th><th>Combustible</th><th>Cortes</th><th>Incidentes</th><th>Acciones</th></tr></thead><tbody></tbody>";
   var filas = tabla.querySelector("tbody");
   tablaWrap.appendChild(tabla);
 
@@ -1936,7 +1936,38 @@
    * `animationDelay` negativo lo pone en la fase que le toca según el reloj, y así todos los puntos
    * titilan parejos y sin cortes aunque se vuelvan a crear.
    */
-  function celdaApp(car) {
+  /**
+   * "1.10" → [1, 10]. Las versiones se comparan número por número y no como texto: como texto,
+   * "1.9" sería más nueva que "1.10".
+   */
+  function partesVersion(v) {
+    return String(v).split(".").map(function (n) { return parseInt(n, 10) || 0; });
+  }
+
+  function versionVieja(tiene, vigente) {
+    if (!tiene || !vigente) return false;
+    var a = partesVersion(tiene);
+    var b = partesVersion(vigente);
+    for (var i = 0; i < Math.max(a.length, b.length); i++) {
+      if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) < (b[i] || 0);
+    }
+    return false;
+  }
+
+  /**
+   * Tiempo de vuelta en el formato de siempre: 1:47.312. Hasta la 1.50 esta tabla no mostraba
+   * tiempos porque fslmanager ya tiene su live timing; se volvieron a pedir en la 1.51.
+   */
+  function formatoVuelta(ms) {
+    if (typeof ms !== "number" || !isFinite(ms) || ms <= 0) return "—";
+    var totalMs = Math.round(ms);
+    var minutos = Math.floor(totalMs / 60000);
+    var segundos = Math.floor((totalMs % 60000) / 1000);
+    var milis = totalMs % 1000;
+    return minutos + ":" + (segundos < 10 ? "0" : "") + segundos + "." + ("00" + milis).slice(-3);
+  }
+
+  function celdaApp(car, latestAppVersion) {
     var td = document.createElement("td");
     td.className = "rc-embed__celda-app";
     var estado = car.connected === false ? "off" : car.appReporting ? "ok" : "bad";
@@ -1946,12 +1977,25 @@
       estado === "off"
         ? "No está conectado"
         : estado === "ok"
-          ? "App de Race Control activa"
+          ? textoAppActiva(car.appVersion, latestAppVersion)
           : "Sin la app de Race Control: no la tiene instalada, no la activó o se le cayó";
     punto.title = texto;
     punto.setAttribute("aria-label", texto);
     td.appendChild(punto);
     return td;
+  }
+
+  /**
+   * El tooltip del punto verde dice qué versión de la app tiene el piloto (1.51), para saber quién
+   * reinstaló el .zip nuevo. Sin dato es que tiene una anterior a la 1.11, que no la mandaba: ya
+   * con eso se sabe que está vieja.
+   */
+  function textoAppActiva(version, vigente) {
+    if (!version) return "App de Race Control activa · versión anterior a la 1.11: tiene que reinstalar el .zip";
+    if (versionVieja(version, vigente)) {
+      return "App de Race Control activa · versión " + version + " (la vigente es " + vigente + "): tiene que reinstalar el .zip";
+    }
+    return "App de Race Control activa · versión " + version;
   }
 
   function renderTabla(state) {
@@ -1964,11 +2008,20 @@
     Object.keys(expandedCars).forEach(function (id) { if (!idsActuales[id]) delete expandedCars[id]; });
     if (openKebab && !idsActuales[openKebab.carId]) cerrarKebab();
 
+    // La vuelta más rápida de la sesión, entre todos — también los que ya se fueron: el récord
+    // sigue siendo suyo aunque se hayan desconectado. Se pinta en violeta, como en la F1.
+    var vueltaMasRapida = null;
+    state.cars.forEach(function (c) {
+      if (typeof c.bestLapMs === "number" && c.bestLapMs > 0 && (vueltaMasRapida === null || c.bestLapMs < vueltaMasRapida)) {
+        vueltaMasRapida = c.bestLapMs;
+      }
+    });
+
     state.cars.forEach(function (car) {
       var tr = document.createElement("tr");
       tr.className = "rc-embed__fila" + (car.connected === false ? " rc-embed__fila--desconectado" : "");
 
-      tr.appendChild(celdaApp(car));
+      tr.appendChild(celdaApp(car, state.latestAppVersion));
 
       var autoCelda = document.createElement("td");
       autoCelda.className = "rc-embed__celda-auto";
@@ -1985,6 +2038,25 @@
       var velocidad = document.createElement("td");
       velocidad.textContent = typeof car.speedKmh === "number" ? Math.round(car.speedKmh) + " km/h" : "—";
       tr.appendChild(velocidad);
+
+      // Las tres salen del LAP_COMPLETED del servidor de AC: no dependen de la app del piloto.
+      var ultima = document.createElement("td");
+      ultima.className = "rc-embed__celda-tiempo";
+      ultima.textContent = formatoVuelta(car.lastLapMs);
+      tr.appendChild(ultima);
+
+      var mejor = document.createElement("td");
+      mejor.className = "rc-embed__celda-tiempo";
+      mejor.textContent = formatoVuelta(car.bestLapMs);
+      if (vueltaMasRapida !== null && car.bestLapMs === vueltaMasRapida) {
+        mejor.classList.add("rc-embed__celda-tiempo--record");
+        mejor.title = "Vuelta más rápida de la sesión";
+      }
+      tr.appendChild(mejor);
+
+      var vueltas = document.createElement("td");
+      vueltas.textContent = String(car.lapCount || 0);
+      tr.appendChild(vueltas);
 
       var box = document.createElement("td");
       if (!car.telemetry || car.telemetry.pitStops === null || car.telemetry.pitStops === undefined) {
@@ -2054,7 +2126,7 @@
       if (expandido) {
         var detailTr = el("tr", "rc-embed__fila-detalle");
         var detailTd = document.createElement("td");
-        detailTd.colSpan = 9;
+        detailTd.colSpan = 12;
         detailTd.appendChild(construirDetalle(car, deEsteAutoTotal));
         detailTr.appendChild(detailTd);
         filas.appendChild(detailTr);

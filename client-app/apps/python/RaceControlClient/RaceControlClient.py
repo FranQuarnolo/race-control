@@ -282,7 +282,11 @@ STATUS_FONT_SIZE = 13
 # El amarillo del contador es el de la bandera amarilla, y es el color de "cuidado, todavia no
 # pasa nada". La sancion pendiente va en naranja: ya pasa algo, pero no es rojo porque el rojo es
 # del aviso que acaba de llegar, y un renglon permanente en rojo deja de leerse a los dos minutos.
-CUTS_COLOR = (1.0, 0.82, 0.10, 1.0)
+#
+# Desde la 1.11 el contador va en celeste y el amarillo quedo para "VUELTA INVALIDADA": el aviso
+# es el "cuidado" del momento, y el contador es un estado que acompana toda la carrera. Con los dos
+# en amarillo, uno arriba del otro, se leian como lo mismo.
+CUTS_COLOR = (0.35, 0.80, 1.0, 1.0)
 PENDING_COLOR = (1.0, 0.52, 0.05, 1.0)
 CUTS_FONT_SIZE = 24
 PENDING_FONT_SIZE = 17
@@ -294,9 +298,53 @@ PENDING_FONT_SIZE = 17
 # --que no aparezca el backend, que venza la credencial-- se ponen sin vencimiento y se quedan:
 # ahi el cartel es la unica pista que tiene el piloto de por que la app no hace nada.
 STATUS_TTL_SECONDS = 8.0
+OUTDATED_TTL_SECONDS = 30.0
+
+# La version de la app, leida del `ui.json` que viaja en el mismo .zip. Se muestra debajo del
+# "Conectado a Race Control" para que direccion de carrera pueda pedirle al piloto que mire ahi y
+# saber si reinstalo el .zip nuevo: no hay actualizacion automatica, y el listado de apps del juego
+# es el otro unico lugar donde aparece, bastante mas escondido.
+#
+# Se lee del ui.json y no se escribe aca a mano para que haya un solo numero que subir al publicar.
+# Si el archivo no se puede leer, el renglon dice "?" y la app sigue andando: la version es un dato
+# para el piloto, no algo de lo que dependa nada.
+UI_JSON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui.json")
+
+
+def leerVersionApp():
+    try:
+        with open(UI_JSON_PATH, encoding="utf-8") as f:
+            return str(json.load(f).get("version") or "?")
+    except Exception as e:
+        ac.log("[RaceControlClient] no se pudo leer la version del ui.json: {0}".format(e))
+        return "?"
+
+
+APP_VERSION = leerVersionApp()
+
+
+def versionMasVieja(tiene, vigente):
+    """True si `tiene` es anterior a `vigente`. Se compara numero por numero y no como texto: como
+    texto, "1.9" seria mas nueva que "1.10"."""
+    try:
+        a = [int(n) for n in str(tiene).split(".")]
+        b = [int(n) for n in str(vigente).split(".")]
+    except ValueError:
+        return False
+    return a < b
+
+
+# Para avisar una sola vez por conexion que hay una version nueva, y no cada dos segundos.
+outdated_warned = False
 
 # El aviso de vuelta invalidada lo arma la app, no el servidor. Ver `checkLapInvalidated`.
+#
+# Desde la 1.11 va en amarillo y dura 8 segundos en vez de 25. No es una sancion: es un "cuidado"
+# que ya quedo anotado en el contador de cortes, y en rojo y 25 segundos ocupaba el lugar y el
+# color de los avisos de direccion de carrera, que son los que de verdad hay que leer.
 LAP_INVALIDATED_TEXT = "VUELTA INVALIDADA"
+LAP_INVALIDATED_COLOR = (1.0, 0.82, 0.10, 1.0)
+LAP_INVALIDATED_TTL_SECONDS = 8.0
 
 window_messages = None
 window_flags = None
@@ -304,6 +352,7 @@ window_lights = None
 window_alert = None
 
 label_backend_status = None
+label_app_version = None
 label_cuts = None
 label_pending = None
 label_alert = None
@@ -472,7 +521,7 @@ def posicionarVentanasDeFabrica(ventanas):
 
 def acMain(ac_version):
     global window_messages, window_flags, window_lights, window_alert
-    global label_backend_status, label_cuts, label_pending, label_alert, label_messages
+    global label_backend_status, label_app_version, label_cuts, label_pending, label_alert, label_messages
     global label_formation_lap, label_formation_limit, label_formation_grace
     global steam_guid, poll_thread_running
 
@@ -498,6 +547,16 @@ def acMain(ac_version):
     ac.setPosition(label_backend_status, 6, 2)
     ac.setFontSize(label_backend_status, STATUS_FONT_SIZE)
     ac.setFontColor(label_backend_status, *STATUS_COLOR)
+
+    # El renglon de la version cae en el mismo lugar que el contador de cortes. No se pisan en la
+    # practica: solo se ve los 8 segundos del "Conectado", y en ese momento el contador todavia no
+    # tiene limite (llega con el primer poll) o recien arranca la sesion y esta en cero.
+    # Arranca con la version puesta, debajo del "Buscando servidor...": es justo cuando el piloto
+    # dice "no me anda", y lo primero que hay que saber es si tiene la app vieja.
+    label_app_version = ac.addLabel(window_messages, "App del piloto {0}".format(APP_VERSION))
+    ac.setPosition(label_app_version, 6, 18)
+    ac.setFontSize(label_app_version, STATUS_FONT_SIZE)
+    ac.setFontColor(label_app_version, *STATUS_COLOR)
 
     label_cuts = ac.addLabel(window_messages, "")
     ac.setPosition(label_cuts, 6, 18)
@@ -631,7 +690,7 @@ def onChatMessage(message, author):
 
 
 def setBackendUrl(announce):
-    global backend_url, backend_token, poll_thread_running
+    global backend_url, backend_token, poll_thread_running, outdated_warned
     parts = announce.split(BACKEND_ANNOUNCE_SEPARATOR, 1)
     url = "http://{0}".format(parts[0].strip())
     token = parts[1].strip() if len(parts) > 1 else None
@@ -643,7 +702,8 @@ def setBackendUrl(announce):
     if url == backend_url:
         return
     backend_url = url
-    setStatus("Conectado a Race Control", STATUS_TTL_SECONDS)
+    outdated_warned = False
+    setStatus("Conectado a Race Control", STATUS_TTL_SECONDS, "App del piloto {0}".format(APP_VERSION))
     ac.log("[RaceControlClient] backend descubierto: {0}".format(backend_url))
     threading.Thread(target=pollLoop, daemon=True).start()
 
@@ -658,10 +718,14 @@ def setBackendUrl(announce):
 status_until = None  # None = el estado actual no vence
 
 
-def setStatus(text, ttl=None):
-    """Escribe el renglon de estado. Con `ttl`, se borra solo a los tantos segundos."""
+def setStatus(text, ttl=None, detail=""):
+    """Escribe el renglon de estado. Con `ttl`, se borra solo a los tantos segundos.
+
+    `detail` va en un segundo renglon debajo, y se borra junto con el primero.
+    """
     global status_until
     ac.setText(label_backend_status, text)
+    ac.setText(label_app_version, detail)
     status_until = (time.time() + ttl) if ttl else None
 
 
@@ -670,6 +734,7 @@ def expireStatus():
     if status_until is not None and time.time() >= status_until:
         status_until = None
         ac.setText(label_backend_status, "")
+        ac.setText(label_app_version, "")
 
 
 # =============================================================================================
@@ -681,12 +746,18 @@ def expireStatus():
 # dejar la lista a medio escribir.
 # =============================================================================================
 
-messages = []  # [{"text": str, "at": float}], del mas viejo al mas nuevo
+# [{"text": str, "at": float, "color": tupla, "ttl": float}], del mas viejo al mas nuevo. El color y
+# la duracion son por aviso desde la 1.11, para que "VUELTA INVALIDADA" no se vea igual que una
+# sancion.
+messages = []
 messages_lock = threading.Lock()
 
 
-def showMessage(text):
-    """Pone un aviso en la ventana de mensajes. Repetido seguido, no se duplica."""
+def showMessage(text, color=None, ttl=None):
+    """Pone un aviso en la ventana de mensajes. Repetido seguido, no se duplica.
+
+    Sin `color` ni `ttl` es un aviso de direccion de carrera: rojo, 25 segundos.
+    """
     text = (text or "").strip()
     if not text:
         return
@@ -699,16 +770,21 @@ def showMessage(text):
                 existing["at"] = now
                 break
         else:
-            messages.append({"text": text, "at": now})
+            messages.append({
+                "text": text,
+                "at": now,
+                "color": color or MESSAGE_COLOR,
+                "ttl": ttl or MESSAGE_TTL_SECONDS,
+            })
             if len(messages) > MESSAGE_LINES:
                 del messages[0:len(messages) - MESSAGE_LINES]
     renderMessages()
 
 
 def expireMessages():
-    cutoff = time.time() - MESSAGE_TTL_SECONDS
+    now = time.time()
     with messages_lock:
-        vivos = [m for m in messages if m["at"] > cutoff]
+        vivos = [m for m in messages if now - m["at"] < m["ttl"]]
         if len(vivos) == len(messages):
             return
         messages[:] = vivos
@@ -752,20 +828,24 @@ def envolver(texto, max_chars, max_renglones):
 
 def renderMessages():
     with messages_lock:
-        textos = [m["text"] for m in messages]
+        avisos = [(m["text"], m["color"]) for m in messages]
     # Del mas nuevo al mas viejo: si no entran todos, el que se cae es el viejo, nunca el que
     # acaba de llegar. Despues se dan vuelta para dibujarlos en orden de llegada.
     bloques = []
     usados = 0
-    for texto in reversed(textos):
+    for texto, color in reversed(avisos):
         renglones = envolver(texto, MESSAGE_MAX_CHARS, MESSAGE_MAX_ROWS_PER_MESSAGE)
         if usados + len(renglones) > len(label_messages):
             break
-        bloques.insert(0, renglones)
+        bloques.insert(0, [(r, color) for r in renglones])
         usados += len(renglones)
-    filas = [r for bloque in bloques for r in bloque]
+    filas = [f for bloque in bloques for f in bloque]
     for i in range(len(label_messages)):
-        ac.setText(label_messages[i], filas[i] if i < len(filas) else "")
+        if i < len(filas):
+            ac.setText(label_messages[i], filas[i][0])
+            ac.setFontColor(label_messages[i], *filas[i][1])
+        else:
+            ac.setText(label_messages[i], "")
 
 
 # =============================================================================================
@@ -813,7 +893,8 @@ def checkLapInvalidated():
         return
 
     if invalid and not lap_invalidated and not in_pit_lane:
-        showMessage(LAP_INVALIDATED_TEXT)
+        showMessage(LAP_INVALIDATED_TEXT, LAP_INVALIDATED_COLOR, LAP_INVALIDATED_TTL_SECONDS)
+        ac.log("[RaceControlClient] vuelta invalidada detectada en el juego")
         # El corte se suma AHORA, no cuando el servidor lo confirme. Ver `countCutLocally`.
         countCutLocally()
         playCutWarning()
@@ -863,6 +944,10 @@ def applyServerStatus(status):
     nuevo = int(status.get("cuts", 0) or 0)
     cuts_limit = int(status.get("cutsLimit", 0) or 0)
     if nuevo != cuts_server:
+        # Al log del juego (py_log.txt) para poder reconstruir despues que conto el servidor: el
+        # contador no aparecio en una carrera de noviembre de 2026 y no habia con que averiguar
+        # por que. Es una linea por corte, no por poll.
+        ac.log("[RaceControlClient] cortes segun el servidor: {0}/{1}".format(nuevo, cuts_limit))
         cuts_server = nuevo
         cuts_local_extra = 0
     penalty = status.get("penalty") or None
@@ -991,7 +1076,7 @@ def heartbeatLoop():
             # request esta en vuelo, que son justo las de los dos segundos mas recientes.
             sending = excursions.take()
             try:
-                payload = {"steamGuid": steam_guid}
+                payload = {"steamGuid": steam_guid, "appVersion": APP_VERSION}
                 if last_ping_ms is not None:
                     payload["pingMs"] = last_ping_ms
                 snapshot = telemetry_snapshot
@@ -1000,11 +1085,13 @@ def heartbeatLoop():
                 if sending:
                     payload["excursions"] = sending
                 started = time.perf_counter()
-                openAuthed(
+                with openAuthed(
                     "{0}/api/client/heartbeat".format(backend_url),
                     data=json.dumps(payload).encode("utf-8"),
-                )
+                ) as resp:
+                    respuesta = resp.read()
                 last_ping_ms = int(round((time.perf_counter() - started) * 1000))
+                checkOutdated(respuesta)
             except Exception as e:
                 # Una request fallida no deja un ping valido -- mejor no reportar nada que
                 # reportar el del intento anterior como si fuera actual.
@@ -1013,6 +1100,26 @@ def heartbeatLoop():
                     excursions.restore(sending)
                 ac.log("[RaceControlClient] heartbeat error: {0}".format(e))
         time.sleep(HEARTBEAT_INTERVAL_SECONDS)
+
+
+def checkOutdated(respuesta):
+    """Si el servidor dice que hay una version mas nueva de la app, se lo avisa al piloto una vez.
+
+    Va en el renglon de estado y no en los avisos rojos: no es algo de la carrera. Dura 30
+    segundos -- mas que el "Conectado" -- porque es lo unico que va a hacer que reinstale.
+    """
+    global outdated_warned
+    if outdated_warned:
+        return
+    try:
+        vigente = json.loads(respuesta.decode("utf-8")).get("latestAppVersion")
+    except Exception:
+        return
+    if vigente and versionMasVieja(APP_VERSION, vigente):
+        outdated_warned = True
+        setStatus("Hay una version nueva de la app: reinstala el .zip", OUTDATED_TTL_SECONDS,
+                  "Tenes la {0}, la vigente es la {1}".format(APP_VERSION, vigente))
+        ac.log("[RaceControlClient] app desactualizada: {0} < {1}".format(APP_VERSION, vigente))
 
 
 def playWav(path):

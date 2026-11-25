@@ -19,6 +19,7 @@ import { DriverTelemetry, DriverTelemetryStore } from "../telemetry/driverTeleme
 import { brandOf, brandSlug, categorySlug } from "../cars/carBadges";
 import { computeGaps, computeStandings } from "../state/standings";
 import { buildReport, reportFileName, toCsv } from "../report/raceReport";
+import { CLIENT_APP_VERSION } from "./clientApi";
 
 export interface AdminApiDeps {
   config: AppConfig;
@@ -71,7 +72,7 @@ const TELEMETRY_STALE_MS = 2000;
  * solo en un parche sobre una versión ya publicada. `package.json` queda siempre en semver de
  * tres partes porque npm lo exige, pero ese valor es interno: el admin ve este. Sin esto no
  * había forma de saber qué build está corriendo quien reporta un problema. */
-export const APP_VERSION = "1.50";
+export const APP_VERSION = "1.51";
 
 /**
  * Si el auto está en el pit lane. Dos fuentes, en este orden:
@@ -146,6 +147,8 @@ export function createAdminApi(deps: AdminApiDeps): Express {
       /** Segundos que faltan para el verde automático durante el "VSC ENDING"; `null` fuera de él. */
       vscSecondsLeft: deps.formationStart.getVscSecondsLeft(),
       phase: deps.getPhase(),
+      /** La versión vigente de la app del piloto, para marcar en el tooltip a quien quedó viejo. */
+      latestAppVersion: CLIENT_APP_VERSION,
       cars: roster.map((car) => {
         const telemetry = deps.telemetryStore.get(car.driverGuid);
         return {
@@ -169,6 +172,9 @@ export function createAdminApi(deps: AdminApiDeps): Express {
            * del cajón de Conexión (`getReportingCount`), por piloto: la columna y el contador no se
            * pueden contradecir. No se deduce de `pingMs` porque el embed no recibe ese campo. */
           appReporting: deps.presenceWatchdog.isReporting(car.driverGuid),
+          /** Versión de la app del piloto (1.51), para el tooltip del punto de la columna App.
+           * `null` sin la app, o con una anterior a la 1.11 que no la manda. */
+          appVersion: deps.presenceWatchdog.getAppVersion(car.driverGuid),
           /** Sectores, compuesto, combustible y paradas. `null` sin la app del piloto: el UDP de AC
            * no transporta ninguno de estos datos, solo la Shared Memory del juego los tiene. */
           telemetry,

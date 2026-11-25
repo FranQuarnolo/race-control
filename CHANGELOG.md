@@ -3,6 +3,48 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.51] — 2026-11-25 · app del piloto 1.11
+
+### Qué versión de la app tiene cada piloto
+
+**Síntoma.** Cuando sale una app nueva no hay forma de saber quién reinstaló el `.zip`. El número
+solo aparecía en el listado de apps del juego, que nadie mira.
+
+**Decisión.**
+
+- La app muestra `App del piloto 1.11` en gris, debajo de "Buscando servidor de Race Control..." y
+  de "Conectado a Race Control". La versión se lee del `ui.json`, así que al publicar sigue
+  habiendo un solo número que subir del lado de la app.
+- La app manda la versión en cada heartbeat. En el embed aparece en el tooltip del punto verde de
+  la columna App, y si es vieja lo dice. Las apps anteriores a la 1.11 no la mandan, y figuran
+  como "anterior a la 1.11".
+- El servidor contesta el heartbeat con la versión vigente (`CLIENT_APP_VERSION` en
+  `clientApi.ts`). Si la del piloto es más vieja, la app le avisa una vez por conexión durante
+  30 segundos que reinstale. El servidor tiene el número escrito a mano porque se despliega sin
+  `client-app/`; un test falla si no coincide con el `ui.json`.
+
+### Vuelta invalidada y contador de cortes
+
+**Síntoma.** "VUELTA INVALIDADA" salía en rojo y duraba 25 segundos, igual que una sanción, y el
+contador de cortes estaba en el mismo amarillo.
+
+**Decisión.** "VUELTA INVALIDADA" pasa a amarillo y dura 8 segundos. Los avisos ahora llevan color
+y duración propios; los de dirección de carrera siguen en rojo y 25 segundos. El contador
+`CUTS: n/m` pasa a celeste y sigue fijo mientras sea mayor que cero.
+
+**Sobre el contador que no apareció.** En una carrera de noviembre hubo cortes y el contador no
+se vio. El código no tiene un bug a la vista: lo más probable es que esa carrera tuviera los
+límites de pista en "Ignorar", y con eso el servidor no cuenta ningún corte (tampoco en la columna
+Cortes). Por las dudas se agregaron líneas al `py_log.txt` del juego —cuando la app detecta la
+vuelta invalidada y cuando el servidor cambia la cuenta— para poder reconstruirlo si vuelve a pasar.
+
+### Tiempos de vuelta en el embed
+
+La tabla suma, después de Velocidad, **Última**, **Mejor** y **Vueltas**. Los tres datos vienen
+del servidor de AC y no requieren la app del piloto. La mejor vuelta de la sesión se pinta en
+violeta, como en la F1. Hasta la 1.50 no estaban porque fslmanager tiene su propio live timing;
+se volvieron a pedir. El panel completo no cambia.
+
 ## [1.50] — 2026-11-24
 
 ### Logos de la parrilla de TCR

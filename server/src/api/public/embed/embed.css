@@ -617,6 +617,17 @@
   color: var(--text);
 }
 
+/* Tiempos de vuelta en cifras de ancho fijo: si no, la columna baila cada vez que cambia un dígito. */
+.rc-embed__celda-tiempo {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* La vuelta más rápida de la sesión, en violeta como en la F1. */
+.rc-embed__celda-tiempo--record {
+  color: var(--purple);
+  font-weight: 600;
+}
+
 .rc-embed__fila-detalle td {
   background: var(--panel-sunken);
   padding: 0;
