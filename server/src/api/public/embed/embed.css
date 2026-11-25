@@ -628,6 +628,70 @@
   font-weight: 600;
 }
 
+/* La tabla de autos, con los mismos anchos que `#timing-table` en el panel (styles.css): son
+   espejadas. Con `table-layout: auto` el navegador repartía el ancho mirando el contenido, y en la
+   1.51 —con tres columnas nuevas— Cortes, Incidentes y Acciones quedaron apretadas. */
+.rc-embed__tabla--autos {
+  table-layout: fixed;
+}
+.rc-embed__tabla--autos th,
+.rc-embed__tabla--autos td {
+  padding: 6px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rc-embed__tabla--autos th:nth-child(1) {
+  width: 4%; /* App */
+}
+.rc-embed__tabla--autos th:nth-child(2) {
+  width: 4%; /* # */
+}
+.rc-embed__tabla--autos th:nth-child(3) {
+  width: 6%; /* Auto */
+}
+.rc-embed__tabla--autos th:nth-child(4) {
+  width: 16%; /* Piloto */
+}
+.rc-embed__tabla--autos th:nth-child(5) {
+  width: 8%; /* Velocidad */
+}
+.rc-embed__tabla--autos th:nth-child(6) {
+  width: 9%; /* Última */
+}
+.rc-embed__tabla--autos th:nth-child(7) {
+  width: 9%; /* Mejor */
+}
+.rc-embed__tabla--autos th:nth-child(8) {
+  width: 6%; /* Vueltas */
+}
+.rc-embed__tabla--autos th:nth-child(9) {
+  width: 9%; /* Box */
+}
+.rc-embed__tabla--autos th:nth-child(10) {
+  width: 7%; /* Comb */
+}
+.rc-embed__tabla--autos th:nth-child(11) {
+  width: 6%; /* Cuts */
+}
+.rc-embed__tabla--autos th:nth-child(12) {
+  width: 6%; /* Insi */
+}
+.rc-embed__tabla--autos th:nth-child(13) {
+  width: 10%; /* Acciones */
+}
+/* La fila de detalle es una sola celda que ocupa todo el ancho: no se recorta. */
+.rc-embed__tabla--autos .rc-embed__fila-detalle td {
+  white-space: normal;
+  overflow: visible;
+}
+@media (max-width: 480px) {
+  .rc-embed__tabla--autos {
+    table-layout: auto;
+    min-width: 820px;
+  }
+}
+
 .rc-embed__fila-detalle td {
   background: var(--panel-sunken);
   padding: 0;

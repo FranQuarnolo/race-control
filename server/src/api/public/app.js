@@ -1176,11 +1176,12 @@ function updateCarRow(row, car, vueltaMasRapida, latestAppVersion) {
   renderPits(row.pits, telemetry);
   setText(row.fuel, telemetry && telemetry.fuelLiters !== null ? telemetry.fuelLiters.toFixed(1) + " L" : null, NO_APP_TITLE);
 
-  // Cuts y incidentes salen del mismo agrupado por piloto que antes alimentaba la bandeja aparte
-  // (`agruparPorPiloto`): la lógica de que solo cuentan en clasificación y carrera no cambió, vive
-  // en el motor que decide si crear el incidente, no acá.
+  // Cuts es el contador del servidor (`car.cuts`): las vueltas que Assetto Corsa invalidó. Hasta
+  // la 1.52 salía de la bandeja (`grupo.cuts`, la cantidad de incidentes de cortes), que no es lo
+  // mismo —un incidente de límites de pista junta varias salidas— y el embed mostraba el otro
+  // número. Desde la 1.53 los dos muestran el del servidor. Insi sigue saliendo del agrupado.
   const grupo = incidentGroups.get(groupKeyFor(car)) || null;
-  const cuts = grupo ? grupo.cuts : 0;
+  const cuts = car.cuts || 0;
   const incidentesCount = grupo ? grupo.choques + grupo.pit + grupo.largada + grupo.otros : 0;
   row.cuts.textContent = String(cuts);
   row.incidents.textContent = String(incidentesCount);

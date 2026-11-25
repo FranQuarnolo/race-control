@@ -3,6 +3,33 @@
 Todas las fechas en hora local (Argentina). Formato libre, pensado para trazabilidad de decisiones,
 no solo de código — cada entrada explica el porqué, no solo el qué.
 
+## [1.53] — 2026-11-25
+
+### Panel y embed iguales, y los anchos de la tabla
+
+**Síntoma.** Con las tres columnas nuevas de la 1.51/1.52, Cuts, Insi y Acciones quedaron con
+anchos rotos. Además el panel y el embed, que tienen que ser espejados, mostraban cosas distintas:
+el embed no tenía posición, y los cortes de cada uno salían de un lado distinto.
+
+**Causa de los anchos.** En el panel los anchos van por número de columna (`th:nth-child(n)`), y
+estaban pensados para diez. Con trece, Acciones se quedó sin ancho y Box se llevó el 15% que era de
+Acciones. El embed no tenía anchos fijos: el navegador los repartía según el contenido.
+
+**Decisión.**
+
+- Trece anchos que suman 100, los mismos en el panel y en el embed. App queda en 4% y Piloto pasa
+  de 20% a 16%. `panel.test.ts` falla si falta un ancho, si no suman 100 o si el panel y el embed
+  no coinciden.
+- El embed suma la columna de posición (`#`) y ordena los autos como el panel: por posición, con
+  los desconectados al fondo.
+- **Cuts** muestra en los dos el contador del servidor: las vueltas que AC invalidó. El panel
+  mostraba la cantidad de incidentes de cortes, que no es lo mismo, porque un incidente de límites
+  de pista junta varias salidas.
+- **Insi** cuenta en los dos los incidentes del piloto sin contar los de cortes. El embed los
+  contaba todos.
+- El embed usa los mismos encabezados y tooltips que el panel (Box Stops, Comb, Cuts, Insi). Sus
+  nombres largos no entraban en las columnas nuevas.
+
 ## [1.52] — 2026-11-25
 
 ### Los tiempos de vuelta también en el panel

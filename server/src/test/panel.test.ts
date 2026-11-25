@@ -483,3 +483,36 @@ test("el reloj de sesión no muestra centésimas, y el panel y el embed lo escri
     assert.doesNotMatch(delEmbed(ms), /\.\d/, `embed.js volvió a mostrar centésimas con ${ms} ms`);
   }
 });
+
+/**
+ * Cada columna de la tabla de autos tiene su ancho, los anchos suman 100, y el panel y el embed
+ * usan los mismos (1.53).
+ *
+ * Con `table-layout: fixed` el ancho va por posición (`th:nth-child(n)`). En la 1.52 se agregaron
+ * tres columnas y no se renumeró: Acciones, que pasó a ser la 13, se quedó sin regla, y Box heredó
+ * el 15% que era suyo. No falla nada, la tabla solo se ve rota, y el panel y el embed son
+ * espejados: si uno se arregla y el otro no, vuelven a verse distintos.
+ */
+test("la tabla de autos tiene un ancho por columna, que suman 100, iguales en panel y embed", () => {
+  const html = leer(PANEL, "index.html");
+  const thead = /<table id="timing-table">[\s\S]*?<\/thead>/.exec(html)![0];
+  const columnas = (thead.match(/<th\b/g) || []).length;
+
+  const anchos = (css: string, selector: string): number[] => {
+    const re = new RegExp(selector.replace(/[.#]/g, "\\$&") + " th:nth-child\\((\\d+)\\) \\{\\s*width: (\\d+)%", "g");
+    const out: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(css))) out[Number(m[1]) - 1] = Number(m[2]);
+    return out;
+  };
+  const panel = anchos(sinComentarios(leer(PANEL, "styles.css")), "#timing-table");
+  const embed = anchos(sinComentarios(leer(PANEL, "embed", "embed.css")), ".rc-embed__tabla--autos");
+
+  assert.equal(panel.length, columnas, `el panel tiene ${columnas} columnas y ${panel.length} reglas de ancho`);
+  assert.equal(panel.reduce((a, b) => a + b, 0), 100, "los anchos del panel no suman 100");
+  assert.deepEqual(embed, panel, "los anchos del embed no son los del panel");
+
+  const embedJs = leer(PANEL, "embed", "embed.js");
+  const thEmbed = /<thead><tr>(.*?)<\/tr><\/thead>/.exec(embedJs.split("\n").find((l) => l.includes(">App</th>"))!)![1];
+  assert.equal((thEmbed.match(/<th\b/g) || []).length, columnas, "el embed y el panel no tienen la misma cantidad de columnas");
+});

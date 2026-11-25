@@ -976,7 +976,7 @@ td.actions {
 /* ---------------------------------------------------------------- menú de fila (⋮) y detalle (▾) */
 
 /* Solo la celda del cuerpo necesita ser flex para alinear los dos botones: el `<th>` comparte esta
-   misma clase únicamente para heredar el ancho de columna (ver `#timing-table th:nth-child(10)`), y
+   misma clase únicamente para heredar el ancho de columna (ver `#timing-table th:nth-child(13)`), y
    si también se vuelve `display: flex` deja de participar como celda de tabla en `table-layout:
    fixed` — el navegador le calcula un ancho propio por contenido (bastante menor al de la columna)
    en vez de respetar el `width` declarado, y "Acciones" termina angosto y pegado contra "Insi" (el
@@ -1132,35 +1132,48 @@ td.num.has-pending {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Trece columnas desde la 1.52. Los anchos van por posición: al agregar una columna hay que
+   renumerar todo esto, o la que queda última se queda sin ancho (pasó en la 1.52: Acciones
+   sin regla y Box con el 15% que era suyo). `panel.test.ts` cuenta que haya una regla por
+   `<th>` y que sumen 100. Mismos números que `.rc-embed__tabla--autos` en embed.css. */
 #timing-table th:nth-child(1) {
-  width: 4%;
+  width: 4%; /* App */
 }
 #timing-table th:nth-child(2) {
-  width: 5%;
+  width: 4%; /* # */
 }
 #timing-table th:nth-child(3) {
-  width: 7%;
+  width: 6%; /* Auto */
 }
 #timing-table th:nth-child(4) {
-  width: 20%;
+  width: 16%; /* Piloto */
 }
 #timing-table th:nth-child(5) {
-  width: 11%;
+  width: 8%; /* Velocidad */
 }
 #timing-table th:nth-child(6) {
-  width: 11%;
+  width: 9%; /* Última */
 }
 #timing-table th:nth-child(7) {
-  width: 9%;
+  width: 9%; /* Mejor */
 }
 #timing-table th:nth-child(8) {
-  width: 8%;
+  width: 6%; /* Vueltas */
 }
 #timing-table th:nth-child(9) {
-  width: 10%;
+  width: 9%; /* Box */
 }
 #timing-table th:nth-child(10) {
-  width: 15%;
+  width: 7%; /* Comb */
+}
+#timing-table th:nth-child(11) {
+  width: 6%; /* Cuts */
+}
+#timing-table th:nth-child(12) {
+  width: 6%; /* Insi */
+}
+#timing-table th:nth-child(13) {
+  width: 10%; /* Acciones */
 }
 
 #timing-table td.c-driver {
@@ -2002,11 +2015,11 @@ button.secondary.peligro:hover:not(:disabled) {
       `justify-content: space-between`; con un `select` o `input.wide` de 230 px fijos, en ~300 px
       útiles de modal (94vw menos el padding) no entran los dos y el campo queda recortado contra
       el borde.
-   3. `#timing-table` reparte 9 columnas por porcentaje del ancho disponible (`table-layout: fixed`):
+   3. `#timing-table` reparte 13 columnas por porcentaje del ancho disponible (`table-layout: fixed`):
       en escritorio es lo que evita que una columna se quede con todo el aire (ver el comentario de
       la tabla, más arriba), pero en un celular angosto el mismo mecanismo achica cada columna hasta
       que "Acciones" ya no tiene lugar para los dos botones. Mejor un `.table-wrap` que scrollee de
-      costado —ya tiene `overflow-x: auto`— que nueve columnas ilegibles. */
+      costado —ya tiene `overflow-x: auto`— que trece columnas ilegibles. */
 @media (max-width: 480px) {
   .floating {
     max-width: 47%;
@@ -2051,7 +2064,7 @@ button.secondary.peligro:hover:not(:disabled) {
 
   #timing-table {
     table-layout: auto;
-    min-width: 640px;
+    min-width: 820px;
   }
 }
 

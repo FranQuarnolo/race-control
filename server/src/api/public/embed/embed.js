@@ -189,9 +189,9 @@
 
   var tablaWrap = el("div", "rc-embed__tabla-wrap");
   var tabla = document.createElement("table");
-  tabla.className = "rc-embed__tabla";
+  tabla.className = "rc-embed__tabla rc-embed__tabla--autos";
   tabla.innerHTML =
-    "<thead><tr><th title=\"Verde: la app de Race Control está andando en el juego de ese piloto. Rojo: no la tiene instalada, no la activó o se le cayó.\">App</th><th>Auto</th><th>Piloto</th><th>Velocidad</th><th title=\"Última vuelta cerrada. La da el servidor de AC: no requiere la app del piloto.\">Última</th><th title=\"Mejor vuelta del piloto en la sesión. En violeta, la más rápida de todos.\">Mejor</th><th title=\"Vueltas completadas.\">Vueltas</th><th>Paradas en box</th><th>Combustible</th><th>Cortes</th><th>Incidentes</th><th>Acciones</th></tr></thead><tbody></tbody>";
+    "<thead><tr><th title=\"Verde: la app de Race Control está andando en el juego de ese piloto. Rojo: no la tiene instalada, no la activó o se le cayó.\">App</th><th title=\"Posición\">#</th><th>Auto</th><th>Piloto</th><th title=\"Velocidad instantánea. No requiere la app del piloto.\">Velocidad</th><th title=\"Última vuelta cerrada. La da el servidor de AC: no requiere la app del piloto.\">Última</th><th title=\"Mejor vuelta del piloto en la sesión. En violeta, la más rápida de todos.\">Mejor</th><th title=\"Vueltas completadas.\">Vueltas</th><th title=\"Paradas en boxes completadas. Requiere la app del piloto.\">Box Stops</th><th title=\"Combustible restante. Requiere la app del piloto.\">Comb</th><th title=\"Vueltas que el servidor invalidó por irse de pista.\">Cuts</th><th title=\"Incidentes del piloto, sin contar los cortes.\">Insi</th><th>Acciones</th></tr></thead><tbody></tbody>";
   var filas = tabla.querySelector("tbody");
   tablaWrap.appendChild(tabla);
 
@@ -2017,11 +2017,25 @@
       }
     });
 
-    state.cars.forEach(function (car) {
+    // Mismo orden que el panel: el que decide el servidor (`position`), sin posición al fondo y los
+    // desconectados más al fondo todavía. Hasta la 1.52 el embed los listaba en el orden en que
+    // fueron entrando al servidor.
+    var ordenados = state.cars.slice().sort(function (a, b) {
+      var fueraA = a.connected === false ? 1 : 0;
+      var fueraB = b.connected === false ? 1 : 0;
+      if (fueraA !== fueraB) return fueraA - fueraB;
+      return (a.position || 999) - (b.position || 999);
+    });
+
+    ordenados.forEach(function (car) {
       var tr = document.createElement("tr");
       tr.className = "rc-embed__fila" + (car.connected === false ? " rc-embed__fila--desconectado" : "");
 
       tr.appendChild(celdaApp(car, state.latestAppVersion));
+
+      var posicion = document.createElement("td");
+      posicion.textContent = car.position != null ? String(car.position) : "—";
+      tr.appendChild(posicion);
 
       var autoCelda = document.createElement("td");
       autoCelda.className = "rc-embed__celda-auto";
@@ -2085,8 +2099,12 @@
       var deEsteAutoTotal = state.incidents.filter(function (i) {
         return i.parties.some(function (p) { return p.carId === car.carId; });
       });
+      // Sin los de cortes, que ya tienen su columna: mismo criterio que "Insi" en el panel
+      // (`CUT_KINDS` en app.js). Hasta la 1.52 acá se contaban todos.
       var incidentesCelda = document.createElement("td");
-      incidentesCelda.textContent = String(deEsteAutoTotal.length);
+      incidentesCelda.textContent = String(deEsteAutoTotal.filter(function (i) {
+        return i.kind !== "track-limits" && i.kind !== "cut-lap";
+      }).length);
       tr.appendChild(incidentesCelda);
 
       var expandido = Boolean(expandedCars[car.carId]);
@@ -2126,7 +2144,7 @@
       if (expandido) {
         var detailTr = el("tr", "rc-embed__fila-detalle");
         var detailTd = document.createElement("td");
-        detailTd.colSpan = 12;
+        detailTd.colSpan = 13;
         detailTd.appendChild(construirDetalle(car, deEsteAutoTotal));
         detailTr.appendChild(detailTd);
         filas.appendChild(detailTr);
